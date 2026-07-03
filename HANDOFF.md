@@ -54,13 +54,21 @@ src/
 - Microphone start/stop.
 - Japanese Web Speech API transcription with interim and final text display.
 - 5-second segmentation of finalized speech chunks.
+- Manual text mode for microphone-free segment testing.
+- Replay mode for JSON scenario testing.
 - Keyword-based topic detection.
+- Topic decision logs with matched keywords and per-topic scores.
+- Pronoun/reference phrase detection and context-based reference candidates.
+- Focus Gate for classifying each utterance as on-focus, adjacent, important off-topic, noise, or uncertain.
+- AnalyzedSegment unifies segment text, topic decision, focus relation, references, and graph-update decisions.
+- ImportantMention records off-focus important utterances without stealing the current topic.
 - React Flow graph with initial topic nodes.
 - Current topic highlighting.
 - Topic heat increment and 1-second decay.
 - Unknown topic node creation for unmatched utterances of 20+ characters.
 - Session log JSON display.
 - Lightweight local WebSocket relay for session log events.
+- Vitest coverage for topic scoring and reference detection utilities.
 
 ## Limitations
 

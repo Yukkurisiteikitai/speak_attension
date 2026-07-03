@@ -80,7 +80,7 @@ export const INITIAL_TOPIC_NODES: TopicGraphNode[] = [
     data: {
       label: "速度",
       heat: 0,
-      keywords: ["速度", "レイテンシ", "遅延", "リアルタイム", "速い", "遅い"],
+      keywords: ["速度", "レイテンシ", "レイテンシー", "遅延", "リアルタイム", "速い", "遅い"],
       lastTouchedAt: null,
       evidence: [],
     },
@@ -114,11 +114,15 @@ export function normalizeForMatch(value: string): string {
 }
 
 export function scoreTopic(text: string, node: TopicGraphNode): number {
+  return findMatchedKeywords(text, node).length;
+}
+
+export function findMatchedKeywords(text: string, node: TopicGraphNode): string[] {
   const normalizedText = normalizeForMatch(text);
-  return node.data.keywords.reduce((score, keyword) => {
+  return node.data.keywords.filter((keyword) => {
     const normalizedKeyword = normalizeForMatch(keyword);
-    return normalizedKeyword && normalizedText.includes(normalizedKeyword) ? score + 1 : score;
-  }, 0);
+    return normalizedKeyword && normalizedText.includes(normalizedKeyword);
+  });
 }
 
 export function buildUnknownTopicLabel(text: string): string {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ControlPanel } from "./components/ControlPanel";
+import { ManualReplayPanel } from "./components/ManualReplayPanel";
 import { TopicGraph } from "./components/TopicGraph";
 import { TopicInspector } from "./components/TopicInspector";
 import { TranscriptPanel } from "./components/TranscriptPanel";
@@ -67,10 +68,12 @@ export default function App() {
           }}
           statusLabel={stableStatusLabel}
         />
+        <ManualReplayPanel onSubmit={topicEngine.submitTranscript} />
         <TranscriptPanel
           bufferText={topicEngine.bufferText}
           interimText={speech.interimText}
           lastFinalText={speech.lastFinalText}
+          nodes={topicEngine.nodes}
           segments={topicEngine.segments}
         />
       </div>
@@ -79,8 +82,9 @@ export default function App() {
 
       <TopicInspector
         connectionStatus={connectionStatus}
-        currentTopic={topicEngine.currentTopic}
-        heatLeaders={topicEngine.heatLeaders}
+        decisionLogs={topicEngine.decisionLogs}
+        focusState={topicEngine.focusState}
+        importantMentions={topicEngine.importantMentions}
         logs={topicEngine.logs}
         nodes={topicEngine.nodes}
         segments={topicEngine.segments}

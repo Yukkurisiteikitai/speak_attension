@@ -1,13 +1,18 @@
-import type { TranscriptSegment } from "../types/topic";
+import type { TopicGraphNode, TranscriptSegment } from "../types/topic";
 
 type TranscriptPanelProps = {
   bufferText: string;
   interimText: string;
   lastFinalText: string;
+  nodes: TopicGraphNode[];
   segments: TranscriptSegment[];
 };
 
-export function TranscriptPanel({ bufferText, interimText, lastFinalText, segments }: TranscriptPanelProps) {
+function topicLabel(nodes: TopicGraphNode[], topicId: string): string {
+  return nodes.find((node) => node.id === topicId)?.data.label ?? "unknown";
+}
+
+export function TranscriptPanel({ bufferText, interimText, lastFinalText, nodes, segments }: TranscriptPanelProps) {
   return (
     <section className="panel transcript-panel" aria-label="リアルタイム文字起こし">
       <div className="section-head">
@@ -32,8 +37,9 @@ export function TranscriptPanel({ bufferText, interimText, lastFinalText, segmen
           segments.map((segment) => (
             <article className="segment-card" key={segment.id}>
               <time>{new Date(segment.createdAt).toLocaleTimeString("ja-JP")}</time>
+              <span className="source-badge">{segment.source}</span>
               <p>{segment.text}</p>
-              <span>{segment.matchedTopicIds.length ? segment.matchedTopicIds.join(", ") : "no match"}</span>
+              <span>{segment.matchedTopicIds.length ? segment.matchedTopicIds.map((topicId) => topicLabel(nodes, topicId)).join(", ") : "no match"}</span>
             </article>
           ))
         )}

@@ -1,18 +1,35 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { SessionLogEntry, TopicGraphEdge, TopicGraphNode, TranscriptSegment } from "../types/topic";
+import type {
+  AnalyzedSegment,
+  ConversationContext,
+  FocusState,
+  ImportantMention,
+  ResolvedReference,
+  SessionLogEntry,
+  TopicDecisionLog,
+  TopicGraphEdge,
+  TopicGraphNode,
+  TranscriptInputSource,
+  TranscriptSegment,
+} from "../types/topic";
 import {
   INITIAL_TOPIC_EDGES,
   INITIAL_TOPIC_NODES,
   buildUnknownTopicLabel,
   createId,
+  findMatchedKeywords,
   scoreTopic,
 } from "../utils/topicRules";
+import { resolveReferences } from "../utils/contextResolver";
+import { evaluateFocusGate } from "../utils/focusGate";
 
 const HEAT_INCREMENT = 0.25;
+const ADJACENT_HEAT_INCREMENT = 0.1;
 const HEAT_DECAY = 0.01;
 const SEGMENT_INTERVAL_MS = 5000;
 const UNKNOWN_MIN_LENGTH = 20;
 const UNKNOWN_DUPLICATE_WINDOW_MS = 60_000;
+const REFERENCE_CONFIDENCE_THRESHOLD = 0.6;
 
 type UseTopicEngineOptions = {
   onLog?: (entry: SessionLogEntry) => void;
@@ -58,17 +75,50 @@ function nextCustomPosition(nodes: TopicGraphNode[]) {
   };
 }
 
+function getTopicLabel(nodes: TopicGraphNode[], topicId: string | null): string | null {
+  if (!topicId) return null;
+  return nodes.find((node) => node.id === topicId)?.data.label ?? null;
+}
+
+function touchNodes(nodes: TopicGraphNode[], topicIds: string[], text: string, now: number, increment: number): TopicGraphNode[] {
+  const uniqueTopicIds = [...new Set(topicIds)];
+  if (uniqueTopicIds.length === 0) return nodes;
+  return nodes.map((node) => {
+    if (!uniqueTopicIds.includes(node.id)) return node;
+    return {
+      ...node,
+      data: {
+        ...node.data,
+        heat: Math.min(1, Number((node.data.heat + increment).toFixed(2))),
+        lastTouchedAt: now,
+        evidence: limitEvidence(node.data.evidence, text),
+      },
+    };
+  });
+}
+
 export function useTopicEngine({ onLog }: UseTopicEngineOptions = {}) {
   const [nodes, setNodes] = useState<TopicGraphNode[]>(() => cloneInitialNodes());
   const [edges, setEdges] = useState<TopicGraphEdge[]>(() => cloneInitialEdges());
-  const [segments, setSegments] = useState<TranscriptSegment[]>([]);
+  const [segments, setSegments] = useState<AnalyzedSegment[]>([]);
   const [currentTopicId, setCurrentTopicId] = useState<string | null>(null);
+  const [focusState, setFocusState] = useState<FocusState>(() => ({
+    focusTopicId: null,
+    focusLabel: null,
+    focusSetBy: "auto",
+    startedAt: Date.now(),
+  }));
   const [bufferText, setBufferText] = useState("");
   const [logs, setLogs] = useState<SessionLogEntry[]>([]);
+  const [decisionLogs, setDecisionLogs] = useState<TopicDecisionLog[]>([]);
+  const [importantMentions, setImportantMentions] = useState<ImportantMention[]>([]);
 
   const nodesRef = useRef(nodes);
   const edgesRef = useRef(edges);
   const bufferRef = useRef("");
+  const segmentsRef = useRef(segments);
+  const currentTopicIdRef = useRef<string | null>(currentTopicId);
+  const focusStateRef = useRef(focusState);
 
   useEffect(() => {
     nodesRef.current = nodes;
@@ -77,6 +127,18 @@ export function useTopicEngine({ onLog }: UseTopicEngineOptions = {}) {
   useEffect(() => {
     edgesRef.current = edges;
   }, [edges]);
+
+  useEffect(() => {
+    segmentsRef.current = segments;
+  }, [segments]);
+
+  useEffect(() => {
+    currentTopicIdRef.current = currentTopicId;
+  }, [currentTopicId]);
+
+  useEffect(() => {
+    focusStateRef.current = focusState;
+  }, [focusState]);
 
   const addLog = useCallback(
     (entry: Omit<SessionLogEntry, "id" | "at"> & { at?: number }) => {
@@ -94,53 +156,88 @@ export function useTopicEngine({ onLog }: UseTopicEngineOptions = {}) {
   );
 
   const processSegment = useCallback(
-    (text: string) => {
+    (text: string, source: TranscriptInputSource) => {
       const now = Date.now();
       const baseNodes = nodesRef.current;
+      const context: ConversationContext = {
+        activeTopicId: currentTopicIdRef.current,
+        recentTopicIds: segmentsRef.current.flatMap((segment) => segment.matchedTopicIds).slice(0, 8),
+        recentSegments: segmentsRef.current.slice(0, 8),
+      };
+      const references = resolveReferences(text, context);
+      const unresolvedReferences = references
+        .filter((reference) => reference.confidence < REFERENCE_CONFIDENCE_THRESHOLD || !reference.candidateTopicId)
+        .map((reference) => reference.phrase);
+      const confidentReferences = references.filter(
+        (reference) => reference.confidence >= REFERENCE_CONFIDENCE_THRESHOLD && reference.candidateTopicId,
+      );
       const topicScores = baseNodes
-        .map((node, index) => ({ id: node.id, index, score: scoreTopic(text, node) }))
+        .map((node, index) => ({
+          id: node.id,
+          index,
+          label: node.data.label,
+          keywords: findMatchedKeywords(text, node),
+          score: scoreTopic(text, node),
+        }))
         .filter((item) => item.score > 0)
         .sort((a, b) => b.score - a.score || a.index - b.index);
 
+      const matchedKeywords = [...new Set(topicScores.flatMap((item) => item.keywords))];
       const matchedTopicIds = topicScores.map((item) => item.id);
-      let activeTopicId = topicScores[0]?.id ?? null;
+      const selectedTopicId = topicScores[0]?.id ?? null;
+      const selectedTopicLabel = getTopicLabel(baseNodes, selectedTopicId);
+      const focusGate = evaluateFocusGate({
+        text,
+        focusState: focusStateRef.current,
+        selectedTopicId,
+        matchedTopicIds,
+        resolvedReferences: confidentReferences,
+        unresolvedReferences,
+        edges: edgesRef.current,
+        nodes: baseNodes,
+      });
+      let activeTopicId = focusGate.shouldUpdateCurrentTopic ? selectedTopicId ?? focusStateRef.current.focusTopicId : currentTopicIdRef.current;
       let nextNodes = baseNodes;
       let nextEdges = edgesRef.current;
+      let nextFocusState = focusStateRef.current;
+      let createdNodeId: string | null = null;
 
-      if (matchedTopicIds.length > 0) {
-        nextNodes = baseNodes.map((node) => {
-          if (!matchedTopicIds.includes(node.id)) return node;
-          return {
-            ...node,
-            data: {
-              ...node.data,
-              heat: Math.min(1, Number((node.data.heat + HEAT_INCREMENT).toFixed(2))),
-              lastTouchedAt: now,
-              evidence: limitEvidence(node.data.evidence, text),
-            },
-          };
-        });
-      } else if (text.length >= UNKNOWN_MIN_LENGTH) {
+      if (!nextFocusState.focusTopicId && selectedTopicId) {
+        nextFocusState = {
+          focusTopicId: selectedTopicId,
+          focusLabel: selectedTopicLabel,
+          focusSetBy: "auto",
+          startedAt: now,
+        };
+      }
+
+      if (focusGate.focusRelation === "on_focus") {
+        const topicIdsToTouch = selectedTopicId ? matchedTopicIds : [nextFocusState.focusTopicId].filter(Boolean);
+        nextNodes = touchNodes(baseNodes, topicIdsToTouch as string[], text, now, HEAT_INCREMENT);
+        activeTopicId = selectedTopicId ?? nextFocusState.focusTopicId;
+      } else if (focusGate.focusRelation === "adjacent") {
+        nextNodes = touchNodes(baseNodes, matchedTopicIds, text, now, ADJACENT_HEAT_INCREMENT);
+      }
+
+      const canCreateUnknownNode =
+        matchedTopicIds.length === 0 &&
+        text.length >= UNKNOWN_MIN_LENGTH &&
+        focusGate.focusRelation !== "off_topic_noise" &&
+        focusGate.focusRelation !== "off_topic_important" &&
+        unresolvedReferences.length === 0;
+
+      if (canCreateUnknownNode) {
         const duplicate = findUnknownDuplicate(baseNodes, text, now);
         if (duplicate) {
-          activeTopicId = duplicate.id;
           matchedTopicIds.push(duplicate.id);
-          nextNodes = baseNodes.map((node) => {
-            if (node.id !== duplicate.id) return node;
-            return {
-              ...node,
-              data: {
-                ...node.data,
-                heat: Math.min(1, Number((node.data.heat + HEAT_INCREMENT).toFixed(2))),
-                lastTouchedAt: now,
-                evidence: limitEvidence(node.data.evidence, text),
-              },
-            };
-          });
+          createdNodeId = duplicate.id;
+          if (focusGate.focusRelation === "on_focus") activeTopicId = duplicate.id;
+          nextNodes = touchNodes(nextNodes, [duplicate.id], text, now, HEAT_INCREMENT);
         } else {
           const id = createId("custom");
-          activeTopicId = id;
           matchedTopicIds.push(id);
+          createdNodeId = id;
+          if (focusGate.focusRelation === "on_focus") activeTopicId = id;
           const label = buildUnknownTopicLabel(text);
           const customNode: TopicGraphNode = {
             id,
@@ -159,34 +256,86 @@ export function useTopicEngine({ onLog }: UseTopicEngineOptions = {}) {
             ...edgesRef.current,
             {
               id: `topic-${id}`,
-              source: currentTopicId ?? "topic-detection",
+              source: nextFocusState.focusTopicId ?? currentTopicIdRef.current ?? "topic-detection",
               target: id,
             },
           ];
         }
       }
 
-      const segment: TranscriptSegment = {
+      const segment: AnalyzedSegment = {
         id: createId("seg"),
         text,
         createdAt: now,
+        source,
         matchedTopicIds,
+        analysis: {
+          selectedTopicId,
+          selectedTopicLabel,
+          matchedTopicIds,
+          matchedKeywords,
+          focusRelation: focusGate.focusRelation,
+          focusAlignmentScore: focusGate.focusAlignmentScore,
+          importanceType: focusGate.importanceType,
+          resolvedReferences: confidentReferences,
+          unresolvedReferences,
+          shouldUpdateGraph: focusGate.shouldUpdateGraph,
+          shouldUpdateCurrentTopic: focusGate.shouldUpdateCurrentTopic,
+          shouldCreateNode: Boolean(createdNodeId),
+          reason: focusGate.reason,
+        },
       };
+      const decisionLog: TopicDecisionLog = {
+        segmentId: segment.id,
+        text,
+        source,
+        matchedKeywords,
+        topicScores: topicScores.map((item) => ({
+          topicId: item.id,
+          label: item.label,
+          score: item.score,
+          reason: `matched keywords: ${item.keywords.join(", ")}`,
+        })),
+        selectedTopicId,
+        unresolvedReferences,
+        createdAt: now,
+      };
+      const importantMention: ImportantMention | null =
+        focusGate.focusRelation === "off_topic_important" && focusGate.importanceType
+          ? {
+              id: createId("mention"),
+              segmentId: segment.id,
+              text,
+              type: focusGate.importanceType,
+              relatedTopicId: selectedTopicId,
+              confidence: focusGate.focusAlignmentScore,
+            }
+          : null;
 
       nodesRef.current = nextNodes;
       edgesRef.current = nextEdges;
+      currentTopicIdRef.current = activeTopicId;
+      focusStateRef.current = nextFocusState;
+      segmentsRef.current = [segment, ...segmentsRef.current].slice(0, 60);
       setNodes(nextNodes);
       setEdges(nextEdges);
       setCurrentTopicId(activeTopicId);
-      setSegments((current) => [segment, ...current].slice(0, 60));
+      setFocusState(nextFocusState);
+      setSegments(segmentsRef.current);
+      setDecisionLogs((current) => [decisionLog, ...current].slice(0, 60));
+      if (importantMention) setImportantMentions((current) => [importantMention, ...current].slice(0, 40));
       addLog({
-        type: "segment",
-        message: activeTopicId ? `segment matched ${activeTopicId}` : "segment had no topic match",
-        payload: segment,
+        type: "decision",
+        message: `segment analyzed as ${focusGate.focusRelation}`,
+        payload: {
+          segment,
+          decisionLog,
+          importantMention,
+        },
         at: now,
       });
     },
-    [addLog, currentTopicId],
+    [addLog],
   );
 
   const flushBuffer = useCallback(() => {
@@ -194,7 +343,7 @@ export function useTopicEngine({ onLog }: UseTopicEngineOptions = {}) {
     if (!text) return;
     bufferRef.current = "";
     setBufferText("");
-    processSegment(text);
+    processSegment(text, "speech");
   }, [processSegment]);
 
   const addTranscriptText = useCallback(
@@ -206,10 +355,19 @@ export function useTopicEngine({ onLog }: UseTopicEngineOptions = {}) {
       addLog({
         type: "speech",
         message: "speech chunk received",
-        payload: { text: cleanText },
+        payload: { text: cleanText, source: "speech" },
       });
     },
     [addLog],
+  );
+
+  const submitTranscript = useCallback(
+    (text: string, source: Exclude<TranscriptInputSource, "speech">) => {
+      const cleanText = text.replace(/\s+/g, " ").trim();
+      if (!cleanText) return;
+      processSegment(cleanText, source);
+    },
+    [processSegment],
   );
 
   const reset = useCallback(() => {
@@ -222,8 +380,16 @@ export function useTopicEngine({ onLog }: UseTopicEngineOptions = {}) {
     setEdges(initialEdges);
     setSegments([]);
     setCurrentTopicId(null);
+    setFocusState({
+      focusTopicId: null,
+      focusLabel: null,
+      focusSetBy: "auto",
+      startedAt: Date.now(),
+    });
     setBufferText("");
     setLogs([]);
+    setDecisionLogs([]);
+    setImportantMentions([]);
   }, []);
 
   useEffect(() => {
@@ -264,12 +430,16 @@ export function useTopicEngine({ onLog }: UseTopicEngineOptions = {}) {
     bufferText,
     currentTopic,
     currentTopicId,
+    decisionLogs,
     edges,
+    focusState,
     flushBuffer,
     heatLeaders,
+    importantMentions,
     logs,
     nodes,
     reset,
     segments,
+    submitTranscript,
   };
 }

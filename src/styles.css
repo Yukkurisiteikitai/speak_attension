@@ -31,6 +31,24 @@ button {
   font: inherit;
 }
 
+textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  line-height: 1.5;
+  padding: 10px;
+  resize: vertical;
+}
+
+textarea:focus {
+  border-color: rgba(19, 138, 114, 0.5);
+  box-shadow: 0 0 0 3px rgba(19, 138, 114, 0.12);
+  outline: none;
+}
+
 .app-shell {
   display: grid;
   grid-template-columns: 360px minmax(520px, 1fr) 380px;
@@ -41,7 +59,7 @@ button {
 
 .left-column {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 14px;
   min-height: 0;
 }
@@ -120,6 +138,54 @@ button {
 
 .icon-button {
   width: 42px;
+}
+
+.manual-replay-panel {
+  display: grid;
+  gap: 10px;
+}
+
+.field-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.manual-input-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 42px;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.scenario-textarea {
+  min-height: 130px;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 12px;
+}
+
+.replay-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.replay-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.replay-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .status-pill {
@@ -225,6 +291,16 @@ button {
 .segment-card span {
   color: var(--muted);
   font-size: 12px;
+}
+
+.segment-card .source-badge {
+  display: inline-flex;
+  margin-left: 8px;
+  border-radius: 999px;
+  background: rgba(47, 111, 237, 0.1);
+  padding: 2px 7px;
+  color: var(--blue);
+  font-weight: 800;
 }
 
 .segment-card p {
@@ -335,6 +411,130 @@ button {
   display: block;
   margin-bottom: 8px;
   font-size: 20px;
+}
+
+.decision-card,
+.analysis-card,
+.reference-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfb;
+  padding: 10px;
+}
+
+.decision-card p,
+.analysis-card p,
+.reference-card p {
+  margin: 0;
+  color: var(--ink);
+  line-height: 1.5;
+}
+
+.analysis-card {
+  display: grid;
+  gap: 10px;
+  border-left: 4px solid var(--line);
+}
+
+.analysis-card.relation-on_focus {
+  border-left-color: var(--green);
+}
+
+.analysis-card.relation-adjacent {
+  border-left-color: var(--blue);
+}
+
+.analysis-card.relation-off_topic_important {
+  border-left-color: var(--amber);
+}
+
+.analysis-card.relation-off_topic_noise {
+  opacity: 0.74;
+}
+
+.analysis-card.relation-uncertain {
+  border-left-color: var(--red);
+}
+
+.analysis-relation-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.analysis-relation-row strong {
+  font-size: 14px;
+}
+
+.analysis-relation-row span {
+  border-radius: 999px;
+  background: rgba(19, 138, 114, 0.1);
+  padding: 3px 8px;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.decision-card dl,
+.analysis-card dl {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 0;
+}
+
+.decision-card dl div,
+.analysis-card dl div {
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.decision-card dt,
+.analysis-card dt {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.decision-card dd,
+.analysis-card dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.reference-list {
+  display: grid;
+  gap: 8px;
+}
+
+.reference-card {
+  display: grid;
+  gap: 5px;
+}
+
+.reference-card strong {
+  font-size: 13px;
+}
+
+.reference-card span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.reference-card.unresolved {
+  border-left: 4px solid var(--amber);
+}
+
+.reference-card.important {
+  border-left: 4px solid var(--red);
+}
+
+.inline-reference-list {
+  margin-top: 2px;
 }
 
 .heat-list {
