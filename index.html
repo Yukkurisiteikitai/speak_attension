@@ -3,100 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Simple Mindmap Editor</title>
-    <link rel="stylesheet" href="./styles.css" />
+    <title>Live Topic Graph</title>
   </head>
   <body>
-    <main class="app-shell">
-      <header class="hero">
-        <div>
-          <p class="eyebrow">Simple Mindmap Editor</p>
-          <h1>考えを軽く広げるマインドマップ</h1>
-          <p class="hero-copy">
-            中心テーマから枝を足して、メモを残し、ブラウザ内に自動保存します。
-          </p>
-        </div>
-        <div class="hero-actions" aria-label="ファイル操作">
-          <button id="resetBtn" type="button">初期化</button>
-          <button id="exportBtn" type="button">JSON保存</button>
-          <label class="file-button" for="importInput">JSON読込</label>
-          <input id="importInput" type="file" accept="application/json,.json" />
-        </div>
-      </header>
-
-      <section class="stats" aria-label="マップ概要">
-        <div>
-          <span>ノード</span>
-          <strong id="nodeCount">0</strong>
-        </div>
-        <div>
-          <span>末端</span>
-          <strong id="leafCount">0</strong>
-        </div>
-        <div>
-          <span>深さ</span>
-          <strong id="depthCount">0</strong>
-        </div>
-        <div>
-          <span>保存</span>
-          <strong id="saveStatus">未保存</strong>
-        </div>
-      </section>
-
-      <div class="workspace">
-        <section class="map-panel" aria-label="マインドマップ">
-          <div class="panel-head">
-            <div>
-              <h2>マップ</h2>
-              <p>ノードを選択して編集します。空白部分は横スクロールできます。</p>
-            </div>
-            <div class="map-actions" aria-label="ノード操作">
-              <button id="addChildBtn" class="primary" type="button">子を追加</button>
-              <button id="addSiblingBtn" type="button">兄弟を追加</button>
-              <button id="toggleCollapseBtn" type="button">折りたたみ</button>
-              <button id="deleteBtn" class="danger" type="button">削除</button>
-            </div>
-          </div>
-          <div id="mapCanvas" class="map-canvas" tabindex="0">
-            <div id="mindmapTree" class="mindmap-tree" role="tree" aria-label="マインドマップツリー"></div>
-          </div>
-        </section>
-
-        <aside class="editor-panel" aria-label="選択ノード編集">
-          <section class="editor-card">
-            <p class="eyebrow">Selected node</p>
-            <h2>ノード編集</h2>
-            <label for="nodeTitle">タイトル</label>
-            <input id="nodeTitle" type="text" maxlength="64" />
-            <label for="nodeNote">メモ</label>
-            <textarea id="nodeNote" rows="7" maxlength="420"></textarea>
-            <span id="nodeMeta" class="node-meta"></span>
-          </section>
-
-          <section class="editor-card">
-            <h2>色</h2>
-            <div id="colorPicker" class="color-picker" aria-label="ノード色">
-              <button type="button" data-color="teal">Teal</button>
-              <button type="button" data-color="blue">Blue</button>
-              <button type="button" data-color="amber">Amber</button>
-              <button type="button" data-color="rose">Rose</button>
-              <button type="button" data-color="slate">Slate</button>
-            </div>
-          </section>
-
-          <section class="editor-card">
-            <h2>ショートカット</h2>
-            <dl class="shortcut-list">
-              <div><dt>Enter</dt><dd>子ノード追加</dd></div>
-              <div><dt>Tab</dt><dd>兄弟ノード追加</dd></div>
-              <div><dt>Delete</dt><dd>選択ノード削除</dd></div>
-              <div><dt>矢印キー</dt><dd>ノード移動 / 展開</dd></div>
-            </dl>
-          </section>
-        </aside>
-      </div>
-    </main>
-
-    <script src="./app.js"></script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
