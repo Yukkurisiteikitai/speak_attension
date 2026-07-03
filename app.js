@@ -1,432 +1,603 @@
-const TOPICS = [
-  {
-    id: "source",
-    label: "根拠ソース",
-    terms: ["ソース", "根拠", "引用", "発言", "どこ", "参照", "番号", "source"],
-  },
-  {
-    id: "topic-shift",
-    label: "話題転換",
-    terms: ["話題", "議題", "変わ", "転換", "脱線", "戻", "検知", "切れ目"],
-  },
-  {
-    id: "issue-answer",
-    label: "課題と回答",
-    terms: ["課題", "問題", "未回答", "回答", "答え", "解決", "残", "整理"],
-  },
-  {
-    id: "stt",
-    label: "音声認識",
-    terms: ["音声", "マイク", "字幕", "文字起こし", "stt", "asr", "speech"],
-  },
-  {
-    id: "ui",
-    label: "UI表示",
-    terms: ["表示", "強調", "カード", "ハイライト", "notebooklm", "画面", "ui"],
-  },
-];
-
-const ANSWER_HINTS = ["解決", "対応", "答え", "結論", "なので", "ために", "すれば", "として", "方針", "実装"];
-const ISSUE_HINTS = ["課題", "問題", "懸念", "難しい", "できない", "必要", "不足", "未回答", "どう", "なぜ", "どこ"];
-const SAMPLE_LINES = [
-  "課題は、議論中に情報がどの発言をソースにしているのか分からないことです。",
-  "解決策として、各発言にS1、S2の番号を付けて、論点カード側に引用元として表示します。",
-  "次の話題です。話題が変わったタイミングを検知して、今どの論点にいるかを強調したいです。",
-  "これは発話のキーワードが前の話題と大きく変わった時に、話題転換として扱えばよさそうです。",
-  "まだ未回答なのは、議論終了時に答えていない課題をどう強調するかです。",
-  "終了時には、回答済みは緑、未回答は赤で並べ、根拠の発言番号も残します。",
-];
-
-const state = {
-  recognition: null,
-  running: false,
-  startedAt: null,
-  timerId: null,
-  flushId: null,
-  buffer: "",
-  sources: [],
-  issues: [],
-  currentTopicId: null,
-  shiftCount: 0,
+const STORAGE_KEY = "speak-attension:mindmap:v1";
+const COLOR_VALUES = {
+  teal: "#0f766e",
+  blue: "#2563eb",
+  amber: "#d97706",
+  rose: "#be3f55",
+  slate: "#475569",
 };
 
 const els = {
-  startBtn: document.querySelector("#startBtn"),
-  stopBtn: document.querySelector("#stopBtn"),
-  sampleBtn: document.querySelector("#sampleBtn"),
+  nodeCount: document.querySelector("#nodeCount"),
+  leafCount: document.querySelector("#leafCount"),
+  depthCount: document.querySelector("#depthCount"),
+  saveStatus: document.querySelector("#saveStatus"),
+  mindmapTree: document.querySelector("#mindmapTree"),
+  mapCanvas: document.querySelector("#mapCanvas"),
+  addChildBtn: document.querySelector("#addChildBtn"),
+  addSiblingBtn: document.querySelector("#addSiblingBtn"),
+  toggleCollapseBtn: document.querySelector("#toggleCollapseBtn"),
+  deleteBtn: document.querySelector("#deleteBtn"),
   resetBtn: document.querySelector("#resetBtn"),
-  analyzeBtn: document.querySelector("#analyzeBtn"),
-  downloadBtn: document.querySelector("#downloadBtn"),
-  supportBadge: document.querySelector("#supportBadge"),
-  timer: document.querySelector("#timer"),
-  currentTopic: document.querySelector("#currentTopic"),
-  shiftCount: document.querySelector("#shiftCount"),
-  issueCount: document.querySelector("#issueCount"),
-  answeredCount: document.querySelector("#answeredCount"),
-  openCount: document.querySelector("#openCount"),
-  interimTranscript: document.querySelector("#interimTranscript"),
-  sourceList: document.querySelector("#sourceList"),
-  issueBoard: document.querySelector("#issueBoard"),
-  manualInput: document.querySelector("#manualInput"),
-  finalSummary: document.querySelector("#finalSummary"),
-  jsonLog: document.querySelector("#jsonLog"),
+  exportBtn: document.querySelector("#exportBtn"),
+  importInput: document.querySelector("#importInput"),
+  nodeTitle: document.querySelector("#nodeTitle"),
+  nodeNote: document.querySelector("#nodeNote"),
+  nodeMeta: document.querySelector("#nodeMeta"),
+  colorPicker: document.querySelector("#colorPicker"),
 };
 
-const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+let state = loadMap();
+let toastTimer = null;
+let storageAvailable = true;
+
+function createDefaultMap() {
+  const rootId = createId();
+  const ideasId = createId();
+  const tasksId = createId();
+  const memoId = createId();
+
+  return {
+    version: 1,
+    rootId,
+    selectedId: rootId,
+    updatedAt: new Date().toISOString(),
+    nodes: {
+      [rootId]: {
+        id: rootId,
+        title: "中心テーマ",
+        note: "ここから考えを広げます。",
+        parentId: null,
+        children: [ideasId, tasksId, memoId],
+        collapsed: false,
+        color: "teal",
+      },
+      [ideasId]: {
+        id: ideasId,
+        title: "アイデア",
+        note: "思いついたことをそのまま置く枝。",
+        parentId: rootId,
+        children: [],
+        collapsed: false,
+        color: "blue",
+      },
+      [tasksId]: {
+        id: tasksId,
+        title: "やること",
+        note: "次に動く内容を整理します。",
+        parentId: rootId,
+        children: [],
+        collapsed: false,
+        color: "amber",
+      },
+      [memoId]: {
+        id: memoId,
+        title: "メモ",
+        note: "補足や参考情報を残します。",
+        parentId: rootId,
+        children: [],
+        collapsed: false,
+        color: "slate",
+      },
+    },
+  };
+}
 
 function init() {
-  wireEvents();
-  updateSupportBadge();
-  render();
+  bindEvents();
+  renderAll();
+  saveMap();
 }
 
-function wireEvents() {
-  els.startBtn.addEventListener("click", startRecognition);
-  els.stopBtn.addEventListener("click", finishDiscussion);
-  els.sampleBtn.addEventListener("click", playSamples);
-  els.resetBtn.addEventListener("click", resetDiscussion);
-  els.analyzeBtn.addEventListener("click", () => {
-    const text = els.manualInput.value.trim();
-    if (!text) return;
-    addSource(text, "manual");
-    els.manualInput.value = "";
+function bindEvents() {
+  els.addChildBtn.addEventListener("click", () => addChild());
+  els.addSiblingBtn.addEventListener("click", () => addSibling());
+  els.toggleCollapseBtn.addEventListener("click", () => toggleSelectedCollapse());
+  els.deleteBtn.addEventListener("click", () => deleteSelectedNode());
+  els.resetBtn.addEventListener("click", resetMap);
+  els.exportBtn.addEventListener("click", exportMap);
+  els.importInput.addEventListener("change", importMap);
+
+  els.nodeTitle.addEventListener("input", () => {
+    updateSelectedNode({ title: els.nodeTitle.value });
   });
-  els.downloadBtn.addEventListener("click", downloadLog);
+  els.nodeNote.addEventListener("input", () => {
+    updateSelectedNode({ note: els.nodeNote.value });
+  });
+
+  els.colorPicker.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-color]");
+    if (!button) return;
+    updateSelectedNode({ color: button.dataset.color });
+    renderInspector();
+  });
+
+  els.mindmapTree.addEventListener("click", (event) => {
+    const card = event.target.closest("[data-node-id]");
+    if (!card) return;
+    selectNode(card.dataset.nodeId);
+    els.mapCanvas.focus({ preventScroll: true });
+  });
+
+  els.mindmapTree.addEventListener("dblclick", (event) => {
+    const card = event.target.closest("[data-node-id]");
+    if (!card) return;
+    selectNode(card.dataset.nodeId);
+    els.nodeTitle.focus();
+    els.nodeTitle.select();
+  });
+
+  document.addEventListener("keydown", handleKeyboard);
 }
 
-function updateSupportBadge() {
-  if (SpeechRecognition) {
-    els.supportBadge.textContent = "音声認識対応";
+function handleKeyboard(event) {
+  const activeTag = document.activeElement?.tagName;
+  if (activeTag === "INPUT" || activeTag === "TEXTAREA") return;
+  if (event.metaKey || event.ctrlKey || event.altKey) return;
+
+  if (event.key === "Enter") {
+    event.preventDefault();
+    addChild();
     return;
   }
-  els.supportBadge.textContent = "手入力のみ";
-  els.startBtn.disabled = true;
+  if (event.key === "Tab") {
+    event.preventDefault();
+    addSibling();
+    return;
+  }
+  if (event.key === "Delete" || event.key === "Backspace") {
+    event.preventDefault();
+    deleteSelectedNode();
+    return;
+  }
+  if (event.key === "ArrowUp") {
+    event.preventDefault();
+    selectRelative(-1);
+    return;
+  }
+  if (event.key === "ArrowDown") {
+    event.preventDefault();
+    selectRelative(1);
+    return;
+  }
+  if (event.key === "ArrowLeft") {
+    event.preventDefault();
+    moveLeft();
+    return;
+  }
+  if (event.key === "ArrowRight") {
+    event.preventDefault();
+    moveRight();
+  }
 }
 
-function startRecognition() {
-  if (!SpeechRecognition || state.running) return;
+function loadMap() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (!saved) return createDefaultMap();
+    return normalizeMap(JSON.parse(saved));
+  } catch {
+    return createDefaultMap();
+  }
+}
 
-  state.recognition = new SpeechRecognition();
-  state.recognition.lang = "ja-JP";
-  state.recognition.continuous = true;
-  state.recognition.interimResults = true;
+function saveMap() {
+  state.updatedAt = new Date().toISOString();
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    storageAvailable = true;
+  } catch {
+    storageAvailable = false;
+  }
+  renderStats();
+}
 
-  state.recognition.onresult = (event) => {
-    let interim = "";
-    for (let i = event.resultIndex; i < event.results.length; i += 1) {
-      const transcript = event.results[i][0].transcript;
-      if (event.results[i].isFinal) {
-        state.buffer += `${transcript} `;
-        els.interimTranscript.textContent = transcript;
-      } else {
-        interim += transcript;
-      }
+function normalizeMap(payload) {
+  if (!payload || typeof payload !== "object") throw new Error("Invalid map");
+  if (!payload.rootId || !payload.nodes || typeof payload.nodes !== "object") {
+    throw new Error("Invalid map shape");
+  }
+  if (!payload.nodes[payload.rootId]) throw new Error("Root node is missing");
+
+  const nodes = {};
+  for (const [id, node] of Object.entries(payload.nodes)) {
+    if (!node || typeof node !== "object") throw new Error("Invalid node");
+    nodes[id] = {
+      id,
+      title: String(node.title || "無題").slice(0, 64),
+      note: String(node.note || "").slice(0, 420),
+      parentId: node.parentId === null ? null : String(node.parentId || ""),
+      children: Array.isArray(node.children) ? node.children.map(String) : [],
+      collapsed: Boolean(node.collapsed),
+      color: COLOR_VALUES[node.color] ? node.color : "teal",
+    };
+  }
+
+  for (const node of Object.values(nodes)) {
+    node.children = node.children.filter((childId) => nodes[childId] && nodes[childId].parentId === node.id);
+    if (node.id === payload.rootId) node.parentId = null;
+  }
+
+  const reachableIds = collectReachableIds(String(payload.rootId), nodes);
+  for (const nodeId of Object.keys(nodes)) {
+    if (!reachableIds.has(nodeId)) delete nodes[nodeId];
+  }
+  const selectedId = nodes[payload.selectedId] ? String(payload.selectedId) : String(payload.rootId);
+
+  return {
+    version: 1,
+    rootId: String(payload.rootId),
+    selectedId,
+    updatedAt: isValidDate(payload.updatedAt) ? payload.updatedAt : new Date().toISOString(),
+    nodes,
+  };
+}
+
+function collectReachableIds(rootId, nodes) {
+  const seen = new Set();
+  const visit = (nodeId) => {
+    if (seen.has(nodeId) || !nodes[nodeId]) return;
+    seen.add(nodeId);
+    nodes[nodeId].children = nodes[nodeId].children.filter((childId) => !seen.has(childId));
+    for (const childId of nodes[nodeId].children) visit(childId);
+  };
+  visit(rootId);
+  return seen;
+}
+
+function renderAll() {
+  renderMap();
+  renderInspector();
+  renderStats();
+}
+
+function renderMap() {
+  els.mindmapTree.innerHTML = "";
+  els.mindmapTree.appendChild(renderLevel([state.rootId]));
+  updateActionButtons();
+}
+
+function renderLevel(nodeIds) {
+  const level = document.createElement("ul");
+  level.className = "tree-level";
+  for (const nodeId of nodeIds) {
+    const node = state.nodes[nodeId];
+    if (!node) continue;
+    const branch = document.createElement("li");
+    branch.className = [
+      "tree-branch",
+      node.children.length ? "has-children" : "",
+      node.collapsed ? "collapsed" : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
+    branch.appendChild(renderNodeCard(node));
+
+    if (node.children.length && !node.collapsed) {
+      const childrenWrap = document.createElement("div");
+      childrenWrap.className = "children-wrap";
+      childrenWrap.appendChild(renderLevel(node.children));
+      branch.appendChild(childrenWrap);
     }
-    if (interim) els.interimTranscript.textContent = interim;
-  };
-
-  state.recognition.onerror = (event) => {
-    els.interimTranscript.textContent = `音声認識エラー: ${event.error}`;
-  };
-
-  state.recognition.onend = () => {
-    if (state.running) state.recognition.start();
-  };
-
-  state.running = true;
-  state.startedAt = Date.now();
-  state.recognition.start();
-  state.timerId = window.setInterval(updateTimer, 500);
-  state.flushId = window.setInterval(flushBuffer, 6000);
-  els.startBtn.disabled = true;
-  els.stopBtn.disabled = false;
-  els.interimTranscript.textContent = "聞き取り中...";
-}
-
-function finishDiscussion() {
-  if (state.running) {
-    state.running = false;
-    state.recognition?.stop();
-    window.clearInterval(state.timerId);
-    window.clearInterval(state.flushId);
-    flushBuffer();
-    els.startBtn.disabled = !SpeechRecognition;
+    level.appendChild(branch);
   }
-  buildFinalSummary();
+  return level;
 }
 
-function resetDiscussion() {
-  if (state.running) finishDiscussion();
-  state.sources = [];
-  state.issues = [];
-  state.currentTopicId = null;
-  state.shiftCount = 0;
-  state.buffer = "";
-  els.timer.textContent = "00:00";
-  els.interimTranscript.textContent = "音声入力、または手入力で発話を追加してください。";
-  els.finalSummary.innerHTML = "<p>議論を終了すると、課題と回答状況をここに整理します。</p>";
-  render();
+function renderNodeCard(node) {
+  const card = document.createElement("button");
+  card.type = "button";
+  card.dataset.nodeId = node.id;
+  card.className = [
+    "node-card",
+    node.id === state.rootId ? "root" : "",
+    node.id === state.selectedId ? "selected" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  card.style.setProperty("--node-color", COLOR_VALUES[node.color] || COLOR_VALUES.teal);
+  card.setAttribute("role", "treeitem");
+  card.setAttribute("aria-selected", String(node.id === state.selectedId));
+  card.setAttribute("aria-expanded", node.children.length ? String(!node.collapsed) : "false");
+
+  const title = document.createElement("strong");
+  title.textContent = node.title || "無題";
+  card.appendChild(title);
+
+  const note = document.createElement("p");
+  note.textContent = node.note ? trimText(node.note, 72) : "メモなし";
+  if (!node.note) note.className = "empty-note";
+  card.appendChild(note);
+
+  const footer = document.createElement("footer");
+  const childCount = document.createElement("span");
+  childCount.className = "child-count";
+  childCount.textContent = `${node.children.length} 枝`;
+  const stateText = document.createElement("span");
+  stateText.textContent = node.children.length && node.collapsed ? "折りたたみ中" : "表示中";
+  footer.append(childCount, stateText);
+  card.appendChild(footer);
+
+  return card;
 }
 
-function updateTimer() {
-  const elapsed = Math.floor((Date.now() - state.startedAt) / 1000);
-  const minutes = String(Math.floor(elapsed / 60)).padStart(2, "0");
-  const seconds = String(elapsed % 60).padStart(2, "0");
-  els.timer.textContent = `${minutes}:${seconds}`;
+function renderInspector() {
+  const node = getSelectedNode();
+  els.nodeTitle.value = node.title;
+  els.nodeNote.value = node.note;
+  els.nodeMeta.textContent = buildNodeMeta(node);
+
+  els.colorPicker.querySelectorAll("[data-color]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.color === node.color);
+  });
+  updateActionButtons();
 }
 
-function flushBuffer() {
-  const text = state.buffer.trim();
-  if (!text) return;
-  state.buffer = "";
-  addSource(text, "speech");
+function renderStats() {
+  const allNodes = Object.values(state.nodes);
+  els.nodeCount.textContent = String(allNodes.length);
+  els.leafCount.textContent = String(allNodes.filter((node) => node.children.length === 0).length);
+  els.depthCount.textContent = String(getMaxDepth(state.rootId));
+  els.saveStatus.textContent = storageAvailable ? formatTime(state.updatedAt) : "保存不可";
 }
 
-function addSource(text, sourceType) {
-  const source = {
-    id: state.sources.length + 1,
-    label: `S${state.sources.length + 1}`,
-    text,
-    sourceType,
-    at: new Date().toISOString(),
-  };
-  const topic = detectTopic(text);
-  const previousTopicId = state.currentTopicId;
-  const shifted = previousTopicId && previousTopicId !== topic.id;
-  if (shifted) state.shiftCount += 1;
-  state.currentTopicId = topic.id;
-
-  const issue = upsertIssue(text, source, topic, shifted);
-  source.topicId = topic.id;
-  source.topicLabel = topic.label;
-  source.issueId = issue.id;
-  source.shifted = Boolean(shifted);
-  state.sources.push(source);
-  render();
+function updateActionButtons() {
+  const node = getSelectedNode();
+  const isRoot = node.id === state.rootId;
+  els.addSiblingBtn.disabled = isRoot;
+  els.deleteBtn.disabled = isRoot;
+  els.toggleCollapseBtn.disabled = node.children.length === 0;
+  els.toggleCollapseBtn.textContent = node.collapsed ? "展開" : "折りたたみ";
 }
 
-function detectTopic(text) {
-  const normalized = text.toLowerCase();
-  const ranked = TOPICS.map((topic) => ({
-    ...topic,
-    score: topic.terms.reduce((sum, term) => sum + (normalized.includes(term.toLowerCase()) ? 1 : 0), 0),
-  })).sort((a, b) => b.score - a.score);
-  if (ranked[0].score > 0) return ranked[0];
-  return { id: `free-${compactLabel(text)}`, label: compactLabel(text), terms: [] };
+function selectNode(nodeId) {
+  if (!state.nodes[nodeId]) return;
+  state.selectedId = nodeId;
+  renderAll();
+  saveMap();
 }
 
-function upsertIssue(text, source, topic, shifted) {
-  const kind = classifySentence(text);
-  const existing = state.issues.find((issue) => issue.topicId === topic.id && issue.status !== "answered");
-  const shouldCreate = !existing || shifted || kind === "issue";
-  const issue =
-    shouldCreate
-      ? createIssue(text, source, topic, kind)
-      : existing;
+function updateSelectedNode(patch) {
+  const node = getSelectedNode();
+  Object.assign(node, patch);
+  renderMap();
+  saveMap();
+}
 
-  if (!shouldCreate) {
-    issue.sources.push(source.label);
-    issue.evidence.push({ source: source.label, text });
+function addChild(parentId = state.selectedId) {
+  const parent = state.nodes[parentId];
+  if (!parent) return;
+  const child = createNode(parent.id);
+  parent.children.push(child.id);
+  parent.collapsed = false;
+  state.nodes[child.id] = child;
+  state.selectedId = child.id;
+  renderAll();
+  saveMap();
+  focusTitleInput();
+}
+
+function addSibling() {
+  const selected = getSelectedNode();
+  if (selected.id === state.rootId) {
+    showToast("中心ノードには兄弟を追加できません。子ノードを追加してください。");
+    return;
   }
-
-  if (kind === "answer") {
-    issue.status = "answered";
-    issue.answer = summarizeAnswer(text);
-    issue.answerSources = [...new Set([...(issue.answerSources || []), source.label])];
-  } else if (kind === "issue" && issue.status !== "answered") {
-    issue.status = "open";
-  }
-
-  issue.updatedAt = source.at;
-  return issue;
+  const parent = state.nodes[selected.parentId];
+  if (!parent) return;
+  const sibling = createNode(parent.id);
+  const selectedIndex = parent.children.indexOf(selected.id);
+  parent.children.splice(selectedIndex + 1, 0, sibling.id);
+  state.nodes[sibling.id] = sibling;
+  state.selectedId = sibling.id;
+  renderAll();
+  saveMap();
+  focusTitleInput();
 }
 
-function createIssue(text, source, topic, kind) {
-  const issue = {
-    id: `I${state.issues.length + 1}`,
-    topicId: topic.id,
-    topicLabel: topic.label,
-    title: buildIssueTitle(text, topic.label, kind),
-    status: kind === "answer" ? "answered" : "open",
-    issue: kind === "answer" ? "" : summarizeIssue(text),
-    answer: kind === "answer" ? summarizeAnswer(text) : "",
-    sources: [source.label],
-    answerSources: kind === "answer" ? [source.label] : [],
-    evidence: [{ source: source.label, text }],
-    createdAt: source.at,
-    updatedAt: source.at,
-  };
-  state.issues.push(issue);
-  return issue;
+function toggleSelectedCollapse() {
+  const node = getSelectedNode();
+  if (!node.children.length) return;
+  node.collapsed = !node.collapsed;
+  renderAll();
+  saveMap();
 }
 
-function classifySentence(text) {
-  const answerScore = ANSWER_HINTS.filter((term) => text.includes(term)).length;
-  const issueScore = ISSUE_HINTS.filter((term) => text.includes(term)).length;
-  if (answerScore > issueScore) return "answer";
-  if (issueScore > 0) return "issue";
-  return "note";
-}
-
-function buildIssueTitle(text, fallback, kind) {
-  if (kind === "answer") return `${fallback}への回答`;
-  const cleaned = text.replace(/^(課題|問題|懸念)(は|として|:|：)?/g, "").trim();
-  return trimText(cleaned || fallback, 28);
-}
-
-function summarizeIssue(text) {
-  return trimText(text.replace(/^(課題|問題|懸念)(は|として|:|：)?/g, "").trim(), 84);
-}
-
-function summarizeAnswer(text) {
-  return trimText(text.replace(/^(解決策|回答|結論)(として|は|:|：)?/g, "").trim(), 96);
-}
-
-function compactLabel(text) {
-  return trimText(text.replace(/[。、,.!?！？「」]/g, " ").trim(), 14) || "未分類";
-}
-
-function trimText(text, max) {
-  return text.length > max ? `${text.slice(0, max - 1)}…` : text;
-}
-
-function render() {
-  const currentTopic = TOPICS.find((topic) => topic.id === state.currentTopicId);
-  const latestIssue = state.issues.at(-1);
-  els.currentTopic.textContent = currentTopic?.label || latestIssue?.topicLabel || "待機中";
-  els.shiftCount.textContent = String(state.shiftCount);
-  els.issueCount.textContent = String(state.issues.length);
-  els.answeredCount.textContent = String(state.issues.filter((issue) => issue.status === "answered").length);
-  els.openCount.textContent = String(state.issues.filter((issue) => issue.status !== "answered").length);
-  renderSources();
-  renderIssues();
-  renderLog();
-}
-
-function renderSources() {
-  els.sourceList.innerHTML = "";
-  if (!state.sources.length) {
-    els.sourceList.innerHTML = '<div class="empty">発話ソースはまだありません。</div>';
+function deleteSelectedNode() {
+  const node = getSelectedNode();
+  if (node.id === state.rootId) {
+    showToast("中心ノードは削除できません。");
     return;
   }
 
-  for (const source of state.sources.slice().reverse()) {
-    const item = document.createElement("article");
-    item.id = `source-${source.label}`;
-    item.className = ["source-card", source.shifted ? "shifted" : ""].filter(Boolean).join(" ");
-    item.innerHTML = `
-      <div class="source-meta">
-        <span>${source.label}</span>
-        <strong>${source.topicLabel}</strong>
-      </div>
-      <p>${escapeHtml(source.text)}</p>
-    `;
-    els.sourceList.appendChild(item);
-  }
-}
-
-function renderIssues() {
-  els.issueBoard.innerHTML = "";
-  if (!state.issues.length) {
-    els.issueBoard.innerHTML = '<div class="empty">論点はまだありません。</div>';
+  const childTotal = countDescendants(node.id);
+  if (childTotal > 0 && !window.confirm(`このノードと子ノード ${childTotal} 件を削除します。よろしいですか？`)) {
     return;
   }
 
-  for (const issue of state.issues.slice().reverse()) {
-    const card = document.createElement("article");
-    const isActive = issue.topicId === state.currentTopicId;
-    card.className = ["issue-card", issue.status, isActive ? "active" : ""].filter(Boolean).join(" ");
-    card.innerHTML = `
-      <div class="issue-top">
-        <span class="status ${issue.status}">${issue.status === "answered" ? "回答済み" : "未回答"}</span>
-        <span class="topic-pill">${escapeHtml(issue.topicLabel)}</span>
-      </div>
-      <h3>${escapeHtml(issue.title)}</h3>
-      ${issue.issue ? `<p class="issue-text">${escapeHtml(issue.issue)}</p>` : ""}
-      ${issue.answer ? `<p class="answer-text">${escapeHtml(issue.answer)}</p>` : ""}
-      <div class="source-links">
-        ${issue.sources.map((source) => `<button type="button" data-source="${source}">${source}</button>`).join("")}
-      </div>
-    `;
-    card.querySelectorAll("[data-source]").forEach((button) => {
-      button.addEventListener("click", () => focusSource(button.dataset.source));
-    });
-    els.issueBoard.appendChild(card);
-  }
+  const parent = state.nodes[node.parentId];
+  if (parent) parent.children = parent.children.filter((childId) => childId !== node.id);
+  removeSubtree(node.id);
+  state.selectedId = parent?.id || state.rootId;
+  renderAll();
+  saveMap();
 }
 
-function focusSource(sourceLabel) {
-  const target = document.querySelector(`#source-${sourceLabel}`);
-  if (!target) return;
-  target.scrollIntoView({ behavior: "smooth", block: "center" });
-  target.classList.add("focused");
-  window.setTimeout(() => target.classList.remove("focused"), 1500);
+function resetMap() {
+  if (!window.confirm("現在のマインドマップを初期状態に戻します。よろしいですか？")) return;
+  state = createDefaultMap();
+  renderAll();
+  saveMap();
+  showToast("初期状態に戻しました。");
 }
 
-function buildFinalSummary() {
-  const answered = state.issues.filter((issue) => issue.status === "answered");
-  const open = state.issues.filter((issue) => issue.status !== "answered");
-  els.finalSummary.innerHTML = `
-    <div class="summary-group answered">
-      <h3>回答済み</h3>
-      ${answered.length ? answered.map(summaryRow).join("") : "<p>なし</p>"}
-    </div>
-    <div class="summary-group open">
-      <h3>未回答</h3>
-      ${open.length ? open.map(summaryRow).join("") : "<p>なし</p>"}
-    </div>
-  `;
-  render();
-}
-
-function summaryRow(issue) {
-  const sourceList = [...new Set([...issue.sources, ...(issue.answerSources || [])])].join(", ");
-  return `
-    <article>
-      <strong>${escapeHtml(issue.title)}</strong>
-      <span>${escapeHtml(sourceList)}</span>
-    </article>
-  `;
-}
-
-function renderLog() {
-  const payload = {
-    current_topic: els.currentTopic.textContent,
-    topic_shift_count: state.shiftCount,
-    sources: state.sources,
-    issues: state.issues,
-  };
-  els.jsonLog.textContent = JSON.stringify(payload, null, 2);
-}
-
-function downloadLog() {
-  const payload = {
-    exported_at: new Date().toISOString(),
-    sources: state.sources,
-    issues: state.issues,
-  };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+function exportMap() {
+  const payload = JSON.stringify(state, null, 2);
+  const blob = new Blob([payload], { type: "application/json" });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `discussion-sources-${new Date().toISOString()}.json`;
-  a.click();
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `mindmap-${new Date().toISOString()}.json`;
+  link.click();
   URL.revokeObjectURL(url);
 }
 
-function playSamples() {
-  SAMPLE_LINES.forEach((line, index) => {
-    window.setTimeout(() => addSource(line, "sample"), index * 700);
+function importMap(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.addEventListener("load", () => {
+    try {
+      state = normalizeMap(JSON.parse(String(reader.result)));
+      renderAll();
+      saveMap();
+      showToast("JSONを読み込みました。");
+    } catch {
+      showToast("JSONの形式が正しくありません。");
+    } finally {
+      els.importInput.value = "";
+    }
+  });
+  reader.readAsText(file);
+}
+
+function createNode(parentId) {
+  return {
+    id: createId(),
+    title: "新しいアイデア",
+    note: "",
+    parentId,
+    children: [],
+    collapsed: false,
+    color: nextColor(parentId),
+  };
+}
+
+function createId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return `node-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function nextColor(parentId) {
+  const colors = Object.keys(COLOR_VALUES);
+  const parent = state?.nodes?.[parentId];
+  const index = parent ? parent.children.length % colors.length : 0;
+  return colors[index];
+}
+
+function getSelectedNode() {
+  return state.nodes[state.selectedId] || state.nodes[state.rootId];
+}
+
+function countDescendants(nodeId) {
+  const node = state.nodes[nodeId];
+  if (!node) return 0;
+  return node.children.reduce((sum, childId) => sum + 1 + countDescendants(childId), 0);
+}
+
+function removeSubtree(nodeId) {
+  const node = state.nodes[nodeId];
+  if (!node) return;
+  for (const childId of node.children) removeSubtree(childId);
+  delete state.nodes[nodeId];
+}
+
+function getMaxDepth(nodeId, depth = 1) {
+  const node = state.nodes[nodeId];
+  if (!node || !node.children.length) return depth;
+  return Math.max(...node.children.map((childId) => getMaxDepth(childId, depth + 1)));
+}
+
+function getVisibleNodeIds(nodeId = state.rootId, list = []) {
+  const node = state.nodes[nodeId];
+  if (!node) return list;
+  list.push(node.id);
+  if (!node.collapsed) {
+    for (const childId of node.children) getVisibleNodeIds(childId, list);
+  }
+  return list;
+}
+
+function selectRelative(offset) {
+  const visibleIds = getVisibleNodeIds();
+  const currentIndex = visibleIds.indexOf(state.selectedId);
+  const nextIndex = Math.max(0, Math.min(visibleIds.length - 1, currentIndex + offset));
+  selectNode(visibleIds[nextIndex]);
+}
+
+function moveLeft() {
+  const node = getSelectedNode();
+  if (node.children.length && !node.collapsed) {
+    node.collapsed = true;
+    renderAll();
+    saveMap();
+    return;
+  }
+  if (node.parentId) selectNode(node.parentId);
+}
+
+function moveRight() {
+  const node = getSelectedNode();
+  if (node.children.length && node.collapsed) {
+    node.collapsed = false;
+    renderAll();
+    saveMap();
+    return;
+  }
+  if (node.children.length) selectNode(node.children[0]);
+}
+
+function buildNodeMeta(node) {
+  const depth = getNodeDepth(node.id);
+  const descendants = countDescendants(node.id);
+  return `深さ ${depth} / 子ノード ${node.children.length} / 配下 ${descendants}`;
+}
+
+function getNodeDepth(nodeId) {
+  let depth = 1;
+  let current = state.nodes[nodeId];
+  while (current?.parentId) {
+    depth += 1;
+    current = state.nodes[current.parentId];
+  }
+  return depth;
+}
+
+function focusTitleInput() {
+  requestAnimationFrame(() => {
+    els.nodeTitle.focus();
+    els.nodeTitle.select();
   });
 }
 
-function escapeHtml(value) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
+function trimText(value, maxLength) {
+  return value.length > maxLength ? `${value.slice(0, maxLength - 1)}...` : value;
+}
+
+function formatTime(value) {
+  if (!value) return "未保存";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "未保存";
+  return new Intl.DateTimeFormat("ja-JP", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(date);
+}
+
+function isValidDate(value) {
+  return typeof value === "string" && !Number.isNaN(new Date(value).getTime());
+}
+
+function showToast(message) {
+  window.clearTimeout(toastTimer);
+  document.querySelector(".toast")?.remove();
+  const toast = document.createElement("div");
+  toast.className = "toast";
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  toastTimer = window.setTimeout(() => toast.remove(), 2600);
 }
 
 init();

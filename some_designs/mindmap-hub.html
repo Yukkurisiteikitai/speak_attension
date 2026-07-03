@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>mindmap-hub | Source Linked Discussion Tracker</title>
+    <link rel="stylesheet" href="../styles.css" />
+    <link rel="stylesheet" href="./designs.css" />
+  </head>
+  <body class="design-mindmap">
+    <main class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Source Linked Discussion Tracker</p>
+          <h1>論点がどう広がって、どこまで深掘りされたかを俯瞰する</h1>
+        </div>
+        <div class="controls" aria-label="Recording controls">
+          <button id="startBtn" class="primary" type="button">開始</button>
+          <button id="stopBtn" type="button">終了して整理</button>
+          <button id="sampleBtn" type="button">サンプル</button>
+          <button id="resetBtn" type="button">リセット</button>
+        </div>
+      </header>
+
+      <section class="summary-strip" aria-label="Meeting summary">
+        <div>
+          <span>現在の話題</span>
+          <strong id="currentTopic">待機中</strong>
+        </div>
+        <div>
+          <span>話題転換</span>
+          <strong id="shiftCount">0</strong>
+        </div>
+        <div>
+          <span>課題</span>
+          <strong id="issueCount">0</strong>
+        </div>
+        <div>
+          <span>回答済み</span>
+          <strong id="answeredCount">0</strong>
+        </div>
+        <div>
+          <span>未回答</span>
+          <strong id="openCount">0</strong>
+        </div>
+      </section>
+
+      <section class="mindmap-stage" aria-label="Topic cards">
+        <div class="mindmap-stage-head">
+          <div>
+            <p class="eyebrow">Topic cards</p>
+            <h2>議題カード</h2>
+          </div>
+          <div class="mindmap-legend">
+            <span>カードが大きいほど深掘り</span>
+            <span>ソースチップで発言へ戻る</span>
+          </div>
+        </div>
+        <div id="topicMap" class="topic-map" aria-live="polite"></div>
+      </section>
+
+      <div class="workspace mindmap-workspace">
+        <section class="source-panel" aria-label="Source transcript">
+          <div class="panel-head">
+            <div>
+              <h2>ソース発言</h2>
+              <p id="interimTranscript">音声入力、または手入力で発話を追加してください。</p>
+            </div>
+            <div class="status-stack">
+              <span id="supportBadge" class="badge">確認中</span>
+              <span id="timer">00:00</span>
+            </div>
+          </div>
+          <div id="sourceList" class="source-list" aria-live="polite"></div>
+        </section>
+
+        <section class="issue-panel" aria-label="Discussion issues">
+          <div class="panel-head">
+            <div>
+              <h2>論点トラッカー</h2>
+              <p>各話題の深掘り具合を、カードの密度と回答の厚みで見ます。</p>
+            </div>
+            <button id="downloadBtn" type="button">JSON保存</button>
+          </div>
+          <div id="issueBoard" class="issue-board" aria-live="polite"></div>
+        </section>
+
+        <aside class="input-panel" aria-label="Manual input and exported data">
+          <section>
+            <h2>手入力テスト</h2>
+            <textarea id="manualInput" rows="5" placeholder="例: 課題は、議題が広がるのに深掘りが浅い箇所が見えにくいことです。話題ごとに枝を分け、深さを見える化します。"></textarea>
+            <button id="analyzeBtn" class="wide" type="button">発話を追加</button>
+          </section>
+
+          <section>
+            <h2>終了時サマリー</h2>
+            <div id="finalSummary" class="final-summary">
+              <p>議論を終了すると、課題と回答状況をここに整理します。</p>
+            </div>
+          </section>
+
+          <section>
+            <h2>JSONログ</h2>
+            <pre id="jsonLog">[]</pre>
+          </section>
+        </aside>
+      </div>
+    </main>
+
+    <script src="../app.js"></script>
+  </body>
+</html>

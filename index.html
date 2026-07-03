@@ -3,90 +3,95 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Source Linked Discussion Tracker</title>
+    <title>Simple Mindmap Editor</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <main class="app-shell">
-      <header class="topbar">
+      <header class="hero">
         <div>
-          <p class="eyebrow">Source Linked Discussion Tracker</p>
-          <h1>論点と根拠ソースを同時に追う</h1>
+          <p class="eyebrow">Simple Mindmap Editor</p>
+          <h1>考えを軽く広げるマインドマップ</h1>
+          <p class="hero-copy">
+            中心テーマから枝を足して、メモを残し、ブラウザ内に自動保存します。
+          </p>
         </div>
-        <div class="controls" aria-label="Recording controls">
-          <button id="startBtn" class="primary" type="button">開始</button>
-          <button id="stopBtn" type="button">終了して整理</button>
-          <button id="sampleBtn" type="button">サンプル</button>
-          <button id="resetBtn" type="button">リセット</button>
+        <div class="hero-actions" aria-label="ファイル操作">
+          <button id="resetBtn" type="button">初期化</button>
+          <button id="exportBtn" type="button">JSON保存</button>
+          <label class="file-button" for="importInput">JSON読込</label>
+          <input id="importInput" type="file" accept="application/json,.json" />
         </div>
       </header>
 
-      <section class="summary-strip" aria-label="Meeting summary">
+      <section class="stats" aria-label="マップ概要">
         <div>
-          <span>現在の話題</span>
-          <strong id="currentTopic">待機中</strong>
+          <span>ノード</span>
+          <strong id="nodeCount">0</strong>
         </div>
         <div>
-          <span>話題転換</span>
-          <strong id="shiftCount">0</strong>
+          <span>末端</span>
+          <strong id="leafCount">0</strong>
         </div>
         <div>
-          <span>課題</span>
-          <strong id="issueCount">0</strong>
+          <span>深さ</span>
+          <strong id="depthCount">0</strong>
         </div>
         <div>
-          <span>回答済み</span>
-          <strong id="answeredCount">0</strong>
-        </div>
-        <div>
-          <span>未回答</span>
-          <strong id="openCount">0</strong>
+          <span>保存</span>
+          <strong id="saveStatus">未保存</strong>
         </div>
       </section>
 
       <div class="workspace">
-        <section class="source-panel" aria-label="Source transcript">
+        <section class="map-panel" aria-label="マインドマップ">
           <div class="panel-head">
             <div>
-              <h2>ソース発言</h2>
-              <p id="interimTranscript">音声入力、または手入力で発話を追加してください。</p>
+              <h2>マップ</h2>
+              <p>ノードを選択して編集します。空白部分は横スクロールできます。</p>
             </div>
-            <div class="status-stack">
-              <span id="supportBadge" class="badge">確認中</span>
-              <span id="timer">00:00</span>
+            <div class="map-actions" aria-label="ノード操作">
+              <button id="addChildBtn" class="primary" type="button">子を追加</button>
+              <button id="addSiblingBtn" type="button">兄弟を追加</button>
+              <button id="toggleCollapseBtn" type="button">折りたたみ</button>
+              <button id="deleteBtn" class="danger" type="button">削除</button>
             </div>
           </div>
-          <div id="sourceList" class="source-list" aria-live="polite"></div>
-        </section>
-
-        <section class="issue-panel" aria-label="Discussion issues">
-          <div class="panel-head">
-            <div>
-              <h2>論点トラッカー</h2>
-              <p>発話ソース番号をクリックすると該当発言を強調します。</p>
-            </div>
-            <button id="downloadBtn" type="button">JSON保存</button>
+          <div id="mapCanvas" class="map-canvas" tabindex="0">
+            <div id="mindmapTree" class="mindmap-tree" role="tree" aria-label="マインドマップツリー"></div>
           </div>
-          <div id="issueBoard" class="issue-board" aria-live="polite"></div>
         </section>
 
-        <aside class="input-panel" aria-label="Manual input and exported data">
-          <section>
-            <h2>手入力テスト</h2>
-            <textarea id="manualInput" rows="5" placeholder="例: 課題は、話題が変わった時にどの発言を根拠にしたか見えないことです。解決策として、発言番号を論点カードに紐付けます。"></textarea>
-            <button id="analyzeBtn" class="wide" type="button">発話を追加</button>
+        <aside class="editor-panel" aria-label="選択ノード編集">
+          <section class="editor-card">
+            <p class="eyebrow">Selected node</p>
+            <h2>ノード編集</h2>
+            <label for="nodeTitle">タイトル</label>
+            <input id="nodeTitle" type="text" maxlength="64" />
+            <label for="nodeNote">メモ</label>
+            <textarea id="nodeNote" rows="7" maxlength="420"></textarea>
+            <span id="nodeMeta" class="node-meta"></span>
           </section>
 
-          <section>
-            <h2>終了時サマリー</h2>
-            <div id="finalSummary" class="final-summary">
-              <p>議論を終了すると、課題と回答状況をここに整理します。</p>
+          <section class="editor-card">
+            <h2>色</h2>
+            <div id="colorPicker" class="color-picker" aria-label="ノード色">
+              <button type="button" data-color="teal">Teal</button>
+              <button type="button" data-color="blue">Blue</button>
+              <button type="button" data-color="amber">Amber</button>
+              <button type="button" data-color="rose">Rose</button>
+              <button type="button" data-color="slate">Slate</button>
             </div>
           </section>
 
-          <section>
-            <h2>JSONログ</h2>
-            <pre id="jsonLog">[]</pre>
+          <section class="editor-card">
+            <h2>ショートカット</h2>
+            <dl class="shortcut-list">
+              <div><dt>Enter</dt><dd>子ノード追加</dd></div>
+              <div><dt>Tab</dt><dd>兄弟ノード追加</dd></div>
+              <div><dt>Delete</dt><dd>選択ノード削除</dd></div>
+              <div><dt>矢印キー</dt><dd>ノード移動 / 展開</dd></div>
+            </dl>
           </section>
         </aside>
       </div>
