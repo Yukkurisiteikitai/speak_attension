@@ -43,7 +43,24 @@ textarea {
   resize: vertical;
 }
 
+select {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+  padding: 8px 10px;
+}
+
 textarea:focus {
+  border-color: rgba(19, 138, 114, 0.5);
+  box-shadow: 0 0 0 3px rgba(19, 138, 114, 0.12);
+  outline: none;
+}
+
+select:focus {
   border-color: rgba(19, 138, 114, 0.5);
   box-shadow: 0 0 0 3px rgba(19, 138, 114, 0.12);
   outline: none;
@@ -413,9 +430,31 @@ textarea:focus {
   font-size: 20px;
 }
 
+.focus-controls {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.focus-lock-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.focus-lock-control input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
 .decision-card,
 .analysis-card,
-.reference-card {
+.reference-card,
+.score-breakdown-card {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fbfcfb;
@@ -424,7 +463,8 @@ textarea:focus {
 
 .decision-card p,
 .analysis-card p,
-.reference-card p {
+.reference-card p,
+.score-breakdown-card p {
   margin: 0;
   color: var(--ink);
   line-height: 1.5;
@@ -504,6 +544,69 @@ textarea:focus {
   overflow-wrap: anywhere;
   font-size: 12px;
   line-height: 1.45;
+}
+
+.score-breakdown-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.score-breakdown-card {
+  display: grid;
+  gap: 8px;
+  background: #fff;
+}
+
+.score-breakdown-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.score-breakdown-head strong {
+  font-size: 13px;
+}
+
+.score-breakdown-head span {
+  border-radius: 999px;
+  background: rgba(47, 111, 237, 0.1);
+  padding: 3px 8px;
+  color: var(--blue);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.score-breakdown-card dl {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+}
+
+.score-breakdown-card dl div {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  gap: 8px;
+}
+
+.score-breakdown-card dt {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.score-breakdown-card dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.score-breakdown-card p {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .reference-list {

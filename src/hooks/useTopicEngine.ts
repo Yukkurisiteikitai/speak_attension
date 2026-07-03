@@ -17,11 +17,12 @@ import {
   INITIAL_TOPIC_NODES,
   buildUnknownTopicLabel,
   createId,
-  findMatchedKeywords,
-  scoreTopic,
+  scoreTopicBreakdown,
+  sortTopicScores,
 } from "../utils/topicRules";
 import { resolveReferences } from "../utils/contextResolver";
 import { evaluateFocusGate } from "../utils/focusGate";
+import { detectUtteranceIntent } from "../utils/intentRules";
 
 const HEAT_INCREMENT = 0.25;
 const ADJACENT_HEAT_INCREMENT = 0.1;
@@ -42,6 +43,7 @@ function cloneInitialNodes(): TopicGraphNode[] {
     data: {
       ...node.data,
       keywords: [...node.data.keywords],
+      normalizedTerms: [...node.data.normalizedTerms],
       evidence: [],
     },
   }));
@@ -106,6 +108,7 @@ export function useTopicEngine({ onLog }: UseTopicEngineOptions = {}) {
     focusTopicId: null,
     focusLabel: null,
     focusSetBy: "auto",
+    locked: false,
     startedAt: Date.now(),
   }));
   const [bufferText, setBufferText] = useState("");
@@ -159,6 +162,8 @@ export function useTopicEngine({ onLog }: UseTopicEngineOptions = {}) {
     (text: string, source: TranscriptInputSource) => {
       const now = Date.now();
       const baseNodes = nodesRef.current;
+      const currentFocusState = focusStateRef.current;
+      const intent = detectUtteranceIntent(text);
       const context: ConversationContext = {
         activeTopicId: currentTopicIdRef.current,
         recentTopicIds: segmentsRef.current.flatMap((segment) => segment.matchedTopicIds).slice(0, 8),
@@ -171,44 +176,54 @@ export function useTopicEngine({ onLog }: UseTopicEngineOptions = {}) {
       const confidentReferences = references.filter(
         (reference) => reference.confidence >= REFERENCE_CONFIDENCE_THRESHOLD && reference.candidateTopicId,
       );
-      const topicScores = baseNodes
-        .map((node, index) => ({
-          id: node.id,
+      const topicScores = sortTopicScores(
+        baseNodes.map((node, index) => ({
+          ...scoreTopicBreakdown({
+            text,
+            node,
+            focusState: currentFocusState,
+            intent,
+            now,
+          }),
           index,
-          label: node.data.label,
-          keywords: findMatchedKeywords(text, node),
-          score: scoreTopic(text, node),
-        }))
-        .filter((item) => item.score > 0)
-        .sort((a, b) => b.score - a.score || a.index - b.index);
+        })),
+      )
+        .filter((item) => item.total > 0)
+        .map(({ index: _index, ...score }) => score);
 
-      const matchedKeywords = [...new Set(topicScores.flatMap((item) => item.keywords))];
-      const matchedTopicIds = topicScores.map((item) => item.id);
-      const selectedTopicId = topicScores[0]?.id ?? null;
+      const matchedKeywords = [...new Set(topicScores.flatMap((item) => item.matchedKeywords))];
+      const matchedSynonyms = [...new Set(topicScores.flatMap((item) => item.matchedSynonyms))];
+      const matchedTopicIds = topicScores.map((item) => item.topicId);
+      const selectedTopicId = topicScores[0]?.topicId ?? null;
       const selectedTopicLabel = getTopicLabel(baseNodes, selectedTopicId);
       const focusGate = evaluateFocusGate({
         text,
-        focusState: focusStateRef.current,
+        focusState: currentFocusState,
+        intent,
         selectedTopicId,
         matchedTopicIds,
+        topicScores,
         resolvedReferences: confidentReferences,
         unresolvedReferences,
         edges: edgesRef.current,
         nodes: baseNodes,
       });
-      let activeTopicId = focusGate.shouldUpdateCurrentTopic ? selectedTopicId ?? focusStateRef.current.focusTopicId : currentTopicIdRef.current;
+      let activeTopicId = focusGate.shouldUpdateCurrentTopic ? selectedTopicId ?? currentFocusState.focusTopicId : currentTopicIdRef.current;
       let nextNodes = baseNodes;
       let nextEdges = edgesRef.current;
-      let nextFocusState = focusStateRef.current;
+      let nextFocusState = currentFocusState;
       let createdNodeId: string | null = null;
 
-      if (!nextFocusState.focusTopicId && selectedTopicId) {
+      if (focusGate.shouldChangeFocus && focusGate.focusChangeCandidateTopicId) {
+        const nextFocusTopicId = focusGate.focusChangeCandidateTopicId;
         nextFocusState = {
-          focusTopicId: selectedTopicId,
-          focusLabel: selectedTopicLabel,
+          ...nextFocusState,
+          focusTopicId: nextFocusTopicId,
+          focusLabel: getTopicLabel(baseNodes, nextFocusTopicId),
           focusSetBy: "auto",
           startedAt: now,
         };
+        activeTopicId = nextFocusTopicId;
       }
 
       if (focusGate.focusRelation === "on_focus") {
@@ -247,6 +262,7 @@ export function useTopicEngine({ onLog }: UseTopicEngineOptions = {}) {
               label,
               heat: HEAT_INCREMENT,
               keywords: [label, label.slice(0, 8)].filter(Boolean),
+              normalizedTerms: [],
               lastTouchedAt: now,
               evidence: [text],
             },
@@ -274,6 +290,9 @@ export function useTopicEngine({ onLog }: UseTopicEngineOptions = {}) {
           selectedTopicLabel,
           matchedTopicIds,
           matchedKeywords,
+          matchedSynonyms,
+          intent,
+          topicScores,
           focusRelation: focusGate.focusRelation,
           focusAlignmentScore: focusGate.focusAlignmentScore,
           importanceType: focusGate.importanceType,
@@ -289,13 +308,10 @@ export function useTopicEngine({ onLog }: UseTopicEngineOptions = {}) {
         segmentId: segment.id,
         text,
         source,
+        intent,
         matchedKeywords,
-        topicScores: topicScores.map((item) => ({
-          topicId: item.id,
-          label: item.label,
-          score: item.score,
-          reason: `matched keywords: ${item.keywords.join(", ")}`,
-        })),
+        matchedSynonyms,
+        topicScores,
         selectedTopicId,
         unresolvedReferences,
         createdAt: now,
@@ -376,21 +392,68 @@ export function useTopicEngine({ onLog }: UseTopicEngineOptions = {}) {
     nodesRef.current = initialNodes;
     edgesRef.current = initialEdges;
     bufferRef.current = "";
+    segmentsRef.current = [];
+    currentTopicIdRef.current = null;
+    focusStateRef.current = {
+      focusTopicId: null,
+      focusLabel: null,
+      focusSetBy: "auto",
+      locked: false,
+      startedAt: Date.now(),
+    };
     setNodes(initialNodes);
     setEdges(initialEdges);
     setSegments([]);
     setCurrentTopicId(null);
-    setFocusState({
-      focusTopicId: null,
-      focusLabel: null,
-      focusSetBy: "auto",
-      startedAt: Date.now(),
-    });
+    setFocusState(focusStateRef.current);
     setBufferText("");
     setLogs([]);
     setDecisionLogs([]);
     setImportantMentions([]);
   }, []);
+
+  const setManualFocus = useCallback(
+    (topicId: string | null) => {
+      const now = Date.now();
+      const nextFocusState: FocusState = {
+        ...focusStateRef.current,
+        focusTopicId: topicId,
+        focusLabel: getTopicLabel(nodesRef.current, topicId),
+        focusSetBy: "manual",
+        startedAt: now,
+      };
+      focusStateRef.current = nextFocusState;
+      currentTopicIdRef.current = topicId;
+      setFocusState(nextFocusState);
+      setCurrentTopicId(topicId);
+      addLog({
+        type: "system",
+        message: topicId ? "manual focus selected" : "manual focus cleared",
+        payload: { focusState: nextFocusState },
+        at: now,
+      });
+    },
+    [addLog],
+  );
+
+  const setFocusLocked = useCallback(
+    (locked: boolean) => {
+      const now = Date.now();
+      const nextFocusState: FocusState = {
+        ...focusStateRef.current,
+        locked,
+      };
+      focusStateRef.current = nextFocusState;
+      setFocusState(nextFocusState);
+      addLog({
+        type: "system",
+        message: locked ? "focus locked" : "focus unlocked",
+        payload: { focusState: nextFocusState },
+        at: now,
+      });
+    },
+    [addLog],
+  );
 
   useEffect(() => {
     const timer = window.setInterval(flushBuffer, SEGMENT_INTERVAL_MS);
@@ -440,6 +503,8 @@ export function useTopicEngine({ onLog }: UseTopicEngineOptions = {}) {
     nodes,
     reset,
     segments,
+    setFocusLocked,
+    setManualFocus,
     submitTranscript,
   };
 }

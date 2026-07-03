@@ -2,9 +2,15 @@
 
 ## Objective
 
-This workspace contains a v0.1 prototype for detecting the current topic from live Japanese speech and highlighting topic nodes in a React Flow graph.
+This workspace contains a local prototype for detecting the current conversation topic from live Japanese speech and highlighting topic nodes in a React Flow graph.
 
-The goal is to validate the feeling that agenda nodes react live to a conversation. It is not a finished meeting-minutes product.
+The current version is no longer only keyword-count based. It includes manual Focus control, Focus lock, rule-based intent classification, synonym scoring, and Decision Log score breakdowns.
+
+For the full current handoff, read:
+
+```txt
+docs/NEXT_THREAD_HANDOFF.md
+```
 
 ## Stack
 
@@ -25,54 +31,71 @@ npm install
 npm run dev
 ```
 
-Open the Vite URL in a Chromium-based browser. Web Speech API support is browser-dependent, and microphone capture usually requires `localhost` or HTTPS.
-
-## Structure
+Expected app URL:
 
 ```txt
-server/
-  index.ts
-src/
-  App.tsx
-  main.tsx
-  components/
-    ControlPanel.tsx
-    TranscriptPanel.tsx
-    TopicGraph.tsx
-    TopicInspector.tsx
-  hooks/
-    useSpeechRecognition.ts
-    useTopicEngine.ts
-  types/
-    topic.ts
-  utils/
-    topicRules.ts
+http://127.0.0.1:5173/
 ```
+
+Expected WebSocket URL:
+
+```txt
+ws://127.0.0.1:8787
+```
+
+If stale localhost processes are occupying ports:
+
+```sh
+scripts/kill-localhost-port.sh 5173 5174 8787
+```
+
+## Validate
+
+```sh
+npm run typecheck
+npm test
+npm run build
+```
+
+Latest verified results:
+
+- `npm run typecheck`: passed
+- `npm test`: passed, 4 files / 16 tests
+- `npm run build`: passed
 
 ## Implemented
 
 - Microphone start/stop.
 - Japanese Web Speech API transcription with interim and final text display.
 - 5-second segmentation of finalized speech chunks.
-- Manual text mode for microphone-free segment testing.
-- Replay mode for JSON scenario testing.
-- Keyword-based topic detection.
-- Topic decision logs with matched keywords and per-topic scores.
+- Manual text mode and replay JSON scenario mode.
+- React Flow topic graph with heat and active highlighting.
+- Manual Focus select and clear.
+- Focus lock.
+- Rule-based utterance intent classification.
+- Keyword and normalized-term / synonym scoring.
+- Focus Gate with explicit `shouldChangeFocus` decision.
+- Decision Log with score breakdown.
+- Important off-focus mention capture.
 - Pronoun/reference phrase detection and context-based reference candidates.
-- Focus Gate for classifying each utterance as on-focus, adjacent, important off-topic, noise, or uncertain.
-- AnalyzedSegment unifies segment text, topic decision, focus relation, references, and graph-update decisions.
-- ImportantMention records off-focus important utterances without stealing the current topic.
-- React Flow graph with initial topic nodes.
-- Current topic highlighting.
-- Topic heat increment and 1-second decay.
-- Unknown topic node creation for unmatched utterances of 20+ characters.
-- Session log JSON display.
 - Lightweight local WebSocket relay for session log events.
-- Vitest coverage for topic scoring and reference detection utilities.
+- Utility script to kill stale localhost dev servers by port.
 
-## Limitations
+## Key Files
 
-- Detection is keyword-based and intentionally rough.
-- Segments are built from finalized Web Speech API chunks, so browser behavior affects timing.
-- Unknown topic similarity is a simple recent-prefix check.
+- `docs/NEXT_THREAD_HANDOFF.md` - detailed current handoff
+- `src/hooks/useTopicEngine.ts` - main state engine
+- `src/types/topic.ts` - shared topic/focus/decision types
+- `src/utils/topicRules.ts` - topic scoring and normalized terms
+- `src/utils/intentRules.ts` - intent detection
+- `src/utils/focusGate.ts` - Focus relation and Focus-change rules
+- `src/components/TopicInspector.tsx` - right-panel Focus controls and Decision Log
+- `scripts/kill-localhost-port.sh` - port cleanup helper
+
+## Current Limitations
+
+- Detection is deterministic and rule-based.
+- Reference detection can still double-match overlapping phrases.
+- Graph adjacency is partly hard-coded.
 - State is in memory only and resets on refresh.
+- There are utility tests, but no full engine/replay fixture tests yet.

@@ -87,6 +87,8 @@ export default function App() {
         importantMentions={topicEngine.importantMentions}
         logs={topicEngine.logs}
         nodes={topicEngine.nodes}
+        onFocusLockedChange={topicEngine.setFocusLocked}
+        onManualFocusChange={topicEngine.setManualFocus}
         segments={topicEngine.segments}
       />
     </main>

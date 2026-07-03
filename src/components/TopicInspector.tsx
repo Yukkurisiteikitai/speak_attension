@@ -14,6 +14,8 @@ type TopicInspectorProps = {
   importantMentions: ImportantMention[];
   logs: SessionLogEntry[];
   nodes: TopicGraphNode[];
+  onFocusLockedChange: (locked: boolean) => void;
+  onManualFocusChange: (topicId: string | null) => void;
   segments: AnalyzedSegment[];
 };
 
@@ -29,6 +31,8 @@ export function TopicInspector({
   importantMentions,
   logs,
   nodes,
+  onFocusLockedChange,
+  onManualFocusChange,
   segments,
 }: TopicInspectorProps) {
   const latestSegment = segments[0] ?? null;
@@ -49,8 +53,15 @@ export function TopicInspector({
     createdAt: segment.createdAt,
     matchedTopicLabels: segment.analysis.matchedTopicIds.map((topicId) => topicLabel(nodes, topicId)),
     analysis: {
+      intent: segment.analysis.intent,
       selectedTopicLabel: segment.analysis.selectedTopicLabel,
       matchedKeywords: segment.analysis.matchedKeywords,
+      matchedSynonyms: segment.analysis.matchedSynonyms,
+      topicScores: segment.analysis.topicScores.map((score) => ({
+        label: score.label,
+        total: score.total,
+        reason: score.reason,
+      })),
       focusRelation: segment.analysis.focusRelation,
       focusAlignmentScore: segment.analysis.focusAlignmentScore,
       importanceType: segment.analysis.importanceType,
@@ -73,6 +84,7 @@ export function TopicInspector({
       focus: {
         label: focusState.focusLabel,
         setBy: focusState.focusSetBy,
+        locked: focusState.locked,
         startedAt: focusState.startedAt,
         goal: focusState.goal ?? null,
       },
@@ -87,10 +99,19 @@ export function TopicInspector({
       decisionLogs: decisionLogs.map((log) => ({
         text: log.text,
         source: log.source,
+        intent: log.intent,
         matchedKeywords: log.matchedKeywords,
+        matchedSynonyms: log.matchedSynonyms,
         topicScores: log.topicScores.map((score) => ({
           label: score.label,
-          score: score.score,
+          total: score.total,
+          keywordScore: score.keywordScore,
+          synonymScore: score.synonymScore,
+          intentScore: score.intentScore,
+          focusContextScore: score.focusContextScore,
+          recencyScore: score.recencyScore,
+          matchedKeywords: score.matchedKeywords,
+          matchedSynonyms: score.matchedSynonyms,
           reason: score.reason,
         })),
         selectedTopicLabel: topicLabel(nodes, log.selectedTopicId),
@@ -113,12 +134,37 @@ export function TopicInspector({
       <section>
         <div className="section-head">
           <h2>集中議題</h2>
-          <span>{focusState.focusSetBy}</span>
+          <span>{focusState.focusSetBy}{focusState.locked ? " / locked" : ""}</span>
         </div>
         <div className="current-topic-card">
           <span>{focusState.focusTopicId ? "focus" : "none"}</span>
           <strong>{focusState.focusLabel ?? "まだ設定されていません"}</strong>
           <p>{focusState.goal ?? "最初に検知された中心議題を自動でfocusにします。"}</p>
+        </div>
+        <div className="focus-controls">
+          <label className="field-label" htmlFor="focus-topic-select">
+            手動Focus
+          </label>
+          <select
+            id="focus-topic-select"
+            value={focusState.focusTopicId ?? ""}
+            onChange={(event) => onManualFocusChange(event.currentTarget.value || null)}
+          >
+            <option value="">Focusなし</option>
+            {nodes.map((node) => (
+              <option key={node.id} value={node.id}>
+                {node.data.label}
+              </option>
+            ))}
+          </select>
+          <label className="focus-lock-control">
+            <input
+              checked={focusState.locked}
+              type="checkbox"
+              onChange={(event) => onFocusLockedChange(event.currentTarget.checked)}
+            />
+            <span>focusをロック</span>
+          </label>
         </div>
       </section>
 
@@ -136,12 +182,20 @@ export function TopicInspector({
             <p>{latestSegment.text}</p>
             <dl>
               <div>
+                <dt>intent</dt>
+                <dd>{latestSegment.analysis.intent}</dd>
+              </div>
+              <div>
                 <dt>selected</dt>
                 <dd>{latestSegment.analysis.selectedTopicLabel ?? "none"}</dd>
               </div>
               <div>
                 <dt>keywords</dt>
                 <dd>{latestSegment.analysis.matchedKeywords.join(", ") || "none"}</dd>
+              </div>
+              <div>
+                <dt>synonyms</dt>
+                <dd>{latestSegment.analysis.matchedSynonyms.join(", ") || "none"}</dd>
               </div>
               <div>
                 <dt>graph</dt>
@@ -192,10 +246,65 @@ export function TopicInspector({
                 <dd>{latestDecision.matchedKeywords.join(", ") || "none"}</dd>
               </div>
               <div>
+                <dt>synonyms</dt>
+                <dd>{latestDecision.matchedSynonyms.join(", ") || "none"}</dd>
+              </div>
+              <div>
+                <dt>intent</dt>
+                <dd>{latestDecision.intent}</dd>
+              </div>
+            </dl>
+            <div className="score-breakdown-list">
+              {latestDecision.topicScores.length ? (
+                latestDecision.topicScores.slice(0, 3).map((score) => (
+                  <article className="score-breakdown-card" key={score.topicId}>
+                    <div className="score-breakdown-head">
+                      <strong>{score.label}</strong>
+                      <span>{score.total.toFixed(2)}</span>
+                    </div>
+                    <dl>
+                      <div>
+                        <dt>keyword</dt>
+                        <dd>{score.keywordScore.toFixed(2)}</dd>
+                      </div>
+                      <div>
+                        <dt>synonym</dt>
+                        <dd>{score.synonymScore.toFixed(2)}</dd>
+                      </div>
+                      <div>
+                        <dt>intent</dt>
+                        <dd>{score.intentScore.toFixed(2)}</dd>
+                      </div>
+                      <div>
+                        <dt>focus</dt>
+                        <dd>{score.focusContextScore.toFixed(2)}</dd>
+                      </div>
+                      <div>
+                        <dt>recency</dt>
+                        <dd>{score.recencyScore.toFixed(2)}</dd>
+                      </div>
+                      <div>
+                        <dt>keywords</dt>
+                        <dd>{score.matchedKeywords.join(", ") || "none"}</dd>
+                      </div>
+                      <div>
+                        <dt>synonyms</dt>
+                        <dd>{score.matchedSynonyms.join(", ") || "none"}</dd>
+                      </div>
+                    </dl>
+                    <p>{score.reason}</p>
+                  </article>
+                ))
+              ) : (
+                <p className="empty-text">score breakdownはありません。</p>
+              )}
+            </div>
+            <dl>
+              <div>
                 <dt>scores</dt>
                 <dd>
                   {latestDecision.topicScores.length
-                    ? latestDecision.topicScores.map((score) => `${score.label}:${score.score}`).join(" / ")
+                    ? latestDecision.topicScores.map((score) => `${score.label}:${score.total.toFixed(2)}`).join(" / ")
                     : "none"}
                 </dd>
               </div>
