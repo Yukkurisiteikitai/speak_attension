@@ -1,22 +1,23 @@
-import type { TopicGraphNode, TranscriptSegment } from "../types/topic";
+import type { MeetingGraph, TranscriptSegment } from "../types/topic";
 
 type TranscriptPanelProps = {
   bufferText: string;
   interimText: string;
   lastFinalText: string;
-  nodes: TopicGraphNode[];
+  meetingGraph: MeetingGraph;
   segments: TranscriptSegment[];
 };
 
-function topicLabel(nodes: TopicGraphNode[], topicId: string): string {
-  return nodes.find((node) => node.id === topicId)?.data.label ?? "unknown";
+function topicLabel(graph: MeetingGraph, topicId: string): string {
+  return graph.nodes.find((node) => node.id === topicId)?.title ?? "unknown";
 }
 
-export function TranscriptPanel({ bufferText, interimText, lastFinalText, nodes, segments }: TranscriptPanelProps) {
+export function TranscriptPanel({ bufferText, interimText, lastFinalText, meetingGraph, segments }: TranscriptPanelProps) {
   return (
-    <section className="panel transcript-panel" aria-label="リアルタイム文字起こし">
+    <section className="panel transcript-panel" aria-label="recent transcript">
       <div className="section-head">
-        <h2>リアルタイム文字起こし</h2>
+        <h2>Recent Transcript</h2>
+        <span>{segments.length} segments</span>
       </div>
 
       <div className="live-transcript">
@@ -30,16 +31,23 @@ export function TranscriptPanel({ bufferText, interimText, lastFinalText, nodes,
       </div>
 
       <div className="segment-list" aria-label="直近の発話セグメント">
-        <h3>直近の発話セグメント</h3>
+        <h3>Recent Segments</h3>
         {segments.length === 0 ? (
           <p className="empty-text">まだセグメントはありません。</p>
         ) : (
-          segments.map((segment) => (
+          segments.slice(0, 8).map((segment) => (
             <article className="segment-card" key={segment.id}>
-              <time>{new Date(segment.createdAt).toLocaleTimeString("ja-JP")}</time>
-              <span className="source-badge">{segment.source}</span>
+              <div className="segment-meta-row">
+                <time>{new Date(segment.createdAt).toLocaleTimeString("ja-JP")}</time>
+                <span className="source-badge">{segment.source}</span>
+                {segment.metadata?.speaker ? <span className="speaker-badge">{segment.metadata.speaker}</span> : null}
+              </div>
               <p>{segment.text}</p>
-              <span>{segment.matchedTopicIds.length ? segment.matchedTopicIds.map((topicId) => topicLabel(nodes, topicId)).join(", ") : "no match"}</span>
+              <span>
+                {segment.matchedTopicIds.length
+                  ? segment.matchedTopicIds.map((topicId) => topicLabel(meetingGraph, topicId)).join(", ")
+                  : "no stable topic"}
+              </span>
             </article>
           ))
         )}

@@ -1,10 +1,10 @@
-# Handoff: Live Topic Graph
+# Handoff: attension_mindmap
 
 ## Objective
 
-This workspace contains a local prototype for detecting the current conversation topic from live Japanese speech and highlighting topic nodes in a React Flow graph.
+This workspace contains a local prototype for deriving meeting-specific topics from live Japanese speech and visualizing them as a React Flow topic map.
 
-The current version is no longer only keyword-count based. It includes manual Focus control, Focus lock, rule-based intent classification, synonym scoring, and Decision Log score breakdowns.
+The current version is meeting-first. It no longer uses fixed seed product topics. It now includes dynamic topic extraction, topic coverage tracking, topic closure, gap generation, a meeting-wide missing-items summary, and a collapsible dev drawer for diagnostics.
 
 For the full current handoff, read:
 
@@ -52,6 +52,7 @@ scripts/kill-localhost-port.sh 5173 5174 8787
 ## Validate
 
 ```sh
+npm run lint
 npm run typecheck
 npm test
 npm run build
@@ -59,8 +60,9 @@ npm run build
 
 Latest verified results:
 
+- `npm run lint`: passed
 - `npm run typecheck`: passed
-- `npm test`: passed, 4 files / 16 tests
+- `npm test`: passed, 4 files / 13 tests
 - `npm run build`: passed
 
 ## Implemented
@@ -69,33 +71,63 @@ Latest verified results:
 - Japanese Web Speech API transcription with interim and final text display.
 - 5-second segmentation of finalized speech chunks.
 - Manual text mode and replay JSON scenario mode.
-- React Flow topic graph with heat and active highlighting.
+- Meeting-specific topic extraction from transcript clauses.
+- React Flow topic graph with active topic, discussed topics, and synthetic missing nodes.
+- Topic coverage tracking for decision, reason, owner, due date, next action, risk, alternative, objection, dependency, and open-question resolution.
+- Automatic topic closure after focus shift plus quiet window.
+- Local gap generation and meeting-wide gap summary.
+- Rule-based utterance intent classification.
+- Lightweight topic phrase overlap matching with aliases.
 - Manual Focus select and clear.
 - Focus lock.
-- Rule-based utterance intent classification.
-- Keyword and normalized-term / synonym scoring.
-- Focus Gate with explicit `shouldChangeFocus` decision.
-- Decision Log with score breakdown.
+- Decision Log with topic-match breakdown.
 - Important off-focus mention capture.
-- Pronoun/reference phrase detection and context-based reference candidates.
+- Simple topic reference resolution.
 - Lightweight local WebSocket relay for session log events.
+- GitHub Actions for CI and Cloudflare Pages deploy.
 - Utility script to kill stale localhost dev servers by port.
 
 ## Key Files
 
 - `docs/NEXT_THREAD_HANDOFF.md` - detailed current handoff
 - `src/hooks/useTopicEngine.ts` - main state engine
-- `src/types/topic.ts` - shared topic/focus/decision types
-- `src/utils/topicRules.ts` - topic scoring and normalized terms
+- `src/types/topic.ts` - shared meeting graph / topic / gap / analysis types
+- `src/utils/topicRules.ts` - topic extraction, coverage, gap rules, graph projection
 - `src/utils/intentRules.ts` - intent detection
-- `src/utils/focusGate.ts` - Focus relation and Focus-change rules
-- `src/components/TopicInspector.tsx` - right-panel Focus controls and Decision Log
+- `src/utils/topicEngine.ts` - segment processing and graph lifecycle logic
+- `src/components/TopicInspector.tsx` - current topic, coverage, gap lists, dev drawer
+- `.github/workflows/ci.yml` - lint/typecheck/test/build workflow
+- `.github/workflows/cloudflare-pages.yml` - Pages deployment workflow
 - `scripts/kill-localhost-port.sh` - port cleanup helper
 
 ## Current Limitations
 
 - Detection is deterministic and rule-based.
-- Reference detection can still double-match overlapping phrases.
-- Graph adjacency is partly hard-coded.
+- Topic phrase extraction is heuristic and clause-based, not morphological.
+- Reference resolution is intentionally shallow.
 - State is in memory only and resets on refresh.
-- Utility tests and fixed replay fixture tests are in place.
+- Topic closure still depends on simple segment/time windows.
+
+## Cloudflare Cache Note
+
+Cloudflare Pages deployment is already wired, and edge cache headers are committed in the repo.
+
+Implemented config:
+
+- `public/_headers` is copied to `dist/_headers` by Vite on build.
+- Cache headers:
+
+```txt
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/*
+  Cache-Control: public, max-age=0, must-revalidate
+```
+
+- Reason:
+
+- hashed JS/CSS/image assets should be cached aggressively at the Cloudflare edge
+- HTML should stay revalidating so new deployments become visible immediately
+
+Do not confuse this with GitHub Actions dependency caching. The intended action is Cloudflare edge/static asset caching via Pages headers.

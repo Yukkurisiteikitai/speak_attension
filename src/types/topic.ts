@@ -1,30 +1,117 @@
 import type { Edge, Node } from "@xyflow/react";
 
-export type TopicNodeData = {
-  label: string;
-  heat: number;
-  keywords: string[];
-  normalizedTerms: string[];
-  lastTouchedAt: number | null;
-  evidence: string[];
-};
-
-export type GraphTopicNodeData = TopicNodeData & {
-  isActive?: boolean;
-};
-
-export type TopicGraphNode = Node<TopicNodeData, "topic">;
-
-export type TopicGraphEdge = Edge;
-
 export type TranscriptInputSource = "speech" | "manual" | "replay";
 
-export type TranscriptSegment = {
-  id: string;
+export type TimedTranscriptWord = {
   text: string;
+  startMs: number;
+  endMs: number;
+  confidence?: number;
+};
+
+export type TimedTranscriptSegment = {
+  id: string;
+  startMs: number;
+  endMs?: number;
+  speaker?: string;
+  text: string;
+  source: "official_transcript" | "offline_stt" | "manual_replay" | "audio_replay";
+  confidence?: number;
+  words?: TimedTranscriptWord[];
+  raw?: unknown;
+};
+
+export type TranscriptSegmentMetadata = {
+  speaker?: string;
+  startMs?: number;
+  endMs?: number;
+  transcriptSource?: TimedTranscriptSegment["source"];
+  confidence?: number;
+  words?: TimedTranscriptWord[];
+  raw?: unknown;
+};
+
+export type TopicCoverageKey =
+  | "decision"
+  | "reason"
+  | "owner"
+  | "dueDate"
+  | "risk"
+  | "alternative"
+  | "objection"
+  | "nextAction"
+  | "dependency"
+  | "openQuestionResolved";
+
+export type TopicCoverage = Record<TopicCoverageKey, boolean>;
+
+export type TopicLifecycle = "active" | "discussed" | "decided" | "unresolved";
+
+export type TopicDisplayState = "active" | "discussed" | "shallow" | "missing" | "decided" | "unresolved";
+
+export type TopicEdgeType = "parent" | "related" | "depends_on" | "contradicts" | "follow_up" | "missing_of";
+
+export type TopicGapType =
+  | "shallow"
+  | "missing_decision"
+  | "missing_reason"
+  | "missing_owner"
+  | "missing_due_date"
+  | "missing_next_action"
+  | "missing_risk"
+  | "missing_alternative"
+  | "unresolved";
+
+export type TopicGapSeverity = "high" | "medium" | "low";
+
+export type TopicNode = {
+  id: string;
+  title: string;
+  aliases: string[];
+  lifecycle: TopicLifecycle;
+  displayStates: TopicDisplayState[];
+  coverage: TopicCoverage;
+  evidenceSegmentIds: string[];
+  mentionCount: number;
+  openQuestionCount: number;
+  firstSeenAt: number;
+  lastSeenAt: number;
+  lastActivatedAt: number | null;
+  closedAt: number | null;
+  lastActivatedSegmentIndex: number;
+};
+
+export type TopicEdge = {
+  id: string;
+  source: string;
+  target: string;
+  type: TopicEdgeType;
+};
+
+export type TopicGap = {
+  id: string;
+  topicId: string;
+  type: TopicGapType;
+  title: string;
+  detail: string;
+  severity: TopicGapSeverity;
   createdAt: number;
-  source: TranscriptInputSource;
-  matchedTopicIds: string[];
+  closedAt: number | null;
+};
+
+export type MeetingGapSummary = {
+  gaps: TopicGap[];
+  updatedAt: number | null;
+};
+
+export type MeetingGraph = {
+  meetingId: string;
+  title: string;
+  rootTopicId: string;
+  nodes: TopicNode[];
+  edges: TopicEdge[];
+  gaps: TopicGap[];
+  gapSummary: MeetingGapSummary;
 };
 
 export type FocusState = {
@@ -48,10 +135,22 @@ export type UtteranceIntent =
   | "switch_topic"
   | "unknown";
 
-export type ConversationContext = {
-  activeTopicId: string | null;
-  recentTopicIds: string[];
-  recentSegments: TranscriptSegment[];
+export type TopicPhraseCandidate = {
+  phrase: string;
+  clause: string;
+  reason: string;
+};
+
+export type TopicMatchCandidate = {
+  topicId: string;
+  label: string;
+  score: number;
+  reason: string;
+};
+
+export type CoverageUpdate = {
+  key: TopicCoverageKey;
+  matchedText: string;
 };
 
 export type ResolvedReference = {
@@ -61,31 +160,46 @@ export type ResolvedReference = {
   reason: string;
 };
 
+export type TranscriptSegment = {
+  id: string;
+  text: string;
+  createdAt: number;
+  source: TranscriptInputSource;
+  matchedTopicIds: string[];
+  metadata?: TranscriptSegmentMetadata;
+};
+
+export type AnalyzedSegment = TranscriptSegment & {
+  analysis: {
+    selectedTopicId: string | null;
+    selectedTopicLabel: string | null;
+    matchedTopicIds: string[];
+    intent: UtteranceIntent;
+    focusRelation: FocusRelation;
+    focusAlignmentScore: number;
+    candidateTopicPhrases: TopicPhraseCandidate[];
+    topicScores: TopicMatchCandidate[];
+    resolvedReferences: ResolvedReference[];
+    unresolvedReferences: string[];
+    shouldUpdateGraph: boolean;
+    shouldUpdateCurrentTopic: boolean;
+    shouldCreateNode: boolean;
+    coverageUpdates: CoverageUpdate[];
+    createdGapIds: string[];
+    reason: string;
+  };
+};
+
 export type TopicDecisionLog = {
   segmentId: string;
   text: string;
   source: TranscriptInputSource;
   intent: UtteranceIntent;
-  matchedKeywords: string[];
-  matchedSynonyms: string[];
-  topicScores: TopicScoreBreakdown[];
+  topicScores: TopicMatchCandidate[];
   selectedTopicId: string | null;
   unresolvedReferences: string[];
+  coverageUpdates: CoverageUpdate[];
   createdAt: number;
-};
-
-export type TopicScoreBreakdown = {
-  topicId: string;
-  label: string;
-  total: number;
-  keywordScore: number;
-  synonymScore: number;
-  focusContextScore: number;
-  intentScore: number;
-  recencyScore: number;
-  matchedKeywords: string[];
-  matchedSynonyms: string[];
-  reason: string;
 };
 
 export type ImportantMention = {
@@ -97,27 +211,6 @@ export type ImportantMention = {
   confidence: number;
 };
 
-export type AnalyzedSegment = TranscriptSegment & {
-  analysis: {
-    selectedTopicId: string | null;
-    selectedTopicLabel: string | null;
-    matchedTopicIds: string[];
-    matchedKeywords: string[];
-    matchedSynonyms: string[];
-    intent: UtteranceIntent;
-    topicScores: TopicScoreBreakdown[];
-    focusRelation: FocusRelation;
-    focusAlignmentScore: number;
-    importanceType: ImportantMention["type"] | null;
-    resolvedReferences: ResolvedReference[];
-    unresolvedReferences: string[];
-    shouldUpdateGraph: boolean;
-    shouldUpdateCurrentTopic: boolean;
-    shouldCreateNode: boolean;
-    reason: string;
-  };
-};
-
 export type SessionLogEntry = {
   id: string;
   type: "speech" | "segment" | "topic" | "system" | "websocket" | "decision";
@@ -127,3 +220,22 @@ export type SessionLogEntry = {
 };
 
 export type SpeechStatus = "idle" | "listening" | "unsupported" | "error";
+
+export type GraphTopicNodeData = {
+  label: string;
+  kind: "root" | "topic" | "gap";
+  states: TopicDisplayState[];
+  lifecycle?: TopicLifecycle;
+  mentionCount?: number;
+  evidence?: string;
+  detail?: string;
+  isActive?: boolean;
+};
+
+export type TopicGraphNode = Node<GraphTopicNodeData, "topic">;
+
+export type TopicGraphEdgeData = {
+  relation: TopicEdgeType;
+};
+
+export type TopicGraphEdge = Edge<TopicGraphEdgeData>;

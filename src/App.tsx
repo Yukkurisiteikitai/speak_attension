@@ -4,6 +4,7 @@ import { ManualReplayPanel } from "./components/ManualReplayPanel";
 import { TopicGraph } from "./components/TopicGraph";
 import { TopicInspector } from "./components/TopicInspector";
 import { TranscriptPanel } from "./components/TranscriptPanel";
+import { TranscriptReplayPanel } from "./components/TranscriptReplayPanel";
 import { useSpeechRecognition } from "./hooks/useSpeechRecognition";
 import { useTopicEngine } from "./hooks/useTopicEngine";
 import type { SessionLogEntry } from "./types/topic";
@@ -43,19 +44,79 @@ function statusLabel(isSupported: boolean, isListening: boolean): string {
   return "idle";
 }
 
+function formatElapsed(ms: number): string {
+  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(totalSeconds / 60)
+    .toString()
+    .padStart(2, "0");
+  const seconds = (totalSeconds % 60).toString().padStart(2, "0");
+  return `${minutes}:${seconds}`;
+}
+
 export default function App() {
   const { connectionStatus, sendLog } = useSessionSocket();
   const topicEngine = useTopicEngine({ onLog: sendLog });
   const speech = useSpeechRecognition({ onFinalText: topicEngine.addTranscriptText });
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   const stableStatusLabel = useMemo(
     () => statusLabel(speech.isSupported, speech.isListening),
     [speech.isListening, speech.isSupported],
   );
 
+  const elapsedLabel = useMemo(() => formatElapsed(now - topicEngine.meetingStartedAt), [now, topicEngine.meetingStartedAt]);
+
   return (
     <main className="app-shell">
-      <div className="left-column">
+      <header className="meeting-header">
+        <div>
+          <p className="eyebrow">Meeting Dashboard</p>
+          <h1>{topicEngine.meetingGraph.title}</h1>
+        </div>
+        <div className="header-metrics">
+          <div className="header-metric">
+            <span>elapsed</span>
+            <strong>{elapsedLabel}</strong>
+          </div>
+          <div className="header-metric">
+            <span>current topic</span>
+            <strong>{topicEngine.currentTopic?.title ?? "none"}</strong>
+          </div>
+          <div className="header-metric">
+            <span>status</span>
+            <strong>{connectionStatus}</strong>
+          </div>
+        </div>
+      </header>
+
+      <section className="dashboard-grid">
+        <div className="graph-column">
+          <TopicGraph currentTopicId={topicEngine.currentTopicId} edges={topicEngine.edges} nodes={topicEngine.nodes} />
+        </div>
+
+        <div className="rail-column">
+          <TopicInspector
+            connectionStatus={connectionStatus}
+            currentTopicGaps={topicEngine.currentTopicGaps}
+            currentTopicId={topicEngine.currentTopicId}
+            decisionLogs={topicEngine.decisionLogs}
+            focusState={topicEngine.focusState}
+            importantMentions={topicEngine.importantMentions}
+            logs={topicEngine.logs}
+            meetingGraph={topicEngine.meetingGraph}
+            onFocusLockedChange={topicEngine.setFocusLocked}
+            onManualFocusChange={topicEngine.setManualFocus}
+            segments={topicEngine.segments}
+          />
+        </div>
+      </section>
+
+      <section className="utility-grid">
         <ControlPanel
           error={speech.error}
           isListening={speech.isListening}
@@ -69,28 +130,15 @@ export default function App() {
           statusLabel={stableStatusLabel}
         />
         <ManualReplayPanel onSubmit={topicEngine.submitTranscript} />
+        <TranscriptReplayPanel onSubmit={topicEngine.submitTimedTranscript} />
         <TranscriptPanel
           bufferText={topicEngine.bufferText}
           interimText={speech.interimText}
           lastFinalText={speech.lastFinalText}
-          nodes={topicEngine.nodes}
+          meetingGraph={topicEngine.meetingGraph}
           segments={topicEngine.segments}
         />
-      </div>
-
-      <TopicGraph currentTopicId={topicEngine.currentTopicId} edges={topicEngine.edges} nodes={topicEngine.nodes} />
-
-      <TopicInspector
-        connectionStatus={connectionStatus}
-        decisionLogs={topicEngine.decisionLogs}
-        focusState={topicEngine.focusState}
-        importantMentions={topicEngine.importantMentions}
-        logs={topicEngine.logs}
-        nodes={topicEngine.nodes}
-        onFocusLockedChange={topicEngine.setFocusLocked}
-        onManualFocusChange={topicEngine.setManualFocus}
-        segments={topicEngine.segments}
-      />
+      </section>
     </main>
   );
 }
