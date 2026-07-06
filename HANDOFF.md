@@ -98,4 +98,4 @@ Latest verified results:
 - Reference detection can still double-match overlapping phrases.
 - Graph adjacency is partly hard-coded.
 - State is in memory only and resets on refresh.
-- There are utility tests, but no full engine/replay fixture tests yet.
+- Utility tests and fixed replay fixture tests are in place.

@@ -325,7 +325,7 @@ Current coverage includes:
 - Off-topic important utterances are recorded as notes instead of creating nodes.
 - Web Speech API support depends on browser; Chrome-like browsers are best.
 - State is in memory only and resets on refresh.
-- There are no fixture-level end-to-end replay tests yet.
+- Fixture-level replay tests now cover fixed focus and intent scenarios.
 
 ## Recommended Next Work
 
@@ -337,10 +337,7 @@ Current coverage includes:
    - Avoid overlapping matches such as `それで` plus `それ`.
    - Store span offsets if future UI highlights reference phrases in text.
 
-3. Add fixture-level replay tests.
-   - Test full analysis results, not only utility-level `evaluateFocusGate`.
-
-4. Tune importance handling.
+3. Tune importance handling.
    - Consider separate confidence for important mention severity instead of reusing focus alignment.
    - Improve mapping of `concern` to `problem` vs `risk`.
 
