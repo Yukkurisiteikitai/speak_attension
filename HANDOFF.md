@@ -62,7 +62,7 @@ Latest verified results:
 
 - `npm run lint`: passed
 - `npm run typecheck`: passed
-- `npm test`: passed, 4 files / 13 tests
+- `npm test`: passed, 5 files / 19 tests
 - `npm run build`: passed
 
 ## Implemented
@@ -84,20 +84,29 @@ Latest verified results:
 - Important off-focus mention capture.
 - Simple topic reference resolution.
 - Lightweight local WebSocket relay for session log events.
+- Store-backed topic engine state management via `useSyncExternalStore`.
+- Aggregated transcript JSON validation errors before import failure.
 - GitHub Actions for CI and Cloudflare Pages deploy.
 - Utility script to kill stale localhost dev servers by port.
 
 ## Key Files
 
 - `docs/NEXT_THREAD_HANDOFF.md` - detailed current handoff
-- `src/hooks/useTopicEngine.ts` - main state engine
+- `src/hooks/useTopicEngine.ts` - thin hook adapter over the topic engine store
+- `src/hooks/topicEngineStore.ts` - store for engine state, buffered speech, logs, and commands
 - `src/types/topic.ts` - shared meeting graph / topic / gap / analysis types
-- `src/utils/topicRules.ts` - topic extraction, coverage, gap rules, graph projection
+- `src/utils/topicRules.ts` - compatibility exports for split topic utilities
 - `src/utils/intentRules.ts` - intent detection
-- `src/utils/topicEngine.ts` - segment processing and graph lifecycle logic
+- `src/utils/topicEngine.ts` - segment processing orchestrator
+- `src/utils/topicExtraction.ts` - clause splitting, phrase extraction, matching, references
+- `src/utils/topicCoverage.ts` - coverage markers, gap generation, lifecycle display rules
+- `src/utils/topicProjection.ts` - graph bootstrap, React Flow projection, id helpers
+- `src/utils/topicLifecycle.ts` - coverage mutation, topic closure, mention creation
+- `src/utils/topicSelection.ts` - topic selection and topic creation helpers
+- `src/utils/transcriptImporter.ts` - transcript JSON parsing with aggregated validation errors
 - `src/components/TopicInspector.tsx` - current topic, coverage, gap lists, dev drawer
 - `.github/workflows/ci.yml` - lint/typecheck/test/build workflow
-- `.github/workflows/cloudflare-pages.yml` - Pages deployment workflow
+- `.github/workflows/cloudflare-pages.yml` - Pages deployment workflow using `npx wrangler@4`
 - `scripts/kill-localhost-port.sh` - port cleanup helper
 
 ## Current Limitations
@@ -107,6 +116,7 @@ Latest verified results:
 - Reference resolution is intentionally shallow.
 - State is in memory only and resets on refresh.
 - Topic closure still depends on simple segment/time windows.
+- Transcript import stays strict: one invalid segment causes the entire import to fail, but all validation errors are collected first.
 
 ## Cloudflare Cache Note
 

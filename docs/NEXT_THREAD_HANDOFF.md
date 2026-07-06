@@ -59,7 +59,7 @@ Latest results:
 
 - `npm run lint`: passed
 - `npm run typecheck`: passed
-- `npm test`: passed, 4 files / 13 tests
+- `npm test`: passed, 5 files / 19 tests
 - `npm run build`: passed
 
 Dev server note:
@@ -71,10 +71,14 @@ Dev server note:
 ## Important Files
 
 - `src/hooks/useTopicEngine.ts`
-  - Main state engine.
-  - Processes speech/manual/replay text into analyzed segments.
-  - Runs topic extraction, topic matching, coverage updates, closure checks, gap generation, graph projection, decision logs, and important mentions.
-  - Exposes `setManualFocus(topicId)` and `setFocusLocked(locked)`.
+  - Thin hook adapter over a local external store.
+  - Uses `useSyncExternalStore` to read engine state, buffered speech, and logs.
+  - Owns only the 5-second speech flush timer and memoized selectors.
+
+- `src/hooks/topicEngineStore.ts`
+  - Canonical mutable store for `engineState`, `bufferText`, and `logs`.
+  - Processes speech/manual/replay commands against the latest snapshot, avoiding hook-level stale state sync.
+  - Attaches transcript metadata, emits session logs, and exposes imperative commands to the hook.
 
 - `src/types/topic.ts`
   - Core types.
@@ -90,23 +94,46 @@ Dev server note:
     - `ImportantMention`
 
 - `src/utils/topicRules.ts`
-  - Meeting graph bootstrap.
+  - Compatibility barrel.
+  - Re-exports the split utility modules so existing imports continue to work.
+
+- `src/utils/topicExtraction.ts`
   - Transcript clause splitting.
   - Topic phrase extraction.
   - Topic overlap scoring.
+  - Shallow topic reference resolution.
+
+- `src/utils/topicCoverage.ts`
   - Coverage detection.
   - Gap generation.
+  - Lifecycle and display-state derivation.
+
+- `src/utils/topicProjection.ts`
+  - Meeting graph bootstrap.
   - Meeting graph to React Flow projection.
+  - ID creation and focus-relation helpers.
+
+- `src/utils/topicLifecycle.ts`
+  - Coverage mutation.
+  - Important mention creation.
+  - Dormant topic closure and derived-state refresh.
+
+- `src/utils/topicSelection.ts`
+  - Existing-topic matching.
+  - Topic creation from phrases.
+  - Alias and evidence updates.
 
 - `src/utils/intentRules.ts`
   - Rule-based utterance intent classification.
   - Maps intents to `ImportantMention` types where applicable.
 
 - `src/utils/topicEngine.ts`
-  - Creates and mutates the `MeetingGraph`.
-  - Chooses stable topics or creates new ones from phrases.
-  - Applies coverage updates per segment.
-  - Closes dormant topics and emits gap records.
+  - Orchestrates one segment transition end-to-end.
+  - Delegates extraction, matching, coverage, lifecycle, and projection to the split utility modules.
+
+- `src/utils/transcriptImporter.ts`
+  - Validates external replay JSON.
+  - Keeps strict import semantics, but now aggregates all invalid segment errors before throwing.
 
 - `src/components/TopicInspector.tsx`
   - Right rail + dev drawer.
@@ -120,6 +147,7 @@ Dev server note:
 
 - `.github/workflows/cloudflare-pages.yml`
   - Deploys `dist/` to Cloudflare Pages on `main`.
+  - Uses direct `npx wrangler@4 pages deploy ...` instead of `cloudflare/wrangler-action`, so deploy failures surface raw CLI stderr.
 
 - `scripts/kill-localhost-port.sh`
   - Utility script for killing stale localhost dev servers by port.
@@ -150,6 +178,13 @@ Manual/replay behavior:
 
 - Manual text is processed immediately as `source: "manual"`.
 - Replay items are processed immediately as `source: "replay"`.
+
+## State Management Refactor
+
+- The old hook-local `useState` + mutable ref sync pattern has been replaced with a local external store.
+- `topicEngineStore` is the single mutable source of truth for engine state, buffer text, and logs.
+- `useTopicEngine` subscribes through `useSyncExternalStore`, so imperative callbacks always read the latest snapshot without manual `stateRef` synchronization.
+- Public hook API remains stable for `App.tsx` and the existing panels.
 
 ## Focus State
 
@@ -232,7 +267,14 @@ Current extraction approach:
 - match against existing topic `title + aliases`
 - create a new topic only when overlap is below threshold
 
-This logic lives in `src/utils/topicRules.ts`.
+This logic lives in the split topic utility modules and is re-exported from `src/utils/topicRules.ts` for compatibility.
+
+## Transcript Import Validation
+
+- Import remains strict: if any segment is invalid, the whole JSON import fails.
+- Validation no longer fails on the first bad segment.
+- The thrown error now starts with `Transcript JSONに不正なセグメントがあります。` and includes one bullet per invalid segment.
+- This behavior is covered by `src/utils/transcript-importer.test.ts`.
 
 ## Intent Rules
 
