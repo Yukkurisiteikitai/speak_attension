@@ -20,16 +20,17 @@ export function ControlPanel({
   statusLabel,
 }: ControlPanelProps) {
   return (
-    <section className="panel control-panel" aria-label="音声入力操作">
+    <section className="panel control-panel" aria-label="meeting controls">
       <div className="panel-heading">
-        <p className="eyebrow">Live Topic Graph</p>
-        <h1>会話に合わせて議題ノードを動かす</h1>
+        <p className="eyebrow">Meeting Input</p>
+        <h1>attension_mindmap</h1>
+        <p className="panel-copy">会話から議題を立ち上げ、抜けを見つけるローカル会議マップです。</p>
       </div>
 
       <div className="control-row">
         <button className="primary-button" type="button" onClick={isListening ? onStop : onStart} disabled={!isSupported}>
           {isListening ? <Square size={18} /> : <Mic size={18} />}
-          <span>{isListening ? "停止" : "マイク開始"}</span>
+          <span>{isListening ? "マイク停止" : "マイク開始"}</span>
         </button>
         <button className="icon-button" type="button" onClick={onReset} aria-label="セッションをリセット">
           <RefreshCw size={18} />

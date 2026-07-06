@@ -1,4 +1,4 @@
-import { Background, Controls, Handle, Position, ReactFlow, type NodeProps } from "@xyflow/react";
+import { Background, Controls, Handle, MiniMap, Position, ReactFlow, type NodeProps } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import type { GraphTopicNodeData, TopicGraphEdge, TopicGraphNode } from "../types/topic";
 
@@ -9,19 +9,24 @@ type TopicGraphProps = {
 };
 
 function TopicNode({ data }: NodeProps<TopicGraphNode & { data: GraphTopicNodeData }>) {
-  const heatPercent = Math.round(data.heat * 100);
   return (
-    <div className={`topic-node ${data.isActive ? "is-active" : ""}`} style={{ "--heat": data.heat } as React.CSSProperties}>
-      <Handle type="target" position={Position.Left} />
+    <div className={`topic-node kind-${data.kind} ${data.isActive ? "is-active" : ""}`}>
+      {data.kind !== "root" ? <Handle type="target" position={Position.Left} /> : null}
       <div className="topic-node-head">
         <strong>{data.label}</strong>
-        <span>{heatPercent}</span>
+        {typeof data.mentionCount === "number" ? <span>{data.mentionCount} mentions</span> : null}
       </div>
-      <div className="heat-track" aria-label={`heat ${heatPercent}`}>
-        <div style={{ width: `${heatPercent}%` }} />
+      {data.lifecycle ? <p className="topic-node-lifecycle">{data.lifecycle}</p> : null}
+      <div className="topic-badge-row">
+        {data.states.map((state) => (
+          <span className={`topic-badge state-${state}`} key={state}>
+            {state}
+          </span>
+        ))}
       </div>
-      <small>{data.evidence[0] ?? data.keywords.slice(0, 3).join(" / ")}</small>
-      <Handle type="source" position={Position.Right} />
+      {data.evidence ? <small>{data.evidence}</small> : null}
+      {data.detail ? <small>{data.detail}</small> : null}
+      {data.kind !== "gap" ? <Handle type="source" position={Position.Right} /> : null}
     </div>
   );
 }
@@ -31,30 +36,23 @@ const nodeTypes = {
 };
 
 export function TopicGraph({ currentTopicId, edges, nodes }: TopicGraphProps) {
-  const graphNodes = nodes.map((node) => ({
-    ...node,
-    data: {
-      ...node.data,
-      isActive: node.id === currentTopicId,
-    },
-  }));
-
   return (
-    <section className="graph-panel" aria-label="議題グラフ">
+    <section className="graph-panel" aria-label="meeting topic graph">
       <div className="graph-title">
-        <h2>議題グラフ</h2>
-        <span>{currentTopicId ? "Live highlight" : "Waiting for speech"}</span>
+        <h2>Meeting Topic Map</h2>
+        <span>{currentTopicId ? "current topic highlighted" : "waiting for first topic"}</span>
       </div>
       <ReactFlow
-        nodes={graphNodes}
+        nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
         fitView
         minZoom={0.35}
-        maxZoom={1.4}
+        maxZoom={1.5}
         proOptions={{ hideAttribution: true }}
       >
-        <Background gap={22} />
+        <Background gap={20} color="#d5ddd8" />
+        <MiniMap pannable zoomable />
         <Controls showInteractive={false} />
       </ReactFlow>
     </section>

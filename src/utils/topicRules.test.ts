@@ -1,52 +1,100 @@
 import { describe, expect, it } from "vitest";
-import type { FocusState } from "../types/topic";
-import { INITIAL_TOPIC_NODES, findMatchedKeywords, scoreTopic, scoreTopicBreakdown, sortTopicScores } from "./topicRules";
+import type { TopicNode } from "../types/topic";
+import { buildTopicGaps, createEmptyCoverage, deriveDisplayStates, detectCoverageUpdates, extractTopicPhrases, scoreTopicMatch } from "./topicRules";
 
-const focusState: FocusState = {
-  focusTopicId: null,
-  focusLabel: null,
-  focusSetBy: "auto",
-  locked: false,
-  startedAt: 1,
-};
+describe("topic extraction", () => {
+  it("keeps repeated meeting topics stable by overlap", () => {
+    const topic: TopicNode = {
+      id: "topic-latency",
+      title: "レイテンシー対策",
+      aliases: ["レイテンシー", "遅延対策"],
+      lifecycle: "discussed",
+      displayStates: ["discussed"],
+      coverage: createEmptyCoverage(),
+      evidenceSegmentIds: [],
+      mentionCount: 2,
+      openQuestionCount: 0,
+      firstSeenAt: 1,
+      lastSeenAt: 2,
+      lastActivatedAt: null,
+      closedAt: 3,
+      lastActivatedSegmentIndex: 1,
+    };
 
-describe("topicRules", () => {
-  it("scores topic nodes by matched keywords", () => {
-    const graphNode = INITIAL_TOPIC_NODES.find((node) => node.id === "graph");
-    expect(graphNode).toBeDefined();
-    expect(scoreTopic("React Flowのノードとエッジを描画します", graphNode!)).toBe(4);
+    const score = scoreTopicMatch("レイテンシーの件を詰めたい", topic);
+
+    expect(score.topicId).toBe("topic-latency");
+    expect(score.score).toBeGreaterThanOrEqual(0.5);
   });
 
-  it("returns matched keywords for decision logs", () => {
-    const uiNode = INITIAL_TOPIC_NODES.find((node) => node.id === "ui");
-    expect(uiNode).toBeDefined();
-    expect(findMatchedKeywords("画面で強調してLive感を出したい", uiNode!)).toEqual(["画面", "Live感", "強調"]);
+  it("does not create phrases from acknowledgements", () => {
+    expect(extractTopicPhrases("そうですね")).toEqual([]);
+  });
+});
+
+describe("coverage detection", () => {
+  it("sets decision, reason, owner, dueDate, nextAction and risk markers", () => {
+    const updates = detectCoverageUpdates("この方針で決定します。理由はコスト削減のためで、田中さんが来週までに対応する。リスクも確認する。");
+    expect(updates.map((item) => item.key)).toEqual(
+      expect.arrayContaining(["decision", "reason", "owner", "dueDate", "nextAction", "risk"]),
+    );
+  });
+});
+
+describe("closure and gaps", () => {
+  it("marks shallow topics and missing items", () => {
+    const topic: TopicNode = {
+      id: "topic-a",
+      title: "API契約",
+      aliases: ["api契約"],
+      lifecycle: "discussed",
+      displayStates: ["discussed"],
+      coverage: {
+        ...createEmptyCoverage(),
+        decision: true,
+      },
+      evidenceSegmentIds: ["seg-1"],
+      mentionCount: 1,
+      openQuestionCount: 0,
+      firstSeenAt: 1,
+      lastSeenAt: 2,
+      lastActivatedAt: null,
+      closedAt: 3,
+      lastActivatedSegmentIndex: 1,
+    };
+
+    const gaps = buildTopicGaps(topic, false, 10);
+    const types = gaps.map((gap) => gap.type);
+
+    expect(types).toContain("shallow");
+    expect(types).toContain("missing_reason");
+    expect(types).toContain("missing_next_action");
   });
 
-  it("scores latency synonyms separately from keywords", () => {
-    const latencyNode = INITIAL_TOPIC_NODES.find((node) => node.id === "latency");
-    expect(latencyNode).toBeDefined();
+  it("exposes unresolved and missing display states when open questions remain", () => {
+    const topic: TopicNode = {
+      id: "topic-b",
+      title: "認証フロー",
+      aliases: ["認証フロー"],
+      lifecycle: "unresolved",
+      displayStates: ["discussed"],
+      coverage: createEmptyCoverage(),
+      evidenceSegmentIds: ["seg-2"],
+      mentionCount: 1,
+      openQuestionCount: 1,
+      firstSeenAt: 1,
+      lastSeenAt: 2,
+      lastActivatedAt: null,
+      closedAt: 3,
+      lastActivatedSegmentIndex: 1,
+    };
 
-    const score = scoreTopicBreakdown({
-      text: "待ち時間とラグがあって、画面の反応も重いです",
-      node: latencyNode!,
-      focusState,
-      intent: "concern",
-      now: 1,
-    });
+    const gaps = buildTopicGaps(topic, true, 10);
+    const displayStates = deriveDisplayStates(topic, gaps, true);
 
-    expect(score.keywordScore).toBe(0);
-    expect(score.synonymScore).toBeGreaterThan(0);
-    expect(score.matchedSynonyms).toEqual(["待ち時間", "反応", "ラグ", "重い"]);
-  });
-
-  it("sorts topic score breakdowns deterministically", () => {
-    const sorted = sortTopicScores([
-      { index: 1, total: 1, keywordScore: 1, synonymScore: 0 },
-      { index: 2, total: 1.7, keywordScore: 1, synonymScore: 0.7 },
-      { index: 0, total: 1.7, keywordScore: 1, synonymScore: 0.7 },
-    ]);
-
-    expect(sorted.map((score) => score.index)).toEqual([0, 2, 1]);
+    expect(displayStates).toContain("discussed");
+    expect(displayStates).toContain("unresolved");
+    expect(displayStates).toContain("missing");
+    expect(displayStates).toContain("shallow");
   });
 });

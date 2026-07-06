@@ -12,10 +12,11 @@ type ManualReplayPanelProps = {
 
 const DEFAULT_SCENARIO = JSON.stringify(
   [
-    { text: "今日はレイテンシー対策を決めます" },
-    { text: "それで、さっきの話に戻ると遅延が問題です" },
-    { text: "UIのLive感にも関係します" },
-    { text: "ただ、コストも後で見た方がいいです" },
+    { text: "今日は採用フローの短縮について決めます" },
+    { text: "候補者連絡の遅さが問題です" },
+    { text: "理由は担当が曖昧だからです" },
+    { text: "佐藤さんが金曜までに改善案を出します" },
+    { text: "ただ、別案も見た方がいいです" },
     { text: "そうですね" },
   ],
   null,
