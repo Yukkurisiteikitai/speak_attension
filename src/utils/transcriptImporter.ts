@@ -82,6 +82,10 @@ function parseSegment(item: unknown, index: number): TimedTranscriptSegment {
   };
 }
 
+function formatValidationErrors(errors: string[]): string {
+  return ["Transcript JSONに不正なセグメントがあります。", ...errors.map((error) => `- ${error}`)].join("\n");
+}
+
 export function importTimedTranscriptJson(value: string): TimedTranscriptSegment[] {
   let parsed: unknown;
 
@@ -95,5 +99,20 @@ export function importTimedTranscriptJson(value: string): TimedTranscriptSegment
     throw new Error("Transcript JSONは配列にしてください。");
   }
 
-  return parsed.map(parseSegment).sort((left, right) => left.startMs - right.startMs);
+  const segments: TimedTranscriptSegment[] = [];
+  const errors: string[] = [];
+
+  parsed.forEach((item, index) => {
+    try {
+      segments.push(parseSegment(item, index));
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : `${index + 1}件目のsegmentが不正です。`);
+    }
+  });
+
+  if (errors.length > 0) {
+    throw new Error(formatValidationErrors(errors));
+  }
+
+  return segments.sort((left, right) => left.startMs - right.startMs);
 }

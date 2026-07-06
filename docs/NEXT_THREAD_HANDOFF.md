@@ -318,13 +318,9 @@ Current layout:
 
 ## Cloudflare Cache Follow-Up
 
-Cloudflare Pages deployment workflow exists, but static cache headers are not yet committed.
+Cloudflare Pages deployment workflow exists, and static cache headers are now committed.
 
-Required next action:
-
-- add `public/_headers`
-
-Recommended content:
+Committed content:
 
 ```txt
 /assets/*
@@ -334,34 +330,12 @@ Recommended content:
   Cache-Control: public, max-age=0, must-revalidate
 ```
 
-Why:
+- Why:
 
 - hashed Vite assets under `/assets/` should be cached aggressively by Cloudflare Cache
 - HTML should revalidate so fresh deployments are visible immediately
 
 This is the intended Cloudflare Cache implementation. Do not confuse it with GitHub Actions dependency caching.
-
-- keyword: `matchedKeywords.length * 1.0`
-- synonym: `matchedSynonyms.length * 0.7`
-- focus context: `0.5` only when the topic is current Focus and has a direct match
-- intent: `0.3` for question/concern/todo/decision with direct match
-- switch-topic intent: `0.4` for non-Focus direct match
-- recency: `0.2` if the topic was touched within 60 seconds and has direct match
-
-Sorting:
-
-1. higher `total`
-2. higher `keywordScore`
-3. higher `synonymScore`
-4. original node order
-
-Minimum normalized terms added:
-
-- `速度`: `待ち時間`, `反応`, `もたつき`, `ラグ`, `重い`, `遅れる`
-- `コスト`: `API代`, `使用量`, `課金`
-- `精度`: `正確さ`, `間違える`, `ずれる`, `認識ミス`
-
-Note: some cost/accuracy terms such as `料金`, `高い`, `安い`, `誤検知` already existed as keywords, so they were not duplicated as normalized terms.
 
 ## Decision Log
 

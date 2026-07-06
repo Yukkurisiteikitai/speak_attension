@@ -110,12 +110,12 @@ Latest verified results:
 
 ## Cloudflare Cache Note
 
-Cloudflare Pages deployment is already wired, but edge cache headers are not yet configured in the repo.
+Cloudflare Pages deployment is already wired, and edge cache headers are committed in the repo.
 
-Next action:
+Implemented config:
 
-- Add `public/_headers` so Vite copies it to `dist/_headers` on build.
-- Use Cloudflare Cache-friendly headers:
+- `public/_headers` is copied to `dist/_headers` by Vite on build.
+- Cache headers:
 
 ```txt
 /assets/*
@@ -125,9 +125,9 @@ Next action:
   Cache-Control: public, max-age=0, must-revalidate
 ```
 
-Reason:
+- Reason:
 
 - hashed JS/CSS/image assets should be cached aggressively at the Cloudflare edge
 - HTML should stay revalidating so new deployments become visible immediately
 
-Do not solve this with GitHub Actions cache settings alone. The intended action is Cloudflare edge/static asset caching via Pages headers.
+Do not confuse this with GitHub Actions dependency caching. The intended action is Cloudflare edge/static asset caching via Pages headers.

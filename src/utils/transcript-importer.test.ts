@@ -52,6 +52,30 @@ describe("transcript importer", () => {
       ),
     ).toThrow("1件目の startMs は数値にしてください。");
   });
+
+  it("aggregates validation errors before failing", () => {
+    expect(() =>
+      importTimedTranscriptJson(
+        JSON.stringify([
+          { id: "seg-1", startMs: "1000", text: "invalid", source: "audio_replay" },
+          { id: "seg-2", startMs: 2000, source: "manual_replay" },
+        ]),
+      ),
+    ).toThrow(
+      ["Transcript JSONに不正なセグメントがあります。", "- 1件目の startMs は数値にしてください。", "- 2件目の text がありません。"].join("\n"),
+    );
+  });
+
+  it("fails the full import when any segment is invalid", () => {
+    expect(() =>
+      importTimedTranscriptJson(
+        JSON.stringify([
+          { id: "seg-1", startMs: 1000, text: "valid", source: "manual_replay" },
+          { id: "seg-2", startMs: 2000, source: "manual_replay" },
+        ]),
+      ),
+    ).toThrow("Transcript JSONに不正なセグメントがあります。");
+  });
 });
 
 describe("transcript replay", () => {
