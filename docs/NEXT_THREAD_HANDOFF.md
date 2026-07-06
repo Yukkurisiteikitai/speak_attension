@@ -1,19 +1,24 @@
-# Live Topic Graph - Next Thread Handoff
+# attension_mindmap - Next Thread Handoff
 
-Last updated: 2026-07-03
+Last updated: 2026-07-06
 
 ## Current State
 
-Live Topic Graph is a Vite + React + TypeScript prototype for testing live Japanese topic detection without external AI services.
+attension_mindmap is a Vite + React + TypeScript prototype for testing live Japanese meeting-topic extraction without external AI services.
 
-The current version has moved beyond simple keyword count. It now includes:
+The current version is no longer built around fixed seed topics. It now includes:
 
+- meeting-specific `MeetingGraph`
+- transcript-derived topic nodes with aliases
+- rule-based topic coverage tracking
+- automatic topic closure after focus shift + quiet window
+- synthetic gap nodes and meeting-wide gap summary
+- meeting-first dashboard UI
 - manual Focus selection
 - Focus lock
 - rule-based utterance intent classification
-- keyword + normalized-term / synonym scoring
-- per-topic score breakdown in Decision Log
-- explicit Focus auto-change gates to prevent accidental Focus stealing
+- overlap-based topic matching
+- per-topic score breakdown in the dev drawer
 
 No OpenAI, Deepgram, Whisper, Python, database, auth, TTS, speaker diarization, or remote AI service is used.
 
@@ -44,6 +49,7 @@ The script finds LISTENing TCP processes for the given ports with `lsof`, sends 
 Latest verified commands:
 
 ```sh
+npm run lint
 npm run typecheck
 npm test
 npm run build
@@ -51,8 +57,9 @@ npm run build
 
 Latest results:
 
+- `npm run lint`: passed
 - `npm run typecheck`: passed
-- `npm test`: passed, 4 files / 16 tests
+- `npm test`: passed, 4 files / 13 tests
 - `npm run build`: passed
 
 Dev server note:
@@ -66,48 +73,53 @@ Dev server note:
 - `src/hooks/useTopicEngine.ts`
   - Main state engine.
   - Processes speech/manual/replay text into analyzed segments.
-  - Runs intent detection, topic scoring, reference resolution, Focus Gate, graph updates, decision logs, and important mentions.
+  - Runs topic extraction, topic matching, coverage updates, closure checks, gap generation, graph projection, decision logs, and important mentions.
   - Exposes `setManualFocus(topicId)` and `setFocusLocked(locked)`.
 
 - `src/types/topic.ts`
   - Core types.
   - Important current types:
+    - `MeetingGraph`
+    - `TopicNode`
+    - `TopicGap`
     - `FocusState`
     - `UtteranceIntent`
-    - `TopicScoreBreakdown`
+    - `TopicMatchCandidate`
     - `TopicDecisionLog`
     - `AnalyzedSegment`
     - `ImportantMention`
 
 - `src/utils/topicRules.ts`
-  - Initial topic nodes.
-  - Keyword matching.
-  - Normalized-term / synonym matching.
-  - Score breakdown generation via `scoreTopicBreakdown`.
-  - Score sorting via `sortTopicScores`.
+  - Meeting graph bootstrap.
+  - Transcript clause splitting.
+  - Topic phrase extraction.
+  - Topic overlap scoring.
+  - Coverage detection.
+  - Gap generation.
+  - Meeting graph to React Flow projection.
 
 - `src/utils/intentRules.ts`
   - Rule-based utterance intent classification.
   - Maps intents to `ImportantMention` types where applicable.
 
-- `src/utils/focusGate.ts`
-  - Classifies utterances as:
-    - `on_focus`
-    - `adjacent`
-    - `off_topic_important`
-    - `off_topic_noise`
-    - `uncertain`
-  - Also returns:
-    - `shouldChangeFocus`
-    - `focusChangeCandidateTopicId`
-
-- `src/utils/contextResolver.ts`
-  - Detects reference phrases like `これ`, `それ`, `さっきの話`, `前のやつ`, `だから`.
-  - Resolves candidate topics from active topic and recent segments.
+- `src/utils/topicEngine.ts`
+  - Creates and mutates the `MeetingGraph`.
+  - Chooses stable topics or creates new ones from phrases.
+  - Applies coverage updates per segment.
+  - Closes dormant topics and emits gap records.
 
 - `src/components/TopicInspector.tsx`
-  - Right panel.
-  - Displays current Focus, lock state, manual Focus select, current analysis, Decision Log score breakdown, related utterances, important notes, unresolved references, and session JSON.
+  - Right rail + dev drawer.
+  - Displays current topic, local coverage checklist, current topic gaps, meeting-wide gap list, manual Focus controls, latest analysis, score breakdown, and raw JSON.
+
+- `src/components/TopicGraph.tsx`
+  - Renders meeting root, real topic nodes, and synthetic missing nodes with state badges.
+
+- `.github/workflows/ci.yml`
+  - Runs `lint`, `typecheck`, `test`, and `build`.
+
+- `.github/workflows/cloudflare-pages.yml`
+  - Deploys `dist/` to Cloudflare Pages on `main`.
 
 - `scripts/kill-localhost-port.sh`
   - Utility script for killing stale localhost dev servers by port.
@@ -118,12 +130,14 @@ Dev server note:
 speech final text / manual text / replay item
 -> processSegment(text, source)
 -> detect utterance intent
--> resolve reference phrases
--> score every topic with keyword/synonym/focus/intent/recency breakdown
--> sort candidate topics
--> Focus Gate classification and Focus-change decision
--> conditionally update Focus/current topic/graph heat/important mentions
--> render graph and inspector
+-> extract topic phrases from clauses
+-> match phrase against existing topic title + aliases
+-> create topic when no stable overlap exists
+-> update topic coverage
+-> close dormant topics after focus shift + quiet window
+-> compute local gaps + meeting-wide gap summary
+-> project MeetingGraph into React Flow nodes/edges
+-> render dashboard and dev drawer
 ```
 
 Speech source behavior:
@@ -154,52 +168,71 @@ type FocusState = {
 
 UI behavior:
 
-- The right panel has a topic select for manual Focus.
+- The right rail dev drawer has a topic select for manual Focus.
 - Selecting a topic sets `focusSetBy: "manual"` and updates `startedAt`.
 - Selecting `Focusなし` clears Focus but preserves lock state.
 - `focusをロック` toggles only `locked`.
 - When locked, automatic Focus changes are blocked.
 
-## Focus Auto-Change Rules
+## Topic Model
 
-Focus is treated as the conversation center, not simply the latest highest-scoring topic.
+The central domain model is now:
 
-Focus may be automatically set when:
+```ts
+type MeetingGraph = {
+  meetingId: string;
+  title: string;
+  rootTopicId: string;
+  nodes: TopicNode[];
+  edges: TopicEdge[];
+  gaps: TopicGap[];
+  gapSummary: MeetingGapSummary;
+};
+```
 
-- no Focus exists
-- Focus is not locked
-- selected topic exists
-- selected topic has direct keyword or synonym score
-- intent is not `agreement`
+Important `TopicNode` fields:
 
-Existing Focus may automatically change only when:
+- `lifecycle: "active" | "discussed" | "decided" | "unresolved"`
+- `displayStates`
+- `coverage`
+- `aliases`
+- `mentionCount`
+- `firstSeenAt`
+- `lastSeenAt`
+- `lastActivatedAt`
+- `closedAt`
 
-- Focus is not locked
-- current Focus exists
-- selected topic exists and is not current Focus
-- intent is `switch_topic`
-- selected topic has a strong direct match:
-  - `keywordScore >= 1`, or
-  - `synonymScore >= 0.7`
-- selected total is at least `currentFocus.total + 0.7`
-- there are no unresolved references
+Important `TopicEdge.type` values:
 
-Focus never auto-changes for:
+- `parent`
+- `related`
+- `depends_on`
+- `contradicts`
+- `follow_up`
+- `missing_of`
 
-- `locked === true`
-- `agreement`
-- unresolved references
-- adjacent-only topics
-- off-focus important utterances without `switch_topic`
-- weak recency/focus-context-only scores
-- short noise
+There is one meeting root node. Top-level extracted topics attach to it.
 
-Required behavior now covered by tests:
+## Topic Extraction
 
-- If Focus is `速度` and locked, `コストも高いですね` does not steal Focus.
-- Unlocked Focus can change on explicit `switch_topic` with strong direct match.
-- Agreement does not change Focus.
-- Off-focus concern/todo-style utterances become important notes instead of stealing Focus.
+The analyzer stays fully local and deterministic.
+
+Current extraction approach:
+
+- normalize transcript text
+- split into clauses
+- extract topic phrases via markers such as:
+  - `について`
+  - `の件`
+  - `を決める`
+  - `が問題`
+  - `したい`
+- fallback to repeated content phrases
+- avoid short acknowledgements and pronoun-only phrases
+- match against existing topic `title + aliases`
+- create a new topic only when overlap is below threshold
+
+This logic lives in `src/utils/topicRules.ts`.
 
 ## Intent Rules
 
@@ -237,27 +270,76 @@ Examples covered by tests:
 - `いや違う` -> `correction`
 - `話を戻すと` -> `switch_topic`
 
-## Topic Scoring
+## Coverage And Gaps
 
-`TopicNodeData` now includes:
+Coverage updates run on every analyzed segment.
 
-```ts
-normalizedTerms: string[];
+Tracked coverage fields:
+
+- `decision`
+- `reason`
+- `owner`
+- `dueDate`
+- `risk`
+- `alternative`
+- `objection`
+- `nextAction`
+- `dependency`
+- `openQuestionResolved`
+
+Topic closure rule:
+
+- focus moved away from the topic, and
+- the topic is not reactivated for the next 2 segments or 15 seconds
+
+Gap generation currently includes:
+
+- `shallow`
+- `missing_decision`
+- `missing_reason`
+- `missing_owner`
+- `missing_due_date`
+- `missing_next_action`
+- `missing_risk`
+- `missing_alternative`
+- `unresolved`
+
+Each active gap also appears in the graph as a synthetic child node with edge type `missing_of`.
+
+## UI Layout
+
+Current layout:
+
+- header: meeting title, elapsed time, current topic, websocket status
+- center: React Flow topic map
+- right rail: current topic card, coverage checklist, current topic gaps, meeting gaps
+- bottom utility area: mic controls, manual replay, transcript replay, recent transcript
+- dev drawer: latest analysis, score breakdown, important mentions, raw JSON, focus controls
+
+## Cloudflare Cache Follow-Up
+
+Cloudflare Pages deployment workflow exists, but static cache headers are not yet committed.
+
+Required next action:
+
+- add `public/_headers`
+
+Recommended content:
+
+```txt
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/*
+  Cache-Control: public, max-age=0, must-revalidate
 ```
 
-`TopicScoreBreakdown` includes:
+Why:
 
-- `total`
-- `keywordScore`
-- `synonymScore`
-- `focusContextScore`
-- `intentScore`
-- `recencyScore`
-- `matchedKeywords`
-- `matchedSynonyms`
-- `reason`
+- hashed Vite assets under `/assets/` should be cached aggressively by Cloudflare Cache
+- HTML should revalidate so fresh deployments are visible immediately
 
-Current scoring:
+This is the intended Cloudflare Cache implementation. Do not confuse it with GitHub Actions dependency caching.
 
 - keyword: `matchedKeywords.length * 1.0`
 - synonym: `matchedSynonyms.length * 0.7`
