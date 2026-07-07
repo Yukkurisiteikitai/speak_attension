@@ -62,8 +62,14 @@ Latest verified results:
 
 - `npm run lint`: passed
 - `npm run typecheck`: passed
-- `npm test`: passed, 5 files / 19 tests
+- `npm test`: passed, 6 files / 21 tests
 - `npm run build`: passed
+
+Final delivery check status:
+
+- Cloudflare Pages cache headers are present in `public/_headers`.
+- Pages deploy workflow targets `dist/`.
+- Handoff docs include the final acceptance checklist for the sample replay scenario.
 
 ## Implemented
 

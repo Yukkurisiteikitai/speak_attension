@@ -1,6 +1,6 @@
 # attension_mindmap - Next Thread Handoff
 
-Last updated: 2026-07-06
+Last updated: 2026-07-07
 
 ## Current State
 
@@ -59,7 +59,7 @@ Latest results:
 
 - `npm run lint`: passed
 - `npm run typecheck`: passed
-- `npm test`: passed, 5 files / 19 tests
+- `npm test`: passed, 6 files / 21 tests
 - `npm run build`: passed
 
 Dev server note:
@@ -379,6 +379,22 @@ Committed content:
 
 This is the intended Cloudflare Cache implementation. Do not confuse it with GitHub Actions dependency caching.
 
+## Final Delivery Check
+
+Use the default replay scenario in `src/components/ManualReplayPanel.tsx` as the sample meeting log for the final visual check.
+
+- [x] `public/_headers` exists with the Cloudflare cache rules.
+- [x] `.github/workflows/ci.yml` matches the current package scripts.
+- [x] `.github/workflows/cloudflare-pages.yml` deploys `dist/`.
+- [x] `HANDOFF.md` and this document match the current implementation status.
+- [ ] Sample meeting log generates a topic map.
+- [ ] The current topic is highlighted.
+- [ ] Missing elements appear when a topic winds down.
+- [ ] Meeting-wide missing elements appear.
+- [ ] `active / discussed / shallow / missing / decided / unresolved` are visible in the UI.
+- [ ] `npm run lint`, `npm run typecheck`, `npm test`, and `npm run build` all pass.
+- [ ] The Cloudflare Pages URL opens the app.
+
 ## Decision Log
 
 The right panel now shows score breakdown for the latest decision.
@@ -398,10 +414,14 @@ Session JSON also includes intent and score breakdown data.
 
 Current test files:
 
+- `src/hooks/topicEngineStore.test.ts`
 - `src/utils/topicRules.test.ts`
 - `src/utils/intentRules.test.ts`
 - `src/utils/focusGate.test.ts`
 - `src/utils/contextResolver.test.ts`
+- `src/utils/readerGuide.test.ts`
+- `src/utils/topicEngine.test.ts`
+- `src/utils/transcript-importer.test.ts`
 
 Current coverage includes:
 
@@ -439,10 +459,10 @@ Current coverage includes:
    - Consider separate confidence for important mention severity instead of reusing focus alignment.
    - Improve mapping of `concern` to `problem` vs `risk`.
 
-5. Improve right-panel ergonomics.
+4. Improve right-panel ergonomics.
    - The score breakdown is intentionally explicit now, but may need denser layout after more topics are added.
 
-6. Add export/import for session logs.
+5. Add export/import for session logs.
    - Keep it local JSON only for now.
    - No database is needed.
 

@@ -35,6 +35,7 @@ type TopicEngineStore = {
   subscribe: (listener: () => void) => () => void;
 };
 
+// Owns the live engine snapshot and the command queue for speech, manual text, and replay input.
 function cleanText(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }

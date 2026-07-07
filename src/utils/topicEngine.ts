@@ -37,6 +37,8 @@ export type TopicEngineTransition = {
   importantMention: ImportantMention | null;
 };
 
+// This module is the orchestration layer for one transcript segment.
+// It keeps the business rules readable by delegating extraction, scoring, coverage, and lifecycle work to smaller helpers.
 function updateTopicNode(graph: MeetingGraph, topicId: string, update: (node: TopicNode) => TopicNode): MeetingGraph {
   return {
     ...graph,
@@ -101,6 +103,7 @@ export function setFocusLockedState(state: TopicEngineState, locked: boolean): T
   };
 }
 
+// Processes one transcript segment and returns the next immutable engine snapshot plus analysis artifacts.
 export function processTopicSegment(
   state: TopicEngineState,
   text: string,

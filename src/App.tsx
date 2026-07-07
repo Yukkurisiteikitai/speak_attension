@@ -11,6 +11,7 @@ import type { SessionLogEntry } from "./types/topic";
 
 const WS_URL = "ws://127.0.0.1:8787";
 
+// Keeps a single browser WebSocket for session logs and hides the transport detail from the UI.
 function useSessionSocket() {
   const socketRef = useRef<WebSocket | null>(null);
   const [connectionStatus, setConnectionStatus] = useState("ws: connecting");
