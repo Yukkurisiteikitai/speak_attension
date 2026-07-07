@@ -129,6 +129,7 @@ input:focus {
 .segment-buffer,
 .analysis-card,
 .json-panel,
+.guide-card,
 .checklist-item,
 .gap-card {
   border: 1px solid var(--line);
@@ -307,7 +308,8 @@ input:focus {
 .live-transcript,
 .segment-buffer,
 .analysis-card,
-.json-panel {
+.json-panel,
+.guide-card {
   padding: 14px;
 }
 
@@ -321,10 +323,27 @@ input:focus {
 .live-transcript p,
 .segment-buffer p,
 .analysis-card p,
+.guide-card p,
 .gap-card p,
 .score-breakdown-card p {
   margin: 0;
   line-height: 1.5;
+}
+
+.guide-card strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.guide-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.guide-card.hint {
+  background: rgba(17, 97, 71, 0.06);
+  border-color: rgba(17, 97, 71, 0.16);
 }
 
 .segment-list {

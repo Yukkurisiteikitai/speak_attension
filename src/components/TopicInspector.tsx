@@ -8,6 +8,7 @@ import type {
   TopicDecisionLog,
   TopicGap,
 } from "../types/topic";
+import { buildReaderGuide } from "../utils/readerGuide";
 
 type TopicInspectorProps = {
   connectionStatus: string;
@@ -34,6 +35,7 @@ function coverageChecklist(topicId: string | null, graph: MeetingGraph) {
   return Object.entries(topic.coverage).map(([key, value]) => ({ key, value }));
 }
 
+// Diagnostic panel: shows the current topic state, the missing pieces, and the raw analysis trail.
 export function TopicInspector({
   connectionStatus,
   currentTopicGaps,
@@ -53,6 +55,12 @@ export function TopicInspector({
   const meetingGaps = meetingGraph.gapSummary.gaps.slice(0, 8);
   const focusOptions = meetingGraph.nodes.filter((node) => node.id !== meetingGraph.rootTopicId);
   const checklist = coverageChecklist(currentTopicId, meetingGraph);
+  const readerGuide = buildReaderGuide({
+    currentTopic,
+    currentTopicGaps,
+    focusState,
+    latestSegment,
+  });
 
   const sessionJson = useMemo(
     () =>
@@ -84,6 +92,33 @@ export function TopicInspector({
           <span>{currentTopic ? "active" : "none"}</span>
           <strong>{currentTopic?.title ?? "まだ議題がありません"}</strong>
           <p>{currentTopic ? `mentions: ${currentTopic.mentionCount} / lifecycle: ${currentTopic.lifecycle}` : "会話から最初の議題を抽出します。"}</p>
+        </div>
+      </section>
+
+      <section>
+        <div className="section-head">
+          <h2>初見ガイド</h2>
+          <span>first read</span>
+        </div>
+        <article className="guide-card">
+          <strong>この画面が今伝えていること</strong>
+          <p>{readerGuide.summary}</p>
+        </article>
+        <div className="guide-list">
+          {readerGuide.unknowns.map((item) => (
+            <article className="guide-card" key={item}>
+              <strong>まだ分からないこと</strong>
+              <p>{item}</p>
+            </article>
+          ))}
+        </div>
+        <div className="guide-list">
+          {readerGuide.hints.map((item) => (
+            <article className="guide-card hint" key={item}>
+              <strong>読み方</strong>
+              <p>{item}</p>
+            </article>
+          ))}
         </div>
       </section>
 

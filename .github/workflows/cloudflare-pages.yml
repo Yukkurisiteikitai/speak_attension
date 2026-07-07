@@ -1,4 +1,4 @@
-name: Cloudflare Pages Deploy
+name: Cloudflare Workers Deploy
 
 on:
   push:
@@ -17,8 +17,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      - name: Deploy to Cloudflare Pages
-        run: npx wrangler@4 pages deploy dist --project-name="${{ secrets.CLOUDFLARE_PAGES_PROJECT_NAME }}"
+      - name: Deploy to Cloudflare Workers
+        run: npx wrangler@4 deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

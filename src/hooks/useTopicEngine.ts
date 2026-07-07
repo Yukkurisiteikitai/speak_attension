@@ -7,6 +7,8 @@ type UseTopicEngineOptions = {
   onLog?: (entry: import("../types/topic").SessionLogEntry) => void;
 };
 
+// React-facing adapter over the imperative topic engine store.
+// This keeps UI code in sync with the latest snapshot without threading mutable refs through components.
 export function useTopicEngine({ onLog }: UseTopicEngineOptions = {}) {
   const storeRef = useRef<ReturnType<typeof createTopicEngineStore> | null>(null);
   if (!storeRef.current) {
