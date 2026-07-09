@@ -53,6 +53,7 @@ export function useTopicEngine({ onLog }: UseTopicEngineOptions = {}) {
     meetingStartedAt: snapshot.engineState.meetingStartedAt,
     nodes: snapshot.engineState.nodes,
     reset: store.reset,
+    segmentArchive: snapshot.segmentArchive,
     segments: snapshot.engineState.segments,
     setFocusLocked: store.setFocusLocked,
     setManualFocus: store.setManualFocus,

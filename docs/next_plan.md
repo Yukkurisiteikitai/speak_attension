@@ -47,6 +47,7 @@ processSegment
 ## Non-Goals
 
 - No semantic embeddings or remote AI calls.
+  - Update (2026-07): local LLM calls via an OpenAI-compatible server (LM Studio) are now allowed, but only in the post-meeting report layer (`llmGapReview.ts`). The realtime segment pipeline stays rule-based.
 - No persistent storage.
 - No meeting-minutes features.
 - No automatic creation of many new nodes from weak matches.

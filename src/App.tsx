@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ControlPanel } from "./components/ControlPanel";
 import { ManualReplayPanel } from "./components/ManualReplayPanel";
+import { MeetingReportPanel } from "./components/MeetingReportPanel";
 import { TopicGraph } from "./components/TopicGraph";
 import { TopicInspector } from "./components/TopicInspector";
 import { TranscriptPanel } from "./components/TranscriptPanel";
@@ -138,6 +139,11 @@ export default function App() {
           lastFinalText={speech.lastFinalText}
           meetingGraph={topicEngine.meetingGraph}
           segments={topicEngine.segments}
+        />
+        <MeetingReportPanel
+          importantMentions={topicEngine.importantMentions}
+          meetingGraph={topicEngine.meetingGraph}
+          segmentArchive={topicEngine.segmentArchive}
         />
       </section>
     </main>

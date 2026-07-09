@@ -22,7 +22,15 @@ docs/NEXT_THREAD_HANDOFF.md
 - React Flow (`@xyflow/react`)
 - Browser Web Speech API for STT
 
-No OpenAI API, Deepgram, Whisper, Python, database, auth, TTS, or speaker diarization is used.
+No remote AI API, Deepgram, Whisper, Python, database, auth, TTS, or speaker diarization is used. The realtime pipeline stays rule-based; the post-meeting report can optionally call a local LLM through an OpenAI-compatible server (LM Studio).
+
+## Local LLM Review (Optional)
+
+The missing-items report panel can ask a local LLM to confirm or drop each rule-based finding and add missed ones.
+
+1. Start LM Studio, load a model, and start the local server (default `http://127.0.0.1:1234/v1`). Enable CORS in the LM Studio server settings so the browser can call it.
+2. In the app, open the 抜け漏れレポート panel, press 接続確認 (auto-fills the first loaded model id), then レポート生成 followed by LLMレビュー.
+3. Rule-based findings are never removed by the LLM; a `drop` verdict only annotates and dims the finding.
 
 ## Run
 
@@ -62,7 +70,7 @@ Latest verified results:
 
 - `npm run lint`: passed
 - `npm run typecheck`: passed
-- `npm test`: passed, 6 files / 21 tests
+- `npm test`: passed, 9 files / 37 tests
 - `npm run build`: passed
 
 Final delivery check status:
@@ -94,6 +102,9 @@ Final delivery check status:
 - Aggregated transcript JSON validation errors before import failure.
 - GitHub Actions for CI and Cloudflare Pages deploy.
 - Utility script to kill stale localhost dev servers by port.
+- Post-meeting missing-items report (Markdown export) built from the full segment archive.
+- Helpful/noise feedback per report finding with helpful-rate summary and evaluation dataset JSON export.
+- Optional local-LLM second opinion over report findings via an OpenAI-compatible server (LM Studio).
 
 ## Key Files
 
@@ -111,6 +122,11 @@ Final delivery check status:
 - `src/utils/topicSelection.ts` - topic selection and topic creation helpers
 - `src/utils/transcriptImporter.ts` - transcript JSON parsing with aggregated validation errors
 - `src/components/TopicInspector.tsx` - current topic, coverage, gap lists, dev drawer
+- `src/utils/meetingReport.ts` - post-meeting missing-items report builder and Markdown renderer
+- `src/utils/reportFeedback.ts` - helpful/noise feedback summary and evaluation dataset export
+- `src/utils/llmClient.ts` - OpenAI-compatible local LLM client (LM Studio)
+- `src/utils/llmGapReview.ts` - LLM verification of rule-based findings per topic group
+- `src/components/MeetingReportPanel.tsx` - report generation, feedback, downloads, LLM review UI
 - `.github/workflows/ci.yml` - lint/typecheck/test/build workflow
 - `.github/workflows/cloudflare-pages.yml` - Pages deployment workflow using `npx wrangler@4`
 - `scripts/kill-localhost-port.sh` - port cleanup helper

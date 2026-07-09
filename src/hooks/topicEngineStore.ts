@@ -8,12 +8,13 @@ import {
   type TopicEngineState,
   type TopicEngineTransition,
 } from "../utils/topicEngine";
-import type { SessionLogEntry, TimedTranscriptSegment, TranscriptSegmentMetadata, TranscriptInputSource } from "../types/topic";
+import type { AnalyzedSegment, SessionLogEntry, TimedTranscriptSegment, TranscriptSegmentMetadata, TranscriptInputSource } from "../types/topic";
 
 type TopicEngineStoreSnapshot = {
   engineState: TopicEngineState;
   bufferText: string;
   logs: SessionLogEntry[];
+  segmentArchive: AnalyzedSegment[];
 };
 
 type TopicEngineStoreOptions = {
@@ -68,6 +69,7 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
     engineState: createInitialTopicEngineState(),
     bufferText: "",
     logs: [],
+    segmentArchive: [],
   };
   const listeners = new Set<() => void>();
 
@@ -109,6 +111,9 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
     writeSnapshot({
       ...snapshot,
       engineState: transition.state,
+      // Engine state trims segments to the latest 80 for UI perf; keep the full
+      // meeting here so the post-meeting report can quote every evidence segment.
+      segmentArchive: [...snapshot.segmentArchive, transition.segment],
     });
   }
 
@@ -154,6 +159,7 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
         engineState: createInitialTopicEngineState(),
         bufferText: "",
         logs: [],
+        segmentArchive: [],
       });
     },
     setFocusLocked(locked) {

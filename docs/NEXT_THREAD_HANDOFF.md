@@ -1,26 +1,50 @@
 # attension_mindmap - Next Thread Handoff
 
-Last updated: 2026-07-07
+Last updated: 2026-07-09
+
+## プロダクトの方向性(最重要・2026-07-08 に確定)
+
+このプロダクトの価値の核は **トピックグラフではなく「抜け漏れ検知」** である。サービス定義は:
+
+> 決まっていないことを、会議が終わる前に教えてくれるツール。
+
+確定した戦略判断:
+
+- 議事録要約(Otter, tl;dv 等)はコモディティ。「まだ決まっていないことをリアルタイムに指摘する」領域で勝負する。
+- リアルタイム化より先に **判定品質の証明** をやる。実会議のトランスクリプトを事後投入して「抜け漏れレポート」を出し、指摘の納得率を測る。
+- 納得率(助かった率)**7割** がサービスとして成立するかの分水嶺。再現率より適合率優先。的外れな指摘は一発で信頼を失う。
+- 実装順序は **1→3→2**: (1) 事後レポート生成 → (3) 納得率フィードバック収集 → (2) LLM 判定層。
+- **LLM はクラウド API を使わず、LM Studio(ローカル、OpenAI 互換 API)限定。** リアルタイムのセグメント処理パイプラインはルールベースのまま維持し、LLM は事後レポート層でのみ使う。
+- グラフ UI は削除しないがサブビューへ降格方針。日常利用の主役はチェックリストとアラート。
+- 捨てるもの: 代名詞解決の精度追求、グラフレイアウト改良、独自 STT、放射状レイアウト。
+
+この判断の経緯は 2026-07-08〜09 のセッションで議論済み。ユーザー(結仁)の合意済み。
 
 ## Current State
 
-attension_mindmap is a Vite + React + TypeScript prototype for testing live Japanese meeting-topic extraction without external AI services.
+Vite + React + TypeScript のローカルプロトタイプ。日本語会議のトピック抽出・カバレッジ追跡・gap 生成に加えて、**2026-07-09 のセッションで以下の3層を実装済み**:
 
-The current version is no longer built around fixed seed topics. It now includes:
+1. **抜け漏れレポート生成** (`src/utils/meetingReport.ts`)
+   - 会議終了時点の全トピックに対して `buildTopicGaps` で gap を再計算(アクティブなまま終わったトピックは close 処理が走らず gap が出ないため、レポート生成時に全確定させる)
+   - トピックに紐付かず流れた重要発言(問題提起/リスク/TODO/決定/疑問)を「未回収の指摘」として findings 化
+   - finding の id は決定的(`${topicId}-${gapType}` / `mention-${segmentId}-${type}`)なので再生成してもフィードバックが引き継がれる
+   - 高/中/低優先でグループ化した Markdown を出力、証拠発言を引用
 
-- meeting-specific `MeetingGraph`
-- transcript-derived topic nodes with aliases
-- rule-based topic coverage tracking
-- automatic topic closure after focus shift + quiet window
-- synthetic gap nodes and meeting-wide gap summary
-- meeting-first dashboard UI
-- manual Focus selection
-- Focus lock
-- rule-based utterance intent classification
-- overlap-based topic matching
-- per-topic score breakdown in the dev drawer
+2. **納得率フィードバック** (`src/utils/reportFeedback.ts`)
+   - 各指摘に「助かった/ノイズ」をマーク(localStorage 永続化、キー: `speak_attension.feedback.{meetingId}.{generatedAt}`)
+   - 納得率 = helpful ÷ 評価済み。パネルに表示
+   - 「評価データ」ボタンで指摘+人間の判定+LLM 判定を束ねた JSON をエクスポート → **これが将来のルール調整・プロンプト改善のベンチマークデータセットになる**(事後レポートは正解データを作る装置でもある、という位置づけ)
 
-No OpenAI, Deepgram, Whisper, Python, database, auth, TTS, speaker diarization, or remote AI service is used.
+3. **LLM 判定層(LM Studio)** (`src/utils/llmClient.ts` + `src/utils/llmGapReview.ts`)
+   - OpenAI 互換クライアント。デフォルト `http://127.0.0.1:1234/v1`。`/models` で接続確認+モデル自動選択
+   - トピック単位でグループ化し、証拠発言+ルール検出済み findings を渡して confirm/drop 判定と見落とし追加(`llm_added`)を JSON で受け取る
+   - リクエストは逐次実行(ローカルサーバは並列生成できないため)。1グループ失敗しても他は続行し、失敗グループのルール findings はそのまま残る
+   - **ルールベースの指摘を LLM は削除できない設計**。drop は注記+薄表示のみ(適合率優先・信頼維持の方針の実装)
+   - code fence や前置きテキスト付き応答に耐える JSON パーサ(`extractJsonObject`)
+
+UI は `src/components/MeetingReportPanel.tsx`(utility-grid 内)。レポート生成 / Markdown DL / 評価データ DL / LM Studio 設定(localStorage 永続化)/ 接続確認 / LLM レビュー / 指摘ごとの評価ボタン。
+
+また、engine state の `segments` は UI 用に直近80件で切り捨てられるため、store に **`segmentArchive`**(全セグメント保持)を追加した。レポートの証拠引用はこちらを使う。
 
 ## How To Run
 
@@ -29,446 +53,109 @@ npm install
 npm run dev
 ```
 
-Expected URLs:
+- App: `http://127.0.0.1:5173/`
+- WebSocket: `ws://127.0.0.1:8787`
+- ポートが塞がっていたら: `scripts/kill-localhost-port.sh 5173 5174 8787`
 
-```txt
-App: http://127.0.0.1:5173/
-WebSocket: ws://127.0.0.1:8787
-```
+### LM Studio(LLM レビューを使う場合)
 
-If stale local servers are occupying the ports:
-
-```sh
-scripts/kill-localhost-port.sh 5173 5174 8787
-```
-
-The script finds LISTENing TCP processes for the given ports with `lsof`, sends `TERM`, waits briefly, then sends `KILL` only if they remain.
+1. LM Studio でモデルをロードし、ローカルサーバを起動(デフォルト `http://127.0.0.1:1234/v1`)
+2. **LM Studio のサーバ設定で CORS を有効にする**(ブラウザから直接 fetch するため必須)
+3. アプリの「抜け漏れレポート」パネル → 接続確認(最初のモデル id が自動入力される)→ レポート生成 → LLM レビュー
 
 ## Validation
 
-Latest verified commands:
-
-```sh
-npm run lint
-npm run typecheck
-npm test
-npm run build
-```
-
-Latest results:
+Latest verified results (2026-07-09):
 
 - `npm run lint`: passed
 - `npm run typecheck`: passed
-- `npm test`: passed, 6 files / 21 tests
+- `npm test`: passed, 9 files / 37 tests
 - `npm run build`: passed
-
-Dev server note:
-
-- A previous temporary dev server was started on `http://127.0.0.1:5174/` because `5173` was occupied.
-- It has since been stopped.
-- Final port check showed no listeners on `5173`, `5174`, or `8787`.
 
 ## Important Files
 
-- `src/hooks/useTopicEngine.ts`
-  - Thin hook adapter over a local external store.
-  - Uses `useSyncExternalStore` to read engine state, buffered speech, and logs.
-  - Owns only the 5-second speech flush timer and memoized selectors.
+今回追加分:
 
-- `src/hooks/topicEngineStore.ts`
-  - Canonical mutable store for `engineState`, `bufferText`, and `logs`.
-  - Processes speech/manual/replay commands against the latest snapshot, avoiding hook-level stale state sync.
-  - Attaches transcript metadata, emits session logs, and exposes imperative commands to the hook.
+- `src/utils/meetingReport.ts` - レポート構築 (`buildMeetingReport`) と Markdown 描画 (`renderMeetingReportMarkdown`)。型: `MeetingReport`, `MeetingReportFinding`(kind: `topic_gap` | `important_mention` | `llm_added`)
+- `src/utils/reportFeedback.ts` - `summarizeFeedback`(納得率)と `buildEvaluationDataset`(評価データ JSON)
+- `src/utils/llmClient.ts` - `LlmSettings`, `requestChat`, `fetchModelIds`, `extractJsonObject`
+- `src/utils/llmGapReview.ts` - `reviewReportWithLlm`(グループ単位の LLM 検証)、`parseGapReviewResponse`、システムプロンプト
+- `src/components/MeetingReportPanel.tsx` - レポート UI 一式
+- `src/utils/meetingReport.test.ts` / `reportFeedback.test.ts` / `llmGapReview.test.ts` - 新規テスト16件
 
-- `src/types/topic.ts`
-  - Core types.
-  - Important current types:
-    - `MeetingGraph`
-    - `TopicNode`
-    - `TopicGap`
-    - `FocusState`
-    - `UtteranceIntent`
-    - `TopicMatchCandidate`
-    - `TopicDecisionLog`
-    - `AnalyzedSegment`
-    - `ImportantMention`
+既存の中核(変更なし or 小変更):
 
-- `src/utils/topicRules.ts`
-  - Compatibility barrel.
-  - Re-exports the split utility modules so existing imports continue to work.
+- `src/hooks/topicEngineStore.ts` - **変更あり**: snapshot に `segmentArchive: AnalyzedSegment[]` を追加(applyTransition で追記、reset でクリア)
+- `src/hooks/useTopicEngine.ts` - **変更あり**: `segmentArchive` を公開
+- `src/App.tsx` - **変更あり**: `MeetingReportPanel` を utility-grid に追加
+- `src/styles.css` - **変更あり**: report/finding/verdict/severity-badge 系のスタイル追記(末尾の media query 直前)
+- `src/utils/topicEngine.ts` - セグメント処理オーケストレータ(1セグメント → 状態遷移)
+- `src/utils/topicCoverage.ts` - カバレッジ検出・gap 生成(`buildTopicGaps` をレポートが再利用)
+- `src/utils/topicLifecycle.ts` - close 処理・important mention 生成
+- `src/utils/intentRules.ts` - 発話 intent 分類
+- `src/utils/transcriptImporter.ts` - リプレイ JSON の検証付きインポート
+- `src/components/TranscriptReplayPanel.tsx` - タイムライン再生(1x/2x/5x/instant)
 
-- `src/utils/topicExtraction.ts`
-  - Transcript clause splitting.
-  - Topic phrase extraction.
-  - Topic overlap scoring.
-  - Shallow topic reference resolution.
+## Processing Flow
 
-- `src/utils/topicCoverage.ts`
-  - Coverage detection.
-  - Gap generation.
-  - Lifecycle and display-state derivation.
-
-- `src/utils/topicProjection.ts`
-  - Meeting graph bootstrap.
-  - Meeting graph to React Flow projection.
-  - ID creation and focus-relation helpers.
-
-- `src/utils/topicLifecycle.ts`
-  - Coverage mutation.
-  - Important mention creation.
-  - Dormant topic closure and derived-state refresh.
-
-- `src/utils/topicSelection.ts`
-  - Existing-topic matching.
-  - Topic creation from phrases.
-  - Alias and evidence updates.
-
-- `src/utils/intentRules.ts`
-  - Rule-based utterance intent classification.
-  - Maps intents to `ImportantMention` types where applicable.
-
-- `src/utils/topicEngine.ts`
-  - Orchestrates one segment transition end-to-end.
-  - Delegates extraction, matching, coverage, lifecycle, and projection to the split utility modules.
-
-- `src/utils/transcriptImporter.ts`
-  - Validates external replay JSON.
-  - Keeps strict import semantics, but now aggregates all invalid segment errors before throwing.
-
-- `src/components/TopicInspector.tsx`
-  - Right rail + dev drawer.
-  - Displays current topic, local coverage checklist, current topic gaps, meeting-wide gap list, manual Focus controls, latest analysis, score breakdown, and raw JSON.
-
-- `src/components/TopicGraph.tsx`
-  - Renders meeting root, real topic nodes, and synthetic missing nodes with state badges.
-
-- `.github/workflows/ci.yml`
-  - Runs `lint`, `typecheck`, `test`, and `build`.
-
-- `.github/workflows/cloudflare-pages.yml`
-  - Deploys `dist/` to Cloudflare Pages on `main`.
-  - Uses direct `npx wrangler@4 pages deploy ...` instead of `cloudflare/wrangler-action`, so deploy failures surface raw CLI stderr.
-
-- `scripts/kill-localhost-port.sh`
-  - Utility script for killing stale localhost dev servers by port.
-
-## Current Processing Flow
+リアルタイム/リプレイ共通(従来通り、ルールベース):
 
 ```txt
 speech final text / manual text / replay item
--> processSegment(text, source)
--> detect utterance intent
--> extract topic phrases from clauses
--> match phrase against existing topic title + aliases
--> create topic when no stable overlap exists
--> update topic coverage
--> close dormant topics after focus shift + quiet window
--> compute local gaps + meeting-wide gap summary
--> project MeetingGraph into React Flow nodes/edges
--> render dashboard and dev drawer
+-> processSegment -> intent検出 -> トピック抽出/マッチ -> カバレッジ更新
+-> 休眠トピック close -> gap生成 -> React Flow投影
+(全セグメントを segmentArchive にも追記)
 ```
 
-Speech source behavior:
-
-- Web Speech API interim text is displayed only.
-- Final speech chunks are buffered.
-- Every 5 seconds, the speech buffer is flushed as one segment with `source: "speech"`.
-
-Manual/replay behavior:
-
-- Manual text is processed immediately as `source: "manual"`.
-- Replay items are processed immediately as `source: "replay"`.
-
-## State Management Refactor
-
-- The old hook-local `useState` + mutable ref sync pattern has been replaced with a local external store.
-- `topicEngineStore` is the single mutable source of truth for engine state, buffer text, and logs.
-- `useTopicEngine` subscribes through `useSyncExternalStore`, so imperative callbacks always read the latest snapshot without manual `stateRef` synchronization.
-- Public hook API remains stable for `App.tsx` and the existing panels.
-
-## Focus State
-
-Current type:
-
-```ts
-type FocusState = {
-  focusTopicId: string | null;
-  focusLabel: string | null;
-  focusSetBy: "auto" | "manual";
-  locked: boolean;
-  startedAt: number;
-  goal?: string;
-};
-```
-
-UI behavior:
-
-- The right rail dev drawer has a topic select for manual Focus.
-- Selecting a topic sets `focusSetBy: "manual"` and updates `startedAt`.
-- Selecting `Focusなし` clears Focus but preserves lock state.
-- `focusをロック` toggles only `locked`.
-- When locked, automatic Focus changes are blocked.
-
-## Topic Model
-
-The central domain model is now:
-
-```ts
-type MeetingGraph = {
-  meetingId: string;
-  title: string;
-  rootTopicId: string;
-  nodes: TopicNode[];
-  edges: TopicEdge[];
-  gaps: TopicGap[];
-  gapSummary: MeetingGapSummary;
-};
-```
-
-Important `TopicNode` fields:
-
-- `lifecycle: "active" | "discussed" | "decided" | "unresolved"`
-- `displayStates`
-- `coverage`
-- `aliases`
-- `mentionCount`
-- `firstSeenAt`
-- `lastSeenAt`
-- `lastActivatedAt`
-- `closedAt`
-
-Important `TopicEdge.type` values:
-
-- `parent`
-- `related`
-- `depends_on`
-- `contradicts`
-- `follow_up`
-- `missing_of`
-
-There is one meeting root node. Top-level extracted topics attach to it.
-
-## Topic Extraction
-
-The analyzer stays fully local and deterministic.
-
-Current extraction approach:
-
-- normalize transcript text
-- split into clauses
-- extract topic phrases via markers such as:
-  - `について`
-  - `の件`
-  - `を決める`
-  - `が問題`
-  - `したい`
-- fallback to repeated content phrases
-- avoid short acknowledgements and pronoun-only phrases
-- match against existing topic `title + aliases`
-- create a new topic only when overlap is below threshold
-
-This logic lives in the split topic utility modules and is re-exported from `src/utils/topicRules.ts` for compatibility.
-
-## Transcript Import Validation
-
-- Import remains strict: if any segment is invalid, the whole JSON import fails.
-- Validation no longer fails on the first bad segment.
-- The thrown error now starts with `Transcript JSONに不正なセグメントがあります。` and includes one bullet per invalid segment.
-- This behavior is covered by `src/utils/transcript-importer.test.ts`.
-
-## Intent Rules
-
-`src/utils/intentRules.ts` assigns one primary intent per utterance.
-
-Current intents:
-
-- `question`
-- `concern`
-- `todo`
-- `decision`
-- `agreement`
-- `correction`
-- `switch_topic`
-- `unknown`
-
-Priority order:
-
-1. `switch_topic`
-2. `correction`
-3. `todo`
-4. `decision`
-5. `concern`
-6. `question`
-7. `agreement`
-8. `unknown`
-
-Examples covered by tests:
-
-- `どうしますか` -> `question`
-- `問題になりそう` -> `concern`
-- `後で見る` -> `todo`
-- `決めます` -> `decision`
-- `そうですね` -> `agreement`
-- `いや違う` -> `correction`
-- `話を戻すと` -> `switch_topic`
-
-## Coverage And Gaps
-
-Coverage updates run on every analyzed segment.
-
-Tracked coverage fields:
-
-- `decision`
-- `reason`
-- `owner`
-- `dueDate`
-- `risk`
-- `alternative`
-- `objection`
-- `nextAction`
-- `dependency`
-- `openQuestionResolved`
-
-Topic closure rule:
-
-- focus moved away from the topic, and
-- the topic is not reactivated for the next 2 segments or 15 seconds
-
-Gap generation currently includes:
-
-- `shallow`
-- `missing_decision`
-- `missing_reason`
-- `missing_owner`
-- `missing_due_date`
-- `missing_next_action`
-- `missing_risk`
-- `missing_alternative`
-- `unresolved`
-
-Each active gap also appears in the graph as a synthetic child node with edge type `missing_of`.
-
-## UI Layout
-
-Current layout:
-
-- header: meeting title, elapsed time, current topic, websocket status
-- center: React Flow topic map
-- right rail: current topic card, coverage checklist, current topic gaps, meeting gaps
-- bottom utility area: mic controls, manual replay, transcript replay, recent transcript
-- dev drawer: latest analysis, score breakdown, important mentions, raw JSON, focus controls
-
-## Cloudflare Cache Follow-Up
-
-Cloudflare Pages deployment workflow exists, and static cache headers are now committed.
-
-Committed content:
+事後レポート(今回追加):
 
 ```txt
-/assets/*
-  Cache-Control: public, max-age=31536000, immutable
-
-/*
-  Cache-Control: public, max-age=0, must-revalidate
+「レポート生成」クリック
+-> buildMeetingReport(meetingGraph, importantMentions, segmentArchive)
+   - 全トピックの gap を buildTopicGaps で再計算(未closeトピックも確定)
+   - relatedTopicId が null の importantMention を「未回収の指摘」化
+-> UI に findings 表示、helpful/noise 評価(localStorageに保存)
+-> (任意) reviewReportWithLlm: トピックグループごとに LM Studio へ検証依頼
+-> Markdown / 評価データ JSON をダウンロード
 ```
 
-- Why:
-
-- hashed Vite assets under `/assets/` should be cached aggressively by Cloudflare Cache
-- HTML should revalidate so fresh deployments are visible immediately
-
-This is the intended Cloudflare Cache implementation. Do not confuse it with GitHub Actions dependency caching.
-
-## Final Delivery Check
-
-Use the default replay scenario in `src/components/ManualReplayPanel.tsx` as the sample meeting log for the final visual check.
-
-- [x] `public/_headers` exists with the Cloudflare cache rules.
-- [x] `.github/workflows/ci.yml` matches the current package scripts.
-- [x] `.github/workflows/cloudflare-pages.yml` deploys `dist/`.
-- [x] `HANDOFF.md` and this document match the current implementation status.
-- [ ] Sample meeting log generates a topic map.
-- [ ] The current topic is highlighted.
-- [ ] Missing elements appear when a topic winds down.
-- [ ] Meeting-wide missing elements appear.
-- [ ] `active / discussed / shallow / missing / decided / unresolved` are visible in the UI.
-- [ ] `npm run lint`, `npm run typecheck`, `npm test`, and `npm run build` all pass.
-- [ ] The Cloudflare Pages URL opens the app.
-
-## Decision Log
-
-The right panel now shows score breakdown for the latest decision.
-
-Displayed fields:
-
-- selected topic
-- matched keywords
-- matched synonyms
-- intent
-- top 3 topic score cards
-- per-card total, keyword, synonym, intent, focus, recency, matched terms, reason
-
-Session JSON also includes intent and score breakdown data.
+評価データ JSON の形(`EvaluationDataset`): version, meetingId, reportGeneratedAt, summary(納得率), entries[](findingId, kind, gapType, topicTitle, severity, title, detail, evidence, verdict, llmVerdict, llmReason)。
 
 ## Tests
 
-Current test files:
+9 files / 37 tests:
 
 - `src/hooks/topicEngineStore.test.ts`
 - `src/utils/topicRules.test.ts`
 - `src/utils/intentRules.test.ts`
-- `src/utils/focusGate.test.ts`
-- `src/utils/contextResolver.test.ts`
 - `src/utils/readerGuide.test.ts`
 - `src/utils/topicEngine.test.ts`
 - `src/utils/transcript-importer.test.ts`
-
-Current coverage includes:
-
-- existing keyword score compatibility
-- synonym score for latency terms such as `待ち時間`, `ラグ`, `重い`
-- score breakdown and deterministic sorting
-- intent classification examples
-- locked Focus behavior
-- switch-topic auto Focus change
-- agreement/noise behavior
-- off-focus important behavior
+- `src/utils/meetingReport.test.ts` (new)
+- `src/utils/reportFeedback.test.ts` (new)
+- `src/utils/llmGapReview.test.ts` (new — LLM 呼び出しはモック注入。実サーバ不要)
 
 ## Known Limitations
 
-- The engine is still rule-based and intentionally simple.
-- `contextResolver` can still double-match overlapping phrases, for example `それで` and `それ`.
-- Graph adjacency is partly hard-coded in `SEMANTIC_ADJACENCY`.
-- Unknown node creation is conservative after Focus Gate.
-- Off-topic important utterances are recorded as notes instead of creating nodes.
-- Web Speech API support depends on browser; Chrome-like browsers are best.
-- State is in memory only and resets on refresh.
-- Fixture-level replay tests now cover fixed focus and intent scenarios.
+- ルールベース検出は単純なパターンマッチ。`buildTopicGaps` は coverage の組み合わせだけで gap を出すため、1〜2発言のトピックには `shallow` + `missing_decision` が機械的に付きやすい(ノイズ源。納得率測定で最初に問題になる見込み)
+- LLM レビューはブラウザから直接 fetch するため LM Studio 側の CORS 有効化が必須
+- LLM の `additional` findings には証拠引用が付かない(evidence: [])
+- フィードバックは localStorage のみ。エクスポートし忘れるとブラウザ依存
+- state はメモリのみ、リロードで消える(segmentArchive も同様)
+- Web Speech API は Chrome 系推奨
 
-## Recommended Next Work
+## Recommended Next Work(優先順)
 
-1. Add state-level tests for `useTopicEngine`.
-   - Manual Focus selection sets `focusSetBy: "manual"`.
-   - Lock toggle blocks auto Focus changes through the full engine path.
-
-2. Improve reference phrase detection.
-   - Avoid overlapping matches such as `それで` plus `それ`.
-   - Store span offsets if future UI highlights reference phrases in text.
-
-3. Tune importance handling.
-   - Consider separate confidence for important mention severity instead of reusing focus alignment.
-   - Improve mapping of `concern` to `problem` vs `risk`.
-
-4. Improve right-panel ergonomics.
-   - The score breakdown is intentionally explicit now, but may need denser layout after more topics are added.
-
-5. Add export/import for session logs.
-   - Keep it local JSON only for now.
-   - No database is needed.
+1. **実会議トランスクリプト3〜5本で納得率を測る。** これが分水嶺の数字。ルール調整より LLM プロンプト改善より先。測定時のバイアス対策: 指摘を見る前に参加者自身に「この会議で決まらなかったことは?」を書き出させ、ツール出力と突合する形が望ましい。
+2. 手元の録音/字幕データ → リプレイ JSON への変換スクリプト(`transcriptImporter` の受理形式は `transcript-importer.test.ts` 参照)。
+3. 納得率データを見てから: `shallow` 系のノイズ削減(閾値調整 or LLM drop 判定をフィルタに昇格させるか判断)。
+4. LLM プロンプト改善(評価データセットと突合して confirm/drop の精度を測る)。
+5. 会議終了5分前アラート(リアルタイム版のキラー機能)は判定品質証明の後。
 
 ## Notes For Next Agent
 
-- Preserve the prototype constraint: do not add OpenAI, Deepgram, Whisper, Python, DB, auth, TTS, or speaker diarization unless the user explicitly changes direction.
-- The app favors topic labels in UI, but internal JSON may include ids for debugging.
-- There may be unrelated dirty changes from earlier work; do not revert user changes.
-- If `npm run dev` fails because ports are occupied, run `scripts/kill-localhost-port.sh 5173 5174 8787` and retry.
+- **制約の更新(2026-07)**: クラウド AI API は引き続き禁止だが、**ローカル LLM(LM Studio, OpenAI 互換)は事後レポート層に限り許可**。リアルタイムパイプラインはルールベース維持。docs/next_plan.md の Non-Goals にも注記済み。
+- Deepgram, Whisper, Python, DB, auth, TTS, 話者分離は引き続き追加しない。STT は自作しない方針(将来は Zoom/Meet の字幕 API から取る)。
+- finding id は決定的なので、フィードバックの突合キーとして安定。id 生成規則を変えると過去の評価データと突合できなくなる点に注意。
+- `npm run dev` がポート衝突で失敗したら `scripts/kill-localhost-port.sh 5173 5174 8787`。
+- 動作確認の最短ルート: Transcript Replay に JSON を読ませて instant 再生 → レポート生成。
