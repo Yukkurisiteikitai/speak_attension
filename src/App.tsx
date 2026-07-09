@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ControlPanel } from "./components/ControlPanel";
+import { IdeaModeView } from "./components/IdeaModeView";
 import { ManualReplayPanel } from "./components/ManualReplayPanel";
 import { MeetingReportPanel } from "./components/MeetingReportPanel";
 import { TopicGraph } from "./components/TopicGraph";
@@ -9,6 +10,8 @@ import { TranscriptReplayPanel } from "./components/TranscriptReplayPanel";
 import { useSpeechRecognition } from "./hooks/useSpeechRecognition";
 import { useTopicEngine } from "./hooks/useTopicEngine";
 import type { SessionLogEntry } from "./types/topic";
+
+type AppMode = "idea" | "meeting";
 
 const WS_URL = "ws://127.0.0.1:8787";
 
@@ -56,6 +59,24 @@ function formatElapsed(ms: number): string {
 }
 
 export default function App() {
+  const [mode, setMode] = useState<AppMode>("idea");
+
+  return (
+    <main className="app-shell">
+      <nav className="mode-switch" aria-label="app mode">
+        <button type="button" className={mode === "idea" ? "is-active" : ""} onClick={() => setMode("idea")}>
+          アイデア出しモード
+        </button>
+        <button type="button" className={mode === "meeting" ? "is-active" : ""} onClick={() => setMode("meeting")}>
+          会議モード
+        </button>
+      </nav>
+      {mode === "idea" ? <IdeaModeView /> : <MeetingMode />}
+    </main>
+  );
+}
+
+function MeetingMode() {
   const { connectionStatus, sendLog } = useSessionSocket();
   const topicEngine = useTopicEngine({ onLog: sendLog });
   const speech = useSpeechRecognition({ onFinalText: topicEngine.addTranscriptText });
@@ -74,7 +95,7 @@ export default function App() {
   const elapsedLabel = useMemo(() => formatElapsed(now - topicEngine.meetingStartedAt), [now, topicEngine.meetingStartedAt]);
 
   return (
-    <main className="app-shell">
+    <>
       <header className="meeting-header">
         <div>
           <p className="eyebrow">Meeting Dashboard</p>
@@ -146,6 +167,6 @@ export default function App() {
           segmentArchive={topicEngine.segmentArchive}
         />
       </section>
-    </main>
+    </>
   );
 }
