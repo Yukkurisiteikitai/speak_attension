@@ -4,6 +4,8 @@
 
 This workspace contains a local prototype for deriving meeting-specific topics from live Japanese speech and visualizing them as a React Flow topic map.
 
+As of July 2026 the product direction pivoted to brainstorming support: the app now opens in アイデア出しモード (idea mode), and the meeting dashboard remains available via the mode switch. Idea mode captures keywords from live speech or manual text, shows them radially around a center node in conversation order, groups them on 出し終わった (local LLM via LM Studio, rule-based fallback) with an animated radial→mindmap transition, lets the user pick keywords to adopt, and exports Markdown plus a session JSON that keeps keyword→utterance links for RAG reuse.
+
 The current version is meeting-first. It no longer uses fixed seed product topics. It now includes dynamic topic extraction, topic coverage tracking, topic closure, gap generation, a meeting-wide missing-items summary, and a collapsible dev drawer for diagnostics.
 
 For the full current handoff, read:
@@ -105,6 +107,7 @@ Final delivery check status:
 - Post-meeting missing-items report (Markdown export) built from the full segment archive.
 - Helpful/noise feedback per report finding with helpful-rate summary and evaluation dataset JSON export.
 - Optional local-LLM second opinion over report findings via an OpenAI-compatible server (LM Studio).
+- Idea mode (default): keyword capture from speech/manual text, radial idea map, grouping via local LLM with rule-based fallback, animated radial→mindmap transition, pick-and-export (Markdown + RAG-ready session JSON).
 
 ## Key Files
 
@@ -127,6 +130,12 @@ Final delivery check status:
 - `src/utils/llmClient.ts` - OpenAI-compatible local LLM client (LM Studio)
 - `src/utils/llmGapReview.ts` - LLM verification of rule-based findings per topic group
 - `src/components/MeetingReportPanel.tsx` - report generation, feedback, downloads, LLM review UI
+- `src/utils/ideaSession.ts` - brainstorm session state, phases, Markdown/JSON export
+- `src/utils/ideaExtraction.ts` - idea keyword extraction from utterances
+- `src/utils/ideaGrouping.ts` - rule-based clustering and LLM grouping prompt/parse
+- `src/utils/ideaLayout.ts` - radial spiral and mindmap layout positions
+- `src/hooks/ideaSessionStore.ts` / `src/hooks/useIdeaSession.ts` - idea session store and hook
+- `src/components/IdeaModeView.tsx` - idea mode UI (map, controls, keyword list, export)
 - `.github/workflows/ci.yml` - lint/typecheck/test/build workflow
 - `.github/workflows/cloudflare-pages.yml` - Pages deployment workflow using `npx wrangler@4`
 - `scripts/kill-localhost-port.sh` - port cleanup helper

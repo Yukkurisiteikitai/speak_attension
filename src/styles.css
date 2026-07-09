@@ -789,3 +789,196 @@ input:focus {
     flex-direction: column;
   }
 }
+
+/* --- idea brainstorm mode --- */
+
+.mode-switch {
+  display: inline-flex;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  width: fit-content;
+}
+
+.mode-switch button {
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--muted);
+  padding: 8px 16px;
+  cursor: pointer;
+}
+
+.mode-switch button.is-active {
+  background: var(--green-soft);
+  color: var(--green);
+  font-weight: 600;
+}
+
+/* Radial→mindmap の切替は React Flow の transform 変化を CSS で滑らかにする */
+.idea-flow .react-flow__node {
+  transition: transform 700ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.idea-node {
+  position: relative;
+  border: 1.5px solid var(--strong-line);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--ink);
+  padding: 8px 14px;
+  box-shadow: 0 8px 22px rgba(42, 49, 40, 0.08);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.idea-node span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.idea-node-center {
+  border-color: var(--green);
+  background: var(--green-soft);
+  font-size: 15px;
+  padding: 12px 20px;
+}
+
+.idea-node-group {
+  border-width: 2px;
+  background: rgba(255, 255, 255, 0.95);
+  font-weight: 600;
+}
+
+.idea-node-keyword.is-pickable {
+  cursor: pointer;
+}
+
+.idea-node-keyword.is-picked {
+  background: var(--green-soft);
+  box-shadow: 0 0 0 3px rgba(17, 97, 71, 0.18);
+}
+
+.idea-pick-mark {
+  border-radius: 999px;
+  background: var(--green);
+  color: #fff !important;
+  font-size: 10px !important;
+  padding: 2px 8px;
+}
+
+.idea-node-handle {
+  opacity: 0;
+  pointer-events: none;
+  left: 50%;
+  top: 50%;
+}
+
+.idea-mode .button-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0;
+}
+
+.idea-mode button {
+  border: 1px solid var(--strong-line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--ink);
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+.idea-mode button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.idea-phase-note {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 4px 0 10px;
+}
+
+.idea-interim {
+  color: var(--muted);
+  font-style: italic;
+  font-size: 13px;
+}
+
+.error-text {
+  color: var(--red);
+  font-size: 13px;
+}
+
+.idea-llm-settings {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+  font-size: 13px;
+}
+
+.idea-llm-settings label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.idea-llm-settings input[type="checkbox"] {
+  width: auto;
+}
+
+.idea-llm-status {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.idea-keyword-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.idea-keyword-list li {
+  display: grid;
+  gap: 2px;
+}
+
+.idea-keyword-list li small {
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.idea-keyword-chip {
+  justify-self: start;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.85);
+  padding: 4px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.idea-keyword-chip:disabled {
+  cursor: default;
+}
+
+.idea-keyword-list li.is-picked .idea-keyword-chip {
+  background: var(--green-soft);
+  border-color: var(--green);
+  color: var(--green);
+  font-weight: 600;
+}
