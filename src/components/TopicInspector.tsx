@@ -89,9 +89,8 @@ export function TopicInspector({
           <span>{focusState.focusSetBy}{focusState.locked ? " / locked" : ""}</span>
         </div>
         <div className="current-topic-card">
-          <span>{currentTopic ? "active" : "none"}</span>
           <strong>{currentTopic?.title ?? "まだ議題がありません"}</strong>
-          <p>{currentTopic ? `mentions: ${currentTopic.mentionCount} / lifecycle: ${currentTopic.lifecycle}` : "会話から最初の議題を抽出します。"}</p>
+          <p>{currentTopic ? "active" : "会話から最初の議題を抽出します。"}</p>
         </div>
       </section>
 
@@ -141,25 +140,6 @@ export function TopicInspector({
         </div>
       </section>
 
-      <section>
-        <div className="section-head">
-          <h2>Current Gaps</h2>
-          <span>{currentTopicGaps.length}</span>
-        </div>
-        {currentTopicGaps.length ? (
-          <div className="gap-list">
-            {currentTopicGaps.map((gap) => (
-              <article className={`gap-card severity-${gap.severity}`} key={gap.id}>
-                <strong>{gap.title}</strong>
-                <span>{gap.severity}</span>
-                <p>{gap.detail}</p>
-              </article>
-            ))}
-          </div>
-        ) : (
-          <p className="empty-text">現在の議題には未解決ギャップはありません。</p>
-        )}
-      </section>
 
       <section>
         <div className="section-head">

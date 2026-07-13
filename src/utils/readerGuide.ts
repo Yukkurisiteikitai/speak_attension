@@ -29,7 +29,7 @@ function buildSummary({ currentTopic, focusState, latestSegment }: BuildReaderGu
         ? "直近の発話から新しく立ち上がった議題です"
         : "会話の流れから自動で選ばれた中心議題です";
 
-  return `今の中心は「${currentTopic.title}」で、${relationLabel}。mentions が増えるほど、その議題に関する根拠が溜まっていると読めます。`;
+  return `今の中心は「${currentTopic.title}」で、${relationLabel}。`;
 }
 
 function buildUnknowns({ currentTopic, currentTopicGaps, latestSegment }: BuildReaderGuideOptions): string[] {

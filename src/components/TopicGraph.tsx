@@ -18,11 +18,13 @@ function TopicNode({ data }: NodeProps<TopicGraphNode & { data: GraphTopicNodeDa
       </div>
       {data.lifecycle ? <p className="topic-node-lifecycle">{data.lifecycle}</p> : null}
       <div className="topic-badge-row">
-        {data.states.map((state) => (
-          <span className={`topic-badge state-${state}`} key={state}>
-            {state}
-          </span>
-        ))}
+        {data.states
+          .filter((state) => !["shallow", "missing", "unresolved"].includes(state))
+          .map((state) => (
+            <span className={`topic-badge state-${state}`} key={state}>
+              {state}
+            </span>
+          ))}
       </div>
       {data.evidence ? <small>{data.evidence}</small> : null}
       {data.detail ? <small>{data.detail}</small> : null}
