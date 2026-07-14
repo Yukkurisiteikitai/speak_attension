@@ -96,20 +96,20 @@ export function IdeaModeView() {
   const phase = session.phase;
 
   const { nodes, edges } = useMemo(() => {
-    const flowNodes: IdeaFlowNode[] = [
-      {
-        id: "idea-center",
-        type: "idea",
-        position: { x: 0, y: 0 },
-        data: { label: session.title, kind: "center", phase },
-        draggable: false,
-      },
-    ];
     const flowEdges: Edge[] = [];
     const colorByGroup = new Map(session.groups.map((group, index) => [group.id, GROUP_COLORS[index % GROUP_COLORS.length]]));
 
     if (phase === "select" || phase === "grouping") {
-      const layout = mindmapPositions(session.groups);
+      const layout = mindmapPositions(session.groups, session.keywords, session.title);
+      const flowNodes: IdeaFlowNode[] = [
+        {
+          id: "idea-center",
+          type: "idea",
+          position: layout.centerPosition,
+          data: { label: session.title, kind: "center", phase },
+          draggable: false,
+        },
+      ];
       for (const group of session.groups) {
         const color = colorByGroup.get(group.id);
         flowNodes.push({
@@ -145,23 +145,33 @@ export function IdeaModeView() {
           });
         }
       }
-    } else {
-      const positions = radialPositions(session.keywords);
-      for (const keyword of session.keywords) {
-        flowNodes.push({
-          id: keyword.id,
-          type: "idea",
-          position: positions.get(keyword.id) ?? { x: 0, y: 0 },
-          data: { label: keyword.label, kind: "keyword", mentionCount: keyword.mentionCount, phase },
-        });
-        flowEdges.push({
-          id: `edge-center-${keyword.id}`,
-          source: "idea-center",
-          target: keyword.id,
-          type: "straight",
-          style: { stroke: "rgba(62, 76, 65, 0.25)", strokeWidth: 1 },
-        });
-      }
+      return { nodes: flowNodes, edges: flowEdges };
+    }
+
+    const layout = radialPositions(session.keywords, session.title);
+    const flowNodes: IdeaFlowNode[] = [
+      {
+        id: "idea-center",
+        type: "idea",
+        position: layout.centerPosition,
+        data: { label: session.title, kind: "center", phase },
+        draggable: false,
+      },
+    ];
+    for (const keyword of session.keywords) {
+      flowNodes.push({
+        id: keyword.id,
+        type: "idea",
+        position: layout.keywordPositions.get(keyword.id) ?? { x: 0, y: 0 },
+        data: { label: keyword.label, kind: "keyword", mentionCount: keyword.mentionCount, phase },
+      });
+      flowEdges.push({
+        id: `edge-center-${keyword.id}`,
+        source: "idea-center",
+        target: keyword.id,
+        type: "straight",
+        style: { stroke: "rgba(62, 76, 65, 0.25)", strokeWidth: 1 },
+      });
     }
 
     return { nodes: flowNodes, edges: flowEdges };

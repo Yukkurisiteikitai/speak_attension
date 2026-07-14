@@ -6,13 +6,15 @@ This workspace contains a local prototype for deriving meeting-specific topics f
 
 As of July 2026 the product direction pivoted to brainstorming support: the app now opens in アイデア出しモード (idea mode), and the meeting dashboard remains available via the mode switch. Idea mode captures keywords from live speech or manual text, shows them radially around a center node in conversation order, groups them on 出し終わった (local LLM via LM Studio, rule-based fallback) with an animated radial→mindmap transition, lets the user pick keywords to adopt, and exports Markdown plus a session JSON that keeps keyword→utterance links for RAG reuse.
 
-The current version is meeting-first. It no longer uses fixed seed product topics. It now includes dynamic topic extraction, topic coverage tracking, topic closure, gap generation, a meeting-wide missing-items summary, and a collapsible dev drawer for diagnostics.
+The secondary 会議モード (meeting dashboard) no longer uses fixed seed product topics; it includes dynamic topic extraction, topic coverage tracking, topic closure, gap generation, a meeting-wide missing-items summary, and a collapsible dev drawer for diagnostics.
 
-For the full current handoff, read:
+For the full current handoff (idea mode, current as of 2026-07-14), read:
 
 ```txt
-docs/NEXT_THREAD_HANDOFF.md
+docs/NEXT_THREAD_HANDOFF_2026-07-14.md
 ```
+
+`docs/NEXT_THREAD_HANDOFF.md` and `docs/NEXT_THREAD_HANDOFF_2026-07-10.md` are historical — they document the meeting-mode-only period before the idea-mode pivot and are kept as a decision record, not as current state.
 
 ## Stack
 
@@ -68,12 +70,11 @@ npm test
 npm run build
 ```
 
-Latest verified results:
+Latest verified results (2026-07-14):
 
-- `npm run lint`: passed
 - `npm run typecheck`: passed
-- `npm test`: passed, 9 files / 37 tests
-- `npm run build`: passed
+- `npm test`: passed, 13 files / 63 tests
+- Idea mode manually verified in a headless browser (Playwright): capture-phase spiral and grouping-phase mindmap both render with zero overlapping nodes across 24 mixed short/long Japanese keywords; toggling a keyword's pick state does not shift any node position.
 
 Final delivery check status:
 
@@ -108,10 +109,11 @@ Final delivery check status:
 - Helpful/noise feedback per report finding with helpful-rate summary and evaluation dataset JSON export.
 - Optional local-LLM second opinion over report findings via an OpenAI-compatible server (LM Studio).
 - Idea mode (default): keyword capture from speech/manual text, radial idea map, grouping via local LLM with rule-based fallback, animated radial→mindmap transition, pick-and-export (Markdown + RAG-ready session JSON).
+- Overlap-free idea map layout (2026-07-14): `src/utils/ideaLayout.ts` estimates each node's rendered box size from its label (matching the `.idea-node` CSS box model) instead of assuming fixed dimensions, then (a) lays out the grouping/select-phase two-sided mindmap with a tidy-tree row stacker sized to real group/keyword extents, and (b) places the capture-phase spiral by walking outward and verifying each candidate node against every already-placed rectangle before committing, since the y-squashed spiral geometry made a pure closed-form angle/radius formula insufficient near ring seams. Any keyword left ungrouped (e.g. if the LLM path drops one) falls back into a virtual "その他" column instead of collapsing to the origin. Covered by `src/utils/ideaLayout.test.ts` (non-overlap invariants, per-side anchoring, determinism, orphan fallback).
 
 ## Key Files
 
-- `docs/NEXT_THREAD_HANDOFF.md` - detailed current handoff
+- `docs/NEXT_THREAD_HANDOFF_2026-07-14.md` - detailed current handoff (idea mode)
 - `src/hooks/useTopicEngine.ts` - thin hook adapter over the topic engine store
 - `src/hooks/topicEngineStore.ts` - store for engine state, buffered speech, logs, and commands
 - `src/types/topic.ts` - shared meeting graph / topic / gap / analysis types
