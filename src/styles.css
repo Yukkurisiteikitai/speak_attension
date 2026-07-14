@@ -817,10 +817,6 @@ input:focus {
   font-weight: 600;
 }
 
-/* Radial→mindmap の切替は React Flow の transform 変化を CSS で滑らかにする */
-.idea-flow .react-flow__node {
-  transition: transform 700ms cubic-bezier(0.33, 1, 0.68, 1);
-}
 
 .idea-node {
   position: relative;

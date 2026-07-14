@@ -1,4 +1,5 @@
 import type { IdeaGroup, IdeaKeyword } from "./ideaSession";
+import { estimateTextWidth } from "./textMetrics";
 
 export type IdeaNodePosition = { x: number; y: number };
 export type IdeaNodeSize = { width: number; height: number };
@@ -12,26 +13,6 @@ const PADDING_X: Record<IdeaNodeKind, number> = { center: 40, group: 28, keyword
 const BORDER_X: Record<IdeaNodeKind, number> = { center: 3, group: 4, keyword: 3 };
 const HEIGHT: Record<IdeaNodeKind, number> = { center: 48, group: 40, keyword: 40 };
 const BADGE_GAP = 8;
-
-function isFullWidthChar(char: string): boolean {
-  const code = char.codePointAt(0) ?? 0;
-  return (
-    (code >= 0x1100 && code <= 0x115f) ||
-    (code >= 0x2e80 && code <= 0xa4cf) ||
-    (code >= 0xac00 && code <= 0xd7a3) ||
-    (code >= 0xf900 && code <= 0xfaff) ||
-    (code >= 0xfe30 && code <= 0xfe4f) ||
-    (code >= 0xff00 && code <= 0xff60) ||
-    (code >= 0xffe0 && code <= 0xffe6) ||
-    (code >= 0x3000 && code <= 0x303f)
-  );
-}
-
-function estimateTextWidth(text: string, fontSize: number): number {
-  let units = 0;
-  for (const char of text) units += isFullWidthChar(char) ? 1.0 : 0.62;
-  return units * fontSize;
-}
 
 // Conservative (over-)estimate of a rendered .idea-node's box, since layout
 // only has the label text available, not the live DOM.
