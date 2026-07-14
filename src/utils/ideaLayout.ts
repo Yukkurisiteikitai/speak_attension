@@ -1,73 +1,242 @@
 import type { IdeaGroup, IdeaKeyword } from "./ideaSession";
 
 export type IdeaNodePosition = { x: number; y: number };
+export type IdeaNodeSize = { width: number; height: number };
+export type IdeaNodeKind = "center" | "group" | "keyword";
 
-const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+// .idea-node CSS box model (styles.css): border + padding per kind, used to
+// turn a label string into a conservative (>= real rendered size) footprint
+// so layout math can guarantee non-overlap without measuring the live DOM.
+const FONT_SIZE: Record<IdeaNodeKind, number> = { center: 15, group: 13, keyword: 13 };
+const PADDING_X: Record<IdeaNodeKind, number> = { center: 40, group: 28, keyword: 28 };
+const BORDER_X: Record<IdeaNodeKind, number> = { center: 3, group: 4, keyword: 3 };
+const HEIGHT: Record<IdeaNodeKind, number> = { center: 48, group: 40, keyword: 40 };
+const BADGE_GAP = 8;
 
-// 発散フェーズ: 中心から金角スパイラルで外へ置いていく。発言順がそのまま
-// 内側→外側になるので、会話の流れが地層のように見える。
-export function radialPositions(keywords: IdeaKeyword[]): Map<string, IdeaNodePosition> {
+function isFullWidthChar(char: string): boolean {
+  const code = char.codePointAt(0) ?? 0;
+  return (
+    (code >= 0x1100 && code <= 0x115f) ||
+    (code >= 0x2e80 && code <= 0xa4cf) ||
+    (code >= 0xac00 && code <= 0xd7a3) ||
+    (code >= 0xf900 && code <= 0xfaff) ||
+    (code >= 0xfe30 && code <= 0xfe4f) ||
+    (code >= 0xff00 && code <= 0xff60) ||
+    (code >= 0xffe0 && code <= 0xffe6) ||
+    (code >= 0x3000 && code <= 0x303f)
+  );
+}
+
+function estimateTextWidth(text: string, fontSize: number): number {
+  let units = 0;
+  for (const char of text) units += isFullWidthChar(char) ? 1.0 : 0.62;
+  return units * fontSize;
+}
+
+// Conservative (over-)estimate of a rendered .idea-node's box, since layout
+// only has the label text available, not the live DOM.
+export function estimateIdeaNodeSize(
+  label: string,
+  kind: IdeaNodeKind,
+  opts: { mentionCount?: number } = {},
+): IdeaNodeSize {
+  let width = estimateTextWidth(label, FONT_SIZE[kind]) + PADDING_X[kind] + BORDER_X[kind];
+
+  if (kind === "keyword") {
+    if ((opts.mentionCount ?? 1) > 1) {
+      width += BADGE_GAP + estimateTextWidth(`×${opts.mentionCount}`, 11);
+    }
+    // Always reserve the "採用" pick-mark badge so toggling a pick never
+    // shifts the node's footprint mid-session.
+    width += BADGE_GAP + estimateTextWidth("採用", 10) + 16;
+  }
+
+  return { width: Math.ceil(width), height: HEIGHT[kind] };
+}
+
+function halfExtentOf(size: IdeaNodeSize): number {
+  return Math.hypot(size.width, size.height) / 2;
+}
+
+export type RadialLayout = {
+  keywordPositions: Map<string, IdeaNodePosition>;
+  centerPosition: IdeaNodePosition;
+};
+
+const SPIRAL_START_MARGIN = 56;
+const SPIRAL_NODE_MARGIN = 18;
+const SPIRAL_Y_SQUASH = 0.72;
+const SPIRAL_ANGLE_PROBE = (Math.PI * 2) / 180; // 2° search granularity when nudging past a collision
+const SPIRAL_RADIUS_GROWTH_PER_RADIAN = 11; // ~radius grows by one node-height per full revolution
+const SPIRAL_MAX_PROBES = 4000; // safety valve; radius growth alone guarantees termination well before this
+
+type SpiralRect = { x: number; y: number; width: number; height: number };
+
+function spiralRect(angle: number, radius: number, size: IdeaNodeSize): SpiralRect {
+  const px = Math.cos(angle) * radius;
+  const py = Math.sin(angle) * radius * SPIRAL_Y_SQUASH;
+  return { x: px - size.width / 2, y: py - size.height / 2, width: size.width, height: size.height };
+}
+
+function rectsClear(a: SpiralRect, b: SpiralRect, margin: number): boolean {
+  return (
+    a.x + a.width + margin <= b.x ||
+    b.x + b.width + margin <= a.x ||
+    a.y + a.height + margin <= b.y ||
+    b.y + b.height + margin <= a.y
+  );
+}
+
+// 発散フェーズ: 中心から連続的な渦を描いて外へ置いていく。発言順がそのまま
+// 内側→外側になるので、会話の流れが地層のように見える。角度の刻み幅は
+// まず直前ノードの実寸から見積もり、その候補位置を既に置いた全ノード(と
+// 中心ノード)に対して実際に検証してから確定する。楕円状に圧縮した渦では
+// リング境界や一周目の継ぎ目で見積もりだけでは足りないケースがあるため、
+// 衝突が見つかった分だけ角度をわずかに進め半径もじわりと広げて再検証する。
+export function radialPositions(keywords: IdeaKeyword[], centerLabel: string): RadialLayout {
   const positions = new Map<string, IdeaNodePosition>();
+  const centerSize = estimateIdeaNodeSize(centerLabel, "center");
+  const centerPosition: IdeaNodePosition = {
+    x: Math.round(-centerSize.width / 2),
+    y: Math.round(-centerSize.height / 2),
+  };
+
   const ordered = [...keywords].sort((left, right) => left.firstMentionedAt - right.firstMentionedAt);
+  if (ordered.length === 0) return { keywordPositions: positions, centerPosition };
 
-  ordered.forEach((keyword, index) => {
-    const angle = index * GOLDEN_ANGLE;
-    const radius = 170 + 46 * Math.sqrt(index);
-    positions.set(keyword.id, {
-      x: Math.round(Math.cos(angle) * radius),
-      y: Math.round(Math.sin(angle) * radius * 0.72),
-    });
-  });
+  const placed: SpiralRect[] = [
+    { x: centerPosition.x, y: centerPosition.y, width: centerSize.width, height: centerSize.height },
+  ];
 
-  return positions;
+  let angle = 0;
+  let radius = centerSize.width / 2 + SPIRAL_START_MARGIN;
+
+  for (const keyword of ordered) {
+    const size = estimateIdeaNodeSize(keyword.label, "keyword", { mentionCount: keyword.mentionCount });
+
+    let candidate = spiralRect(angle, radius, size);
+    let guard = 0;
+    while (placed.some((rect) => !rectsClear(candidate, rect, SPIRAL_NODE_MARGIN)) && guard < SPIRAL_MAX_PROBES) {
+      angle += SPIRAL_ANGLE_PROBE;
+      radius += SPIRAL_ANGLE_PROBE * SPIRAL_RADIUS_GROWTH_PER_RADIAN;
+      candidate = spiralRect(angle, radius, size);
+      guard += 1;
+    }
+
+    positions.set(keyword.id, { x: Math.round(candidate.x), y: Math.round(candidate.y) });
+    placed.push(candidate);
+
+    const footprint = halfExtentOf(size) * 2 + SPIRAL_NODE_MARGIN;
+    angle += Math.max(SPIRAL_ANGLE_PROBE, footprint / Math.max(radius * SPIRAL_Y_SQUASH, 1));
+  }
+
+  return { keywordPositions: positions, centerPosition };
 }
 
 export type MindmapLayout = {
   groupPositions: Map<string, IdeaNodePosition>;
   keywordPositions: Map<string, IdeaNodePosition>;
+  centerPosition: IdeaNodePosition;
 };
 
-const GROUP_COLUMN_X = 340;
-const KEYWORD_COLUMN_X = 640;
-const KEYWORD_ROW_HEIGHT = 68;
-const GROUP_GAP = 40;
+const MINDMAP_LINK_GAP = 140;
+const MINDMAP_KEYWORD_GAP = 90;
+const MINDMAP_ROW_GAP = 14;
+const MINDMAP_GROUP_GAP = 40;
+const UNGROUPED_GROUP_ID = "__ungrouped__";
+
+type SideRow = { y: number; width: number };
+type SideLayout = {
+  groupRows: Map<string, SideRow>;
+  keywordRows: Map<string, SideRow>;
+  maxGroupWidth: number;
+  totalHeight: number;
+};
+
+// 1サイド分をトップダウンに積む簡易 tidy-tree。各グループはノード実寸から
+// 見積もったキーワード行の合計高さ(または自身の高さ、大きい方)を専有し、
+// 行間・グループ間に固定ギャップを入れることで重なりを防ぐ。
+function layoutSideRows(sideGroups: IdeaGroup[], keywordById: Map<string, IdeaKeyword>): SideLayout {
+  const groupRows = new Map<string, SideRow>();
+  const keywordRows = new Map<string, SideRow>();
+  let maxGroupWidth = 0;
+  let cursorY = 0;
+
+  sideGroups.forEach((group, index) => {
+    const groupSize = estimateIdeaNodeSize(group.title, "group");
+    maxGroupWidth = Math.max(maxGroupWidth, groupSize.width);
+
+    const members = group.keywordIds
+      .map((id) => keywordById.get(id))
+      .filter((keyword): keyword is IdeaKeyword => Boolean(keyword))
+      .map((keyword) => ({
+        keyword,
+        size: estimateIdeaNodeSize(keyword.label, "keyword", { mentionCount: keyword.mentionCount }),
+      }));
+
+    const rowsHeight = members.reduce(
+      (sum, member, memberIndex) => sum + member.size.height + (memberIndex > 0 ? MINDMAP_ROW_GAP : 0),
+      0,
+    );
+    const blockHeight = Math.max(groupSize.height, rowsHeight);
+
+    let rowCursor = cursorY + (blockHeight - rowsHeight) / 2;
+    for (const member of members) {
+      keywordRows.set(member.keyword.id, { y: rowCursor, width: member.size.width });
+      rowCursor += member.size.height + MINDMAP_ROW_GAP;
+    }
+
+    groupRows.set(group.id, { y: cursorY + (blockHeight - groupSize.height) / 2, width: groupSize.width });
+
+    cursorY += blockHeight + (index < sideGroups.length - 1 ? MINDMAP_GROUP_GAP : 0);
+  });
+
+  return { groupRows, keywordRows, maxGroupWidth, totalHeight: cursorY };
+}
 
 // 収束フェーズ: 中心の左右にグループ列、さらに外側にキーワード列を置く
-// 古典的マインドマップ配置。左右交互に振り分けて縦に積む。
-export function mindmapPositions(groups: IdeaGroup[]): MindmapLayout {
-  const groupPositions = new Map<string, IdeaNodePosition>();
-  const keywordPositions = new Map<string, IdeaNodePosition>();
+// 古典的マインドマップ配置。左右交互に振り分けて縦に積む。列の位置は
+// 中心ノード・グループノードの実寸見積もりから決め、React Flow が左上原点で
+// 解釈することに合わせて左サイドは右端基準にミラーリングする。
+export function mindmapPositions(groups: IdeaGroup[], keywords: IdeaKeyword[], centerLabel: string): MindmapLayout {
+  const keywordById = new Map(keywords.map((keyword) => [keyword.id, keyword]));
+  const groupedIds = new Set(groups.flatMap((group) => group.keywordIds));
+  const orphanIds = keywords.filter((keyword) => !groupedIds.has(keyword.id)).map((keyword) => keyword.id);
+
+  const effectiveGroups =
+    orphanIds.length > 0 ? [...groups, { id: UNGROUPED_GROUP_ID, title: "その他", keywordIds: orphanIds }] : groups;
 
   const sides: Array<{ direction: 1 | -1; groups: IdeaGroup[] }> = [
     { direction: 1, groups: [] },
     { direction: -1, groups: [] },
   ];
-  groups.forEach((group, index) => {
+  effectiveGroups.forEach((group, index) => {
     sides[index % 2].groups.push(group);
   });
 
+  const centerSize = estimateIdeaNodeSize(centerLabel, "center");
+  const groupPositions = new Map<string, IdeaNodePosition>();
+  const keywordPositions = new Map<string, IdeaNodePosition>();
+
   for (const side of sides) {
-    const totalRows = side.groups.reduce((sum, group) => sum + group.keywordIds.length, 0);
-    const totalHeight = totalRows * KEYWORD_ROW_HEIGHT + Math.max(0, side.groups.length - 1) * GROUP_GAP;
-    let cursorY = -totalHeight / 2;
+    const placement = layoutSideRows(side.groups, keywordById);
+    const yOffset = -placement.totalHeight / 2;
+    const groupColumnX = centerSize.width / 2 + MINDMAP_LINK_GAP;
+    const keywordColumnX = groupColumnX + placement.maxGroupWidth + MINDMAP_KEYWORD_GAP;
 
-    for (const group of side.groups) {
-      const blockHeight = group.keywordIds.length * KEYWORD_ROW_HEIGHT;
-      groupPositions.set(group.id, {
-        x: side.direction * GROUP_COLUMN_X,
-        y: Math.round(cursorY + blockHeight / 2),
-      });
-
-      group.keywordIds.forEach((keywordId, rowIndex) => {
-        keywordPositions.set(keywordId, {
-          x: side.direction * KEYWORD_COLUMN_X,
-          y: Math.round(cursorY + rowIndex * KEYWORD_ROW_HEIGHT + KEYWORD_ROW_HEIGHT / 2),
-        });
-      });
-
-      cursorY += blockHeight + GROUP_GAP;
+    for (const [groupId, row] of placement.groupRows) {
+      const x = side.direction === 1 ? groupColumnX : -groupColumnX - row.width;
+      groupPositions.set(groupId, { x: Math.round(x), y: Math.round(row.y + yOffset) });
+    }
+    for (const [keywordId, row] of placement.keywordRows) {
+      const x = side.direction === 1 ? keywordColumnX : -keywordColumnX - row.width;
+      keywordPositions.set(keywordId, { x: Math.round(x), y: Math.round(row.y + yOffset) });
     }
   }
 
-  return { groupPositions, keywordPositions };
+  return {
+    groupPositions,
+    keywordPositions,
+    centerPosition: { x: Math.round(-centerSize.width / 2), y: Math.round(-centerSize.height / 2) },
+  };
 }
