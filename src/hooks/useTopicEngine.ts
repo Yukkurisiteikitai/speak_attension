@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { createTopicEngineStore } from "./topicEngineStore";
+import type { LlmSettings } from "../utils/llmClient";
 
 const SEGMENT_INTERVAL_MS = 5000;
 
 type UseTopicEngineOptions = {
   onLog?: (entry: import("../types/topic").SessionLogEntry) => void;
+  llmSettings?: LlmSettings | null;
 };
 
 // React-facing adapter over the imperative topic engine store.
 // This keeps UI code in sync with the latest snapshot without threading mutable refs through components.
-export function useTopicEngine({ onLog }: UseTopicEngineOptions = {}) {
+export function useTopicEngine({ onLog, llmSettings }: UseTopicEngineOptions = {}) {
   const storeRef = useRef<ReturnType<typeof createTopicEngineStore> | null>(null);
   if (!storeRef.current) {
     storeRef.current = createTopicEngineStore({ onLog });
@@ -21,6 +23,10 @@ export function useTopicEngine({ onLog }: UseTopicEngineOptions = {}) {
   useEffect(() => {
     store.setOnLog(onLog);
   }, [onLog, store]);
+
+  useEffect(() => {
+    store.setLlmSettings(llmSettings ?? null);
+  }, [llmSettings, store]);
 
   useEffect(() => {
     const timer = window.setInterval(() => {

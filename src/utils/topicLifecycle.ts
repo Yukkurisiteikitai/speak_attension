@@ -68,8 +68,9 @@ export function refreshTopicDerivedState(graph: MeetingGraph, topicId: string): 
   }));
 }
 
-export function closeDormantTopics(graph: MeetingGraph, activeTopicId: string | null, now: number, segmentIndex: number): MeetingGraph {
+export function closeDormantTopics(graph: MeetingGraph, activeTopicId: string | null, now: number, segmentIndex: number): { graph: MeetingGraph; newlyClosedTopicIds: string[] } {
   let nextGraph = graph;
+  const newlyClosedTopicIds: string[] = [];
 
   for (const topic of graph.nodes) {
     if (topic.id === graph.rootTopicId || topic.id === activeTopicId || topic.closedAt) continue;
@@ -78,6 +79,8 @@ export function closeDormantTopics(graph: MeetingGraph, activeTopicId: string | 
     const quietBySegments = segmentIndex - topic.lastActivatedSegmentIndex >= CLOSE_AFTER_SEGMENTS;
     const quietByTime = now - topic.lastActivatedAt >= CLOSE_AFTER_MS;
     if (!quietBySegments && !quietByTime) continue;
+
+    newlyClosedTopicIds.push(topic.id);
 
     const gaps = buildTopicGaps(topic, topic.openQuestionCount > 0 && !topic.coverage.openQuestionResolved, now);
     const lifecycle = deriveLifecycle(topic, topic.openQuestionCount > 0 && !topic.coverage.openQuestionResolved);
@@ -101,11 +104,14 @@ export function closeDormantTopics(graph: MeetingGraph, activeTopicId: string | 
   }
 
   return {
-    ...nextGraph,
-    gapSummary: {
-      gaps: sortGaps(nextGraph.gaps.filter((gap) => !gap.closedAt)),
-      updatedAt: nextGraph.gaps.length ? now : nextGraph.gapSummary.updatedAt,
+    graph: {
+      ...nextGraph,
+      gapSummary: {
+        gaps: sortGaps(nextGraph.gaps.filter((gap) => !gap.closedAt)),
+        updatedAt: nextGraph.gaps.length ? now : nextGraph.gapSummary.updatedAt,
+      },
     },
+    newlyClosedTopicIds,
   };
 }
 

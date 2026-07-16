@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createInitialTopicEngineState, processTopicSegment } from "./topicEngine";
+import { applyTopicTitleRefinements, createInitialTopicEngineState, processTopicSegment } from "./topicEngine";
 
 describe("topicEngine replay scenario", () => {
   it("builds a topic map and closes earlier topics after focus shift", () => {
@@ -35,5 +35,140 @@ describe("topicEngine replay scenario", () => {
 
     const authTopic = state.meetingGraph.nodes.find((node) => node.id === authTopicId);
     expect(authTopic?.displayStates).toContain("unresolved");
+  });
+});
+
+describe("applyTopicTitleRefinements", () => {
+  it("returns same state when updates are empty", () => {
+    const state = createInitialTopicEngineState(0);
+    const updates = new Map<string, string>();
+
+    const result = applyTopicTitleRefinements(state, updates);
+    expect(result).toBe(state);
+  });
+
+  it("updates only target topics", () => {
+    let state = createInitialTopicEngineState(0);
+    state = processTopicSegment(state, "レイテンシー対策を決める", "manual", 0).state;
+    const topicId1 = state.currentTopicId!;
+
+    state = processTopicSegment(state, "次に予算について話します", "manual", 5_000).state;
+    const topicId2 = state.currentTopicId!;
+
+    const originalTopic1 = state.meetingGraph.nodes.find((n) => n.id === topicId1)!;
+    const originalTitle1 = originalTopic1.title;
+
+    const updates = new Map([[topicId1, "新しいタイトル1"]]);
+    const result = applyTopicTitleRefinements(state, updates);
+
+    const updatedTopic1 = result.meetingGraph.nodes.find((n) => n.id === topicId1)!;
+    const unchangedTopic2 = result.meetingGraph.nodes.find((n) => n.id === topicId2)!;
+
+    expect(updatedTopic1.title).toBe("新しいタイトル1");
+    expect(unchangedTopic2.title).toContain("予算");
+  });
+
+  it("preserves old title in aliases", () => {
+    let state = createInitialTopicEngineState(0);
+    state = processTopicSegment(state, "レイテンシー対策を決める", "manual", 0).state;
+    const topicId = state.currentTopicId!;
+
+    const originalTopic = state.meetingGraph.nodes.find((n) => n.id === topicId)!;
+    const originalTitle = originalTopic.title;
+
+    const updates = new Map([[topicId, "新しいタイトル"]]);
+    const result = applyTopicTitleRefinements(state, updates);
+
+    const updatedTopic = result.meetingGraph.nodes.find((n) => n.id === topicId)!;
+    const normalizedOldTitle = originalTitle.toLowerCase().replace(/[「」『』（）()【】［］.,、。!?！？]/g, " ").replace(/\s+/g, " ").trim();
+    const hasOldTitleInAliases = updatedTopic.aliases.some((alias) => alias.includes(normalizedOldTitle.split(" ")[0]));
+
+    expect(hasOldTitleInAliases).toBe(true);
+  });
+
+  it("respects alias length limit", () => {
+    let state = createInitialTopicEngineState(0);
+    state = processTopicSegment(state, "レイテンシー対策を決める", "manual", 0).state;
+    const topicId = state.currentTopicId!;
+
+    const originalTopic = state.meetingGraph.nodes.find((n) => n.id === topicId)!;
+    // Add many aliases to reach the limit
+    const updatedWithManyAliases = {
+      ...originalTopic,
+      aliases: ["a", "b", "c", "d", "e", "f", "g", "h", "i"],
+    };
+
+    state = {
+      ...state,
+      meetingGraph: {
+        ...state.meetingGraph,
+        nodes: state.meetingGraph.nodes.map((n) => (n.id === topicId ? updatedWithManyAliases : n)),
+      },
+    };
+
+    const updates = new Map([[topicId, "新しいタイトル"]]);
+    const result = applyTopicTitleRefinements(state, updates);
+
+    const updatedTopic = result.meetingGraph.nodes.find((n) => n.id === topicId)!;
+    expect(updatedTopic.aliases.length).toBeLessThanOrEqual(8);
+  });
+
+  it("updates focusLabel when focused topic is updated", () => {
+    let state = createInitialTopicEngineState(0);
+    state = processTopicSegment(state, "レイテンシー対策を決める", "manual", 0).state;
+    const topicId = state.currentTopicId!;
+
+    state = {
+      ...state,
+      focusState: {
+        ...state.focusState,
+        focusTopicId: topicId,
+        focusLabel: "旧ラベル",
+      },
+    };
+
+    const updates = new Map([[topicId, "新しいタイトル"]]);
+    const result = applyTopicTitleRefinements(state, updates);
+
+    expect(result.focusState.focusLabel).toBe("新しいタイトル");
+  });
+
+  it("preserves focusLabel when focused topic is not updated", () => {
+    let state = createInitialTopicEngineState(0);
+    state = processTopicSegment(state, "レイテンシー対策を決める", "manual", 0).state;
+    const topicId1 = state.currentTopicId!;
+
+    state = processTopicSegment(state, "次に予算について話します", "manual", 5_000).state;
+    const topicId2 = state.currentTopicId!;
+
+    state = {
+      ...state,
+      focusState: {
+        ...state.focusState,
+        focusTopicId: topicId2,
+        focusLabel: "予算",
+      },
+    };
+
+    const updates = new Map([[topicId1, "新しいタイトル1"]]);
+    const result = applyTopicTitleRefinements(state, updates);
+
+    expect(result.focusState.focusLabel).toBe("予算");
+  });
+
+  it("re-projects nodes and edges after title update", () => {
+    let state = createInitialTopicEngineState(0);
+    state = processTopicSegment(state, "レイテンシー対策を決める", "manual", 0).state;
+    const topicId = state.currentTopicId!;
+
+    const originalNodeCount = state.nodes.length;
+    const originalEdgeCount = state.edges.length;
+
+    const updates = new Map([[topicId, "新しいタイトル"]]);
+    const result = applyTopicTitleRefinements(state, updates);
+
+    // Projection is recreated after update
+    expect(result.nodes.length).toBe(originalNodeCount);
+    expect(result.edges.length).toBe(originalEdgeCount);
   });
 });
