@@ -8,6 +8,7 @@ import { TopicInspector } from "./components/TopicInspector";
 import { TranscriptPanel } from "./components/TranscriptPanel";
 import { TranscriptReplayPanel } from "./components/TranscriptReplayPanel";
 import { useSpeechRecognition } from "./hooks/useSpeechRecognition";
+import { useLlmSettings } from "./hooks/useLlmSettings";
 import { useTopicEngine } from "./hooks/useTopicEngine";
 import type { SessionLogEntry } from "./types/topic";
 
@@ -78,7 +79,8 @@ export default function App() {
 
 function MeetingMode() {
   const { connectionStatus, sendLog } = useSessionSocket();
-  const topicEngine = useTopicEngine({ onLog: sendLog });
+  const { llmSettings, updateLlmSettings } = useLlmSettings();
+  const topicEngine = useTopicEngine({ onLog: sendLog, llmSettings });
   const speech = useSpeechRecognition({ onFinalText: topicEngine.addTranscriptText });
   const [now, setNow] = useState(() => Date.now());
 
@@ -163,7 +165,9 @@ function MeetingMode() {
         />
         <MeetingReportPanel
           importantMentions={topicEngine.importantMentions}
+          llmSettings={llmSettings}
           meetingGraph={topicEngine.meetingGraph}
+          onUpdateLlmSettings={updateLlmSettings}
           segmentArchive={topicEngine.segmentArchive}
         />
       </section>

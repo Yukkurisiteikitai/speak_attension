@@ -10,23 +10,9 @@ type MeetingReportPanelProps = {
   meetingGraph: MeetingGraph;
   importantMentions: ImportantMention[];
   segmentArchive: AnalyzedSegment[];
+  llmSettings: LlmSettings;
+  onUpdateLlmSettings: (patch: Partial<LlmSettings>) => void;
 };
-
-const LLM_SETTINGS_STORAGE_KEY = "speak_attension.llmSettings";
-
-function loadLlmSettings(): LlmSettings {
-  try {
-    const raw = window.localStorage.getItem(LLM_SETTINGS_STORAGE_KEY);
-    if (!raw) return DEFAULT_LLM_SETTINGS;
-    const parsed = JSON.parse(raw) as Partial<LlmSettings>;
-    return {
-      baseUrl: parsed.baseUrl || DEFAULT_LLM_SETTINGS.baseUrl,
-      model: parsed.model || DEFAULT_LLM_SETTINGS.model,
-    };
-  } catch {
-    return DEFAULT_LLM_SETTINGS;
-  }
-}
 
 function feedbackStorageKey(report: MeetingReport): string {
   return `speak_attension.feedback.${report.meetingId}.${report.generatedAt}`;
@@ -111,10 +97,9 @@ function FindingCard({
 // Post-meeting deliverable: turn the engine state into a reviewable missing-items
 // report, collect helpful/noise verdicts as evaluation data, and optionally get a
 // second opinion from a local LLM (LM Studio's OpenAI-compatible server).
-export function MeetingReportPanel({ meetingGraph, importantMentions, segmentArchive }: MeetingReportPanelProps) {
+export function MeetingReportPanel({ meetingGraph, importantMentions, segmentArchive, llmSettings, onUpdateLlmSettings }: MeetingReportPanelProps) {
   const [report, setReport] = useState<MeetingReport | null>(null);
   const [feedback, setFeedback] = useState<ReportFeedbackMap>({});
-  const [llmSettings, setLlmSettings] = useState<LlmSettings>(() => loadLlmSettings());
   const [llmStatus, setLlmStatus] = useState<string | null>(null);
   const [isReviewing, setIsReviewing] = useState(false);
 
@@ -138,14 +123,6 @@ export function MeetingReportPanel({ meetingGraph, importantMentions, segmentArc
     });
   };
 
-  const updateLlmSettings = (patch: Partial<LlmSettings>) => {
-    setLlmSettings((current) => {
-      const next = { ...current, ...patch };
-      window.localStorage.setItem(LLM_SETTINGS_STORAGE_KEY, JSON.stringify(next));
-      return next;
-    });
-  };
-
   const checkConnection = async () => {
     setLlmStatus("接続確認中...");
     try {
@@ -154,7 +131,7 @@ export function MeetingReportPanel({ meetingGraph, importantMentions, segmentArc
         setLlmStatus("接続成功。ただしロード済みモデルがありません。");
         return;
       }
-      if (!llmSettings.model) updateLlmSettings({ model: modelIds[0] });
+      if (!llmSettings.model) onUpdateLlmSettings({ model: modelIds[0] });
       setLlmStatus(`接続成功: ${modelIds.join(", ")}`);
     } catch (error) {
       setLlmStatus(`接続失敗: ${error instanceof Error ? error.message : String(error)}`);
@@ -233,7 +210,7 @@ export function MeetingReportPanel({ meetingGraph, importantMentions, segmentArc
           id="llmBaseUrl"
           type="text"
           value={llmSettings.baseUrl}
-          onChange={(event) => updateLlmSettings({ baseUrl: event.currentTarget.value })}
+          onChange={(event) => onUpdateLlmSettings({ baseUrl: event.currentTarget.value })}
         />
         <label className="field-label" htmlFor="llmModel">
           Model
@@ -243,7 +220,7 @@ export function MeetingReportPanel({ meetingGraph, importantMentions, segmentArc
           type="text"
           placeholder="接続確認で自動選択"
           value={llmSettings.model}
-          onChange={(event) => updateLlmSettings({ model: event.currentTarget.value })}
+          onChange={(event) => onUpdateLlmSettings({ model: event.currentTarget.value })}
         />
         <div className="report-actions">
           <button type="button" onClick={checkConnection}>

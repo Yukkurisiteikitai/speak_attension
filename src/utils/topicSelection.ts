@@ -15,6 +15,12 @@ export function mergeAliases(current: string[], phrases: TopicPhraseCandidate[])
   return [...next].filter(Boolean).slice(0, 8);
 }
 
+export function mergeAliasStrings(current: string[], titles: string[]): string[] {
+  const next = new Set(current);
+  titles.forEach((title) => next.add(normalizeForMatch(title)));
+  return [...next].filter(Boolean).slice(0, 8);
+}
+
 export function createTopicFromPhrase(phrase: TopicPhraseCandidate, segmentId: string, now: number, segmentIndex: number): TopicNode {
   return {
     id: createId("topic"),

@@ -1,5 +1,6 @@
 import { createId } from "../utils/topicProjection";
 import {
+  applyTopicTitleRefinements,
   createInitialTopicEngineState,
   getCurrentTopicGaps,
   processTopicSegment,
@@ -8,6 +9,8 @@ import {
   type TopicEngineState,
   type TopicEngineTransition,
 } from "../utils/topicEngine";
+import { refineTopicTitlesWithLlm, type TopicTitleCandidate } from "../utils/llmTopicTitle";
+import { type LlmSettings } from "../utils/llmClient";
 import type { AnalyzedSegment, SessionLogEntry, TimedTranscriptSegment, TranscriptSegmentMetadata, TranscriptInputSource } from "../types/topic";
 
 type TopicEngineStoreSnapshot = {
@@ -29,6 +32,7 @@ type TopicEngineStore = {
   getSnapshot: () => TopicEngineStoreSnapshot;
   reset: () => void;
   setFocusLocked: (locked: boolean) => void;
+  setLlmSettings: (settings: LlmSettings | null) => void;
   setManualFocus: (topicId: string | null) => void;
   setOnLog: (onLog?: (entry: SessionLogEntry) => void) => void;
   submitTimedTranscript: (segment: TimedTranscriptSegment) => void;
@@ -72,6 +76,10 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
     segmentArchive: [],
   };
   const listeners = new Set<() => void>();
+  let currentLlmSettings: LlmSettings | null = null;
+  let titleRefineQueue: string[] = [];
+  let isRefiningTitle = false;
+  let sessionEpoch = 0;
 
   function emit() {
     listeners.forEach((listener) => listener());
@@ -115,12 +123,65 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
       // meeting here so the post-meeting report can quote every evidence segment.
       segmentArchive: [...snapshot.segmentArchive, transition.segment],
     });
+
+    if (transition.newlyClosedTopicIds.length > 0) {
+      titleRefineQueue.push(...transition.newlyClosedTopicIds);
+      titleRefineQueue = [...new Set(titleRefineQueue)];
+      void processTitleRefineQueue();
+    }
   }
 
   function processSegment(text: string, source: TranscriptInputSource, metadata?: TranscriptSegmentMetadata) {
     const now = Date.now();
     const transition = attachSegmentMetadata(processTopicSegment(snapshot.engineState, text, source, now), metadata);
     applyTransition(transition, now);
+  }
+
+  async function processTitleRefineQueue() {
+    if (isRefiningTitle) return;
+    isRefiningTitle = true;
+    const epoch = sessionEpoch;
+
+    try {
+      while (titleRefineQueue.length > 0) {
+        const topicId = titleRefineQueue.shift()!;
+        if (epoch !== sessionEpoch) break;
+        if (!currentLlmSettings?.model) continue;
+
+        const node = snapshot.engineState.meetingGraph.nodes.find((n) => n.id === topicId);
+        if (!node) continue;
+
+        const segmentById = new Map(snapshot.segmentArchive.map((s) => [s.id, s.text]));
+        const candidate: TopicTitleCandidate = {
+          topicId: node.id,
+          currentTitle: node.title,
+          evidenceQuotes: node.evidenceSegmentIds.slice(0, 4).map((id) => segmentById.get(id)).filter((t): t is string => Boolean(t)),
+        };
+
+        try {
+          const refinements = await refineTopicTitlesWithLlm(currentLlmSettings, [candidate]);
+          if (epoch !== sessionEpoch) break;
+
+          const updates = new Map(refinements.map((r) => [r.topicId, r.title]));
+          const nextEngineState = applyTopicTitleRefinements(snapshot.engineState, updates, Date.now());
+          writeSnapshot({ ...snapshot, engineState: nextEngineState });
+          addLog({
+            type: "system",
+            message: `トピック「${node.title}」のタイトルをLLMで整理しました`,
+            payload: { topicId, from: node.title, to: updates.get(topicId) },
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          addLog({
+            type: "system",
+            message: `タイトル整理に失敗したため「${node.title}」のままにします: ${message}`,
+            payload: { topicId, error: message },
+          });
+        }
+      }
+    } finally {
+      isRefiningTitle = false;
+    }
   }
 
   return {
@@ -155,6 +216,8 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
       return snapshot;
     },
     reset() {
+      titleRefineQueue = [];
+      sessionEpoch += 1;
       writeSnapshot({
         engineState: createInitialTopicEngineState(),
         bufferText: "",
@@ -175,6 +238,9 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
         ...snapshot,
         engineState: nextState,
       });
+    },
+    setLlmSettings(settings) {
+      currentLlmSettings = settings;
     },
     setManualFocus(topicId) {
       const now = Date.now();

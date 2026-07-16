@@ -15,7 +15,7 @@ import { detectCoverageUpdates, sortGaps } from "./topicCoverage";
 import { extractTopicPhrases, resolveTopicReference } from "./topicExtraction";
 import { closeDormantTopics, createImportantMention, getTopicLabel, projectState, refreshTopicDerivedState, updateCoverage } from "./topicLifecycle";
 import { createId, createInitialMeetingGraph, createTopicEdge, getRootTopicId, projectGraphToFlow, relationFromIntent } from "./topicProjection";
-import { appendEvidenceSegmentIds, chooseSelectedTopic, createTopicFromPhrase, mergeAliases } from "./topicSelection";
+import { appendEvidenceSegmentIds, chooseSelectedTopic, createTopicFromPhrase, mergeAliases, mergeAliasStrings } from "./topicSelection";
 
 export type TopicEngineState = {
   meetingGraph: MeetingGraph;
@@ -35,6 +35,7 @@ export type TopicEngineTransition = {
   segment: AnalyzedSegment;
   decisionLog: TopicDecisionLog;
   importantMention: ImportantMention | null;
+  newlyClosedTopicIds: string[];
 };
 
 // This module is the orchestration layer for one transcript segment.
@@ -100,6 +101,48 @@ export function setFocusLockedState(state: TopicEngineState, locked: boolean): T
       ...state.focusState,
       locked,
     },
+  };
+}
+
+export function applyTopicTitleRefinements(state: TopicEngineState, updates: Map<string, string>, now = Date.now()): TopicEngineState {
+  if (updates.size === 0) return state;
+
+  let nextGraph = state.meetingGraph;
+  for (const [topicId, newTitle] of updates) {
+    const topic = nextGraph.nodes.find((node) => node.id === topicId);
+    if (!topic || topic.title === newTitle) continue;
+
+    nextGraph = {
+      ...nextGraph,
+      nodes: nextGraph.nodes.map((node) =>
+        node.id === topicId
+          ? {
+              ...node,
+              title: newTitle,
+              aliases: mergeAliasStrings(node.aliases, [node.title]),
+            }
+          : node,
+      ),
+    };
+  }
+
+  const nextFocusState: FocusState =
+    state.focusState.focusTopicId && updates.has(state.focusState.focusTopicId)
+      ? {
+          ...state.focusState,
+          focusLabel: getTopicLabel(nextGraph, state.focusState.focusTopicId),
+        }
+      : state.focusState;
+
+  const nextCurrentTopicId = state.currentTopicId;
+  const projection = projectState(nextGraph, nextCurrentTopicId, state.segments, projectGraphToFlow);
+
+  return {
+    ...state,
+    meetingGraph: nextGraph,
+    focusState: nextFocusState,
+    nodes: projection.nodes,
+    edges: projection.edges,
   };
 }
 
@@ -182,7 +225,9 @@ export function processTopicSegment(
           startedAt: selectedTopicId && selectedTopicId !== previousTopicId ? now : state.focusState.startedAt,
         };
 
-  nextGraph = closeDormantTopics(nextGraph, nextCurrentTopicId, now, segmentIndex);
+  const dormancyResult = closeDormantTopics(nextGraph, nextCurrentTopicId, now, segmentIndex);
+  nextGraph = dormancyResult.graph;
+  const newlyClosedTopicIds = dormancyResult.newlyClosedTopicIds;
   if (selectedTopicId) nextGraph = refreshTopicDerivedState(nextGraph, selectedTopicId);
 
   const focusRelation = relationFromIntent(intent, selectedTopicId, nextCurrentTopicId);
@@ -254,6 +299,7 @@ export function processTopicSegment(
     segment,
     decisionLog,
     importantMention,
+    newlyClosedTopicIds,
   };
 }
 
