@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { importTimedTranscriptJson } from "./transcriptImporter";
-import { collectReplaySegments } from "./transcriptReplay";
+import { collectReplaySegments, formatReplayTime } from "./transcriptReplay";
 
 describe("transcript importer", () => {
   it("loads valid transcript json", () => {
@@ -93,5 +93,23 @@ describe("transcript replay", () => {
     const secondAdvance = collectReplaySegments(segments, 1500, firstAdvance.nextIndex);
     expect(secondAdvance.emittedSegments).toEqual([]);
     expect(secondAdvance.nextIndex).toBe(1);
+  });
+});
+
+describe("formatReplayTime", () => {
+  it("formats zero as 00:00", () => {
+    expect(formatReplayTime(0)).toBe("00:00");
+  });
+
+  it("pads minutes and seconds", () => {
+    expect(formatReplayTime(754_000)).toBe("12:34");
+  });
+
+  it("includes hours once the duration passes one hour", () => {
+    expect(formatReplayTime(4_510_000)).toBe("01:15:10");
+  });
+
+  it("clamps negative input to 00:00", () => {
+    expect(formatReplayTime(-5_000)).toBe("00:00");
   });
 });

@@ -110,9 +110,13 @@ Coverage mutation, topic closure, and important mention creation.
 
 Diagnostic side panel. It shows current topic, gaps, coverage, latest analysis, and the developer drawer.
 
+### `src/lib/download.ts`
+
+ブラウザーでのファイルダウンロード補助。DOM 副作用を持つため `src/utils` ではなく `src/lib` に置く。
+
 ### `src/utils/llmClient.ts`
 
-ローカル LLM との通信共通部。`ideaGrouping` と `llmGapReview` から利用する。
+ローカル LLM との通信共通部。`ideaGrouping` と `llmGapReview` から利用する。接続確認は `src/utils/llmConnection.ts` の `checkLlmConnection` を両モードの設定 UI から共用する。
 
 ### `src/utils/llmGapReview.ts` / `src/utils/llmTopicTitle.ts`
 

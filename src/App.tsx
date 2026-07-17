@@ -10,6 +10,7 @@ import { TranscriptReplayPanel } from "./components/TranscriptReplayPanel";
 import { useSpeechRecognition } from "./hooks/useSpeechRecognition";
 import { useLlmSettings } from "./hooks/useLlmSettings";
 import { useTopicEngine } from "./hooks/useTopicEngine";
+import { formatReplayTime } from "./utils/transcriptReplay";
 import type { SessionLogEntry } from "./types/topic";
 
 type AppMode = "idea" | "meeting";
@@ -50,15 +51,6 @@ function statusLabel(isSupported: boolean, isListening: boolean): string {
   return "idle";
 }
 
-function formatElapsed(ms: number): string {
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-  const minutes = Math.floor(totalSeconds / 60)
-    .toString()
-    .padStart(2, "0");
-  const seconds = (totalSeconds % 60).toString().padStart(2, "0");
-  return `${minutes}:${seconds}`;
-}
-
 export default function App() {
   const [mode, setMode] = useState<AppMode>("idea");
 
@@ -94,7 +86,7 @@ function MeetingMode() {
     [speech.isListening, speech.isSupported],
   );
 
-  const elapsedLabel = useMemo(() => formatElapsed(now - topicEngine.meetingStartedAt), [now, topicEngine.meetingStartedAt]);
+  const elapsedLabel = useMemo(() => formatReplayTime(now - topicEngine.meetingStartedAt), [now, topicEngine.meetingStartedAt]);
 
   return (
     <>
