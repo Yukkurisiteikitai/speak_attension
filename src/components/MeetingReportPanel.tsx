@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
 import { Download, FileText, Sparkles, ThumbsDown, ThumbsUp } from "lucide-react";
+import { downloadFile } from "../lib/download";
 import type { AnalyzedSegment, ImportantMention, MeetingGraph } from "../types/topic";
-import { DEFAULT_LLM_SETTINGS, fetchModelIds, type LlmSettings } from "../utils/llmClient";
+import { type LlmSettings } from "../utils/llmClient";
+import { checkLlmConnection } from "../utils/llmConnection";
 import { reviewReportWithLlm } from "../utils/llmGapReview";
 import { buildMeetingReport, renderMeetingReportMarkdown, type MeetingReport, type MeetingReportFinding } from "../utils/meetingReport";
 import { buildEvaluationDataset, summarizeFeedback, type FindingVerdict, type ReportFeedbackMap } from "../utils/reportFeedback";
@@ -25,16 +27,6 @@ function loadFeedback(report: MeetingReport): ReportFeedbackMap {
   } catch {
     return {};
   }
-}
-
-function downloadFile(filename: string, content: string, mimeType: string) {
-  const blob = new Blob([content], { type: mimeType });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  URL.revokeObjectURL(url);
 }
 
 function severityLabel(severity: MeetingReportFinding["severity"]): string {
@@ -123,19 +115,11 @@ export function MeetingReportPanel({ meetingGraph, importantMentions, segmentArc
     });
   };
 
-  const checkConnection = async () => {
+  const handleCheckConnection = async () => {
     setLlmStatus("接続確認中...");
-    try {
-      const modelIds = await fetchModelIds(llmSettings);
-      if (modelIds.length === 0) {
-        setLlmStatus("接続成功。ただしロード済みモデルがありません。");
-        return;
-      }
-      if (!llmSettings.model) onUpdateLlmSettings({ model: modelIds[0] });
-      setLlmStatus(`接続成功: ${modelIds.join(", ")}`);
-    } catch (error) {
-      setLlmStatus(`接続失敗: ${error instanceof Error ? error.message : String(error)}`);
-    }
+    const result = await checkLlmConnection(llmSettings);
+    if (result.autofillModel) onUpdateLlmSettings({ model: result.autofillModel });
+    setLlmStatus(result.statusMessage);
   };
 
   const runLlmReview = async () => {
@@ -223,7 +207,7 @@ export function MeetingReportPanel({ meetingGraph, importantMentions, segmentArc
           onChange={(event) => onUpdateLlmSettings({ model: event.currentTarget.value })}
         />
         <div className="report-actions">
-          <button type="button" onClick={checkConnection}>
+          <button type="button" onClick={handleCheckConnection}>
             <span>接続確認</span>
           </button>
           <button type="button" onClick={runLlmReview} disabled={!report || isReviewing || !llmSettings.model}>

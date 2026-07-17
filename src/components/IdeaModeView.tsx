@@ -12,10 +12,12 @@ import {
 import "@xyflow/react/dist/style.css";
 import { useEffect, useMemo, useState } from "react";
 import { useIdeaSession } from "../hooks/useIdeaSession";
+import { useLlmSettings } from "../hooks/useLlmSettings";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
+import { downloadFile } from "../lib/download";
 import { mindmapPositions, radialPositions } from "../utils/ideaLayout";
 import { buildIdeaSessionExport, renderIdeaMarkdown, type IdeaPhase } from "../utils/ideaSession";
-import { DEFAULT_LLM_SETTINGS, fetchModelIds, type LlmSettings } from "../utils/llmClient";
+import { checkLlmConnection } from "../utils/llmConnection";
 
 const GROUP_COLORS = ["#116147", "#b76a1f", "#4756a6", "#a64845", "#6c6218", "#2e7d84", "#8a4d8f", "#5a6b3b"];
 
@@ -67,16 +69,6 @@ function FitOnPhaseChange({ phase }: { phase: IdeaPhase }) {
   return null;
 }
 
-function downloadFile(filename: string, content: string, mimeType: string) {
-  const blob = new Blob([content], { type: mimeType });
-  const url = URL.createObjectURL(blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  URL.revokeObjectURL(url);
-}
-
 function phaseLabel(phase: IdeaPhase): string {
   if (phase === "capture") return "発散中(キーワード収集)";
   if (phase === "grouping") return "グループ化中…";
@@ -88,7 +80,7 @@ export function IdeaModeView() {
   const speech = useSpeechRecognition({ onFinalText: (text) => idea.addUtterance(text, "speech") });
   const [manualText, setManualText] = useState("");
   const [useLlm, setUseLlm] = useState(false);
-  const [llmSettings, setLlmSettings] = useState<LlmSettings>(DEFAULT_LLM_SETTINGS);
+  const { llmSettings, updateLlmSettings } = useLlmSettings();
   const [llmStatus, setLlmStatus] = useState<string | null>(null);
   const [markdown, setMarkdown] = useState<string | null>(null);
 
@@ -177,19 +169,11 @@ export function IdeaModeView() {
     return { nodes: flowNodes, edges: flowEdges };
   }, [phase, session.groups, session.keywords, session.title]);
 
-  const checkLlmConnection = async () => {
+  const handleCheckConnection = async () => {
     setLlmStatus("接続確認中…");
-    try {
-      const models = await fetchModelIds(llmSettings);
-      if (models.length === 0) {
-        setLlmStatus("接続はできましたが、ロード済みモデルがありません。");
-        return;
-      }
-      setLlmSettings((current) => ({ ...current, model: current.model || models[0] }));
-      setLlmStatus(`接続OK: ${models[0]}`);
-    } catch (error) {
-      setLlmStatus(error instanceof Error ? error.message : String(error));
-    }
+    const result = await checkLlmConnection(llmSettings);
+    if (result.autofillModel) updateLlmSettings({ model: result.autofillModel });
+    setLlmStatus(result.statusMessage);
   };
 
   const finishCapture = () => {
@@ -285,17 +269,17 @@ export function IdeaModeView() {
                     <input
                       type="text"
                       value={llmSettings.baseUrl}
-                      onChange={(event) => setLlmSettings((current) => ({ ...current, baseUrl: event.target.value }))}
+                      onChange={(event) => updateLlmSettings({ baseUrl: event.target.value })}
                       placeholder="http://127.0.0.1:1234/v1"
                     />
                     <input
                       type="text"
                       value={llmSettings.model}
-                      onChange={(event) => setLlmSettings((current) => ({ ...current, model: event.target.value }))}
+                      onChange={(event) => updateLlmSettings({ model: event.target.value })}
                       placeholder="model id(接続確認で自動入力)"
                     />
                     <div className="button-row">
-                      <button type="button" onClick={() => void checkLlmConnection()}>
+                      <button type="button" onClick={() => void handleCheckConnection()}>
                         接続確認
                       </button>
                     </div>
