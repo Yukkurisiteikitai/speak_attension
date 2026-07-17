@@ -6,6 +6,10 @@ on:
       - main
   workflow_dispatch:
 
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -15,7 +19,13 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      - uses: actions/cache@v4
+        id: node-modules
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+      - if: steps.node-modules.outputs.cache-hit != 'true'
+        run: npm ci
       - run: npm run build
       - name: Deploy to Cloudflare Workers
         run: npx wrangler@4 deploy
