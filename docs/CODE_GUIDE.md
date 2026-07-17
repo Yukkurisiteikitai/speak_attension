@@ -46,6 +46,8 @@ speech / manual text / replay
 -> topic extraction + scoring + coverage + lifecycle
 -> MeetingGraph update
 -> TopicInspector / TopicGraph render
+-> (明示的な「会議を整理」) meetingSynthesis + local LLM refinement
+-> MeetingSummaryGraph render
 ```
 
 ## File Map
@@ -118,9 +120,13 @@ Diagnostic side panel. It shows current topic, gaps, coverage, latest analysis, 
 
 ローカル LLM との通信共通部。`ideaGrouping` と `llmGapReview` から利用する。接続確認は `src/utils/llmConnection.ts` の `checkLlmConnection` を両モードの設定 UI から共用する。
 
-### `src/utils/llmGapReview.ts` / `src/utils/llmTopicTitle.ts`
+### `src/utils/llmGapReview.ts` / `src/utils/llmTopicTitle.ts` / `src/utils/llmMeetingSynthesis.ts`
 
-会議後レポートのレビューとトピック名の補助処理。どちらも呼び出し元でルールベースの結果を維持できるようにする。
+会議後レポートのレビュー、トピック名、終了時マップの補助処理。いずれも呼び出し元でルールベースの結果を維持できるようにする。
+
+### `src/utils/meetingSynthesis.ts` / `src/components/MeetingSummaryGraph.tsx`
+
+終了時に発言を固定分類の要点へ整理し、根拠となる原文を開閉できるマップを作る。整理結果はライブの `MeetingGraph` と分離され、タイトル編集も整理結果だけに反映する。
 
 ## Tests and replay data
 
@@ -129,6 +135,7 @@ Diagnostic side panel. It shows current topic, gaps, coverage, latest analysis, 
 | キーワード抽出・グループ化・セッション出力 | `src/utils/ideaExtraction.test.ts`、`ideaGrouping.test.ts`、`ideaSession.test.ts` |
 | 放射状・マインドマップの座標 | `src/utils/ideaLayout.test.ts`。長い日本語ラベル、複数リング、未グループ化キーワードを確認する。 |
 | 会議のトピック・Focus・レポート | 対応する `src/utils/*.test.ts` と `src/hooks/topicEngineStore.test.ts`。リプレイ用の代表発話は各テストに併置されている。 |
+| 終了時の整理マップ | `meetingSynthesis.test.ts`、`llmMeetingSynthesis.test.ts`、`topicEngineStore.test.ts`。相槌除外、根拠発言ID、LM Studio失敗時の規則ベース維持を確認する。 |
 | リプレイ JSON の入力形式 | `src/utils/transcript-importer.test.ts`。入力形式または検証規則を変えるときに更新する。 |
 
 このリポジトリには独立した fixture ディレクトリはない。トピックや Focus の挙動を変える場合は、該当テスト内の代表発話も仕様として見直す。

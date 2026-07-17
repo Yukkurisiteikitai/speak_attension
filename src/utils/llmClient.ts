@@ -13,6 +13,11 @@ export const DEFAULT_LLM_SETTINGS: LlmSettings = {
   model: "",
 };
 
+// Local models can keep generating despite a JSON-only instruction. Keep every
+// non-streaming request bounded so one malformed response cannot occupy a slot
+// indefinitely or force a context shift.
+export const DEFAULT_CHAT_MAX_TOKENS = 800;
+
 function normalizeBaseUrl(baseUrl: string): string {
   return baseUrl.replace(/\/+$/, "");
 }
@@ -28,7 +33,11 @@ export async function fetchModelIds(settings: LlmSettings): Promise<string[]> {
   return (payload.data ?? []).map((model) => model.id).filter((id): id is string => Boolean(id));
 }
 
-export async function requestChat(settings: LlmSettings, messages: ChatMessage[]): Promise<string> {
+export async function requestChat(
+  settings: LlmSettings,
+  messages: ChatMessage[],
+  options: { maxTokens?: number } = {},
+): Promise<string> {
   const response = await fetch(`${normalizeBaseUrl(settings.baseUrl)}/chat/completions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -36,15 +45,20 @@ export async function requestChat(settings: LlmSettings, messages: ChatMessage[]
       model: settings.model,
       messages,
       temperature: 0,
+      max_tokens: options.maxTokens ?? DEFAULT_CHAT_MAX_TOKENS,
       stream: false,
     }),
   });
   if (!response.ok) {
     throw new Error(`LLM呼び出しに失敗しました: HTTP ${response.status}`);
   }
-  const payload = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
-  const content = payload.choices?.[0]?.message?.content;
+  const payload = (await response.json()) as { choices?: Array<{ message?: { content?: string }; finish_reason?: string | null }> };
+  const choice = payload.choices?.[0];
+  const content = choice?.message?.content;
   if (!content) {
+    if (choice?.finish_reason === "length") {
+      throw new Error("LLM応答が出力上限に達したため、JSON本文を受け取れませんでした。");
+    }
     throw new Error("LLM応答にcontentがありません。");
   }
   return content;

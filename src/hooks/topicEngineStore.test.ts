@@ -80,4 +80,17 @@ describe("topicEngineStore", () => {
     expect(snapshot.engineState.segments).toEqual([]);
     expect(snapshot.engineState.currentTopicId).toBeNull();
   });
+
+  it("creates a rule-based meeting summary and marks it stale when new speech arrives", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(6_000);
+    const store = createTopicEngineStore();
+    store.submitTranscript("採用フローの短縮を決めます", "manual");
+    await store.organizeMeeting();
+    expect(store.getSnapshot().meetingSummary?.topics.length).toBeGreaterThan(0);
+    expect(store.getSnapshot().meetingSummaryStatus).toBe("rules");
+    expect(store.getSnapshot().meetingSummaryStartedAt).toBe(6_000);
+
+    store.submitTranscript("担当は田中さんです", "manual");
+    expect(store.getSnapshot().meetingSummaryStale).toBe(true);
+  });
 });

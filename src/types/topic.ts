@@ -49,7 +49,7 @@ export type TopicLifecycle = "active" | "discussed" | "decided" | "unresolved";
 
 export type TopicDisplayState = "active" | "discussed" | "shallow" | "missing" | "decided" | "unresolved";
 
-export type TopicEdgeType = "parent" | "related" | "depends_on" | "contradicts" | "follow_up" | "missing_of";
+export type TopicEdgeType = "parent" | "related" | "depends_on" | "contradicts" | "follow_up";
 
 export type TopicGapType =
   | "shallow"
@@ -113,6 +113,42 @@ export type MeetingGraph = {
   gaps: TopicGap[];
   gapSummary: MeetingGapSummary;
 };
+
+export const MEETING_SUMMARY_CATEGORIES = [
+  "issue",
+  "cause",
+  "proposal",
+  "concern",
+  "decision",
+  "action",
+  "unresolved",
+] as const;
+
+export type MeetingSummaryCategory = (typeof MEETING_SUMMARY_CATEGORIES)[number];
+
+export type MeetingSummaryItem = {
+  id: string;
+  category: MeetingSummaryCategory;
+  title: string;
+  evidenceSegmentIds: string[];
+};
+
+export type MeetingSummaryTopic = {
+  id: string;
+  title: string;
+  items: MeetingSummaryItem[];
+};
+
+export type MeetingSummary = {
+  meetingId: string;
+  title: string;
+  generatedAt: number;
+  source: "rules" | "llm";
+  topics: MeetingSummaryTopic[];
+  ignoredSegmentIds: string[];
+};
+
+export type MeetingSummaryStatus = "idle" | "rules" | "refining" | "llm" | "error";
 
 export type FocusState = {
   focusTopicId: string | null;
@@ -223,19 +259,25 @@ export type SpeechStatus = "idle" | "listening" | "unsupported" | "error";
 
 export type GraphTopicNodeData = {
   label: string;
-  kind: "root" | "topic" | "gap";
+  kind: "root" | "topic" | "utterance";
   states: TopicDisplayState[];
   lifecycle?: TopicLifecycle;
   mentionCount?: number;
   evidence?: string;
   detail?: string;
   isActive?: boolean;
+  topicId?: string;
+  childCount?: number;
+  isCollapsed?: boolean;
+  sequence?: number;
+  sourceLabel?: string;
+  onToggle?: (topicId: string) => void;
 };
 
 export type TopicGraphNode = Node<GraphTopicNodeData, "topic">;
 
 export type TopicGraphEdgeData = {
-  relation: TopicEdgeType;
+  relation: TopicEdgeType | "utterance";
 };
 
 export type TopicGraphEdge = Edge<TopicGraphEdgeData>;

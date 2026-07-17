@@ -1,4 +1,4 @@
-import type { FocusRelation, GraphTopicNodeData, MeetingGraph, TopicEdge, TopicEdgeType, TopicGap, TopicGraphEdge, TopicGraphNode, TopicNode, UtteranceIntent } from "../types/topic";
+import type { AnalyzedSegment, FocusRelation, GraphTopicNodeData, MeetingGraph, TopicEdge, TopicEdgeType, TopicGraphEdge, TopicGraphNode, TopicNode, UtteranceIntent } from "../types/topic";
 import { createEmptyCoverage } from "./topicCoverage";
 import { estimateTextWidth } from "./textMetrics";
 
@@ -48,6 +48,12 @@ export function getRootTopicId(): string {
 
 // Estimate the height of a topic node based on its data
 export function estimateTopicNodeHeight(data: GraphTopicNodeData): number {
+  if (data.kind === "utterance") {
+    const contentWidth = 280;
+    const lineCount = Math.max(1, Math.ceil(estimateTextWidth(data.label, 13) / contentWidth));
+    return 48 + lineCount * 19;
+  }
+
   const TITLE_FONT_SIZE = 14;
   const META_FONT_SIZE = 12;
   const CONTENT_WIDTH = 234; // approximate px
@@ -81,88 +87,56 @@ export function estimateTopicNodeHeight(data: GraphTopicNodeData): number {
   return Math.ceil(totalHeight * 1.2); // Extra 20% buffer for CSS rendering variations
 }
 
-// Cumulative-height topic grid layout: 3 columns, positions nodes by their index
-// tracking cumulative height per column to avoid overlaps
-function createTopicNodePositioner(topics: TopicNode[], dataMap: Map<string, GraphTopicNodeData>) {
-  const COLS = 3;
-  const X_SPACING = 300;
-  const INITIAL_X = 180;
-  const INITIAL_Y = 120;
+const ROOT_X = 40;
+const TOPIC_X = 390;
+const UTTERANCE_X = 750;
+const INITIAL_Y = 80;
+const BRANCH_GAP = 42;
+const UTTERANCE_GAP = 14;
+const ROOT_HEIGHT = 122;
 
-  const colHeights: number[] = [INITIAL_Y, INITIAL_Y, INITIAL_Y];
-  const positions = new Map<string, { x: number; y: number; height: number }>();
+function sourceLabel(source: AnalyzedSegment["source"]): string {
+  if (source === "speech") return "音声";
+  if (source === "replay") return "リプレイ";
+  return "手入力";
+}
 
-  topics.forEach((topic, index) => {
-    const col = index % COLS;
-    const x = INITIAL_X + col * X_SPACING;
-    const y = colHeights[col];
+export function summarizeTranscriptForMindmap(text: string, maxLength = 58): string {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, Math.max(1, maxLength - 1))}…`;
+}
 
-    const data = dataMap.get(topic.id) ?? { label: topic.title, kind: "topic" as const, states: [] };
-    const height = estimateTopicNodeHeight(data);
-
-    positions.set(topic.id, { x, y, height });
-    colHeights[col] = y + height + 16; // 16px gap between nodes
+function segmentsByTopicId(segments: AnalyzedSegment[]): Map<string, AnalyzedSegment[]> {
+  const grouped = new Map<string, AnalyzedSegment[]>();
+  // Engine state is newest-first. Reverse first so same-millisecond input still
+  // keeps its original conversation order when the timestamp tie is stable.
+  const chronological = [...segments].reverse().sort((left, right) => left.createdAt - right.createdAt);
+  chronological.forEach((segment) => {
+    segment.matchedTopicIds.forEach((topicId) => {
+      const topicSegments = grouped.get(topicId) ?? [];
+      topicSegments.push(segment);
+      grouped.set(topicId, topicSegments);
+    });
   });
-
-  return positions;
-}
-
-function nodePosition(index: number, topicId: string, positionMap: Map<string, { x: number; y: number; height: number }>): { x: number; y: number } {
-  const pos = positionMap.get(topicId);
-  if (pos) {
-    return { x: pos.x, y: pos.y };
-  }
-  // Fallback to grid layout if positionMap doesn't have this topic
-  const column = index % 3;
-  const row = Math.floor(index / 3);
-  return {
-    x: 180 + column * 300,
-    y: 120 + row * 180,
-  };
-}
-
-// Global y-cursor for gap column layout, grouped by topic to guarantee structural zero overlap
-function createGapPositioner() {
-  const GAP_COLUMN_X = 1100;
-  const topicGapMap = new Map<string, number[]>();
-  let globalYCursor = 120;
-
-  const addGapForTopic = (topicId: string, topicY: number, gapData: GraphTopicNodeData): number => {
-    if (!topicGapMap.has(topicId)) {
-      topicGapMap.set(topicId, []);
-      globalYCursor = Math.max(globalYCursor, topicY);
-    }
-    const positions = topicGapMap.get(topicId)!;
-    const gapY = globalYCursor;
-    positions.push(gapY);
-    const gapHeight = estimateTopicNodeHeight(gapData);
-    globalYCursor += gapHeight + 16; // gap node height + margin
-    return gapY;
-  };
-
-  return { GAP_COLUMN_X, addGapForTopic };
-}
-
-function gapPosition(index: number, topicId: string, topicY: number, gapData: GraphTopicNodeData, gapPositioner: ReturnType<typeof createGapPositioner>): { x: number; y: number } {
-  const y = gapPositioner.addGapForTopic(topicId, topicY, gapData);
-  return {
-    x: gapPositioner.GAP_COLUMN_X,
-    y,
-  };
+  return grouped;
 }
 
 export function projectGraphToFlow(input: {
   graph: MeetingGraph;
   currentTopicId: string | null;
   evidenceByTopicId: Map<string, string>;
+  segments?: AnalyzedSegment[];
+  collapsedTopicIds?: ReadonlySet<string>;
 }): { nodes: TopicGraphNode[]; edges: TopicGraphEdge[] } {
   const topicNodes = input.graph.nodes.filter((node) => node.id !== input.graph.rootTopicId);
-  const nodeIndexMap = new Map<string, { x: number; y: number }>();
+  const topicSegments = segmentsByTopicId(input.segments ?? []);
+  const collapsedTopicIds = input.collapsedTopicIds ?? new Set<string>();
 
   const rootNode: TopicGraphNode = {
     id: input.graph.rootTopicId,
     type: "topic",
-    position: { x: 520, y: 20 },
+    position: { x: ROOT_X, y: INITIAL_Y },
     data: {
       label: input.graph.title,
       kind: "root",
@@ -173,92 +147,95 @@ export function projectGraphToFlow(input: {
   };
 
   const flowNodes: TopicGraphNode[] = [rootNode];
+  const flowEdges: TopicGraphEdge[] = [];
+  let cursorY = INITIAL_Y;
 
-  // Build data map for height estimation
-  const dataMap = new Map<string, GraphTopicNodeData>();
   topicNodes.forEach((node) => {
-    dataMap.set(node.id, {
+    const branchSegments = topicSegments.get(node.id) ?? [];
+    const isCollapsed = collapsedTopicIds.has(node.id);
+    const visibleSegments = isCollapsed ? [] : branchSegments;
+    const topicData: GraphTopicNodeData = {
       label: node.title,
       kind: "topic",
       states: node.displayStates,
       lifecycle: node.lifecycle,
       mentionCount: node.mentionCount,
-      evidence: undefined,
+      evidence: input.evidenceByTopicId.get(node.id),
       isActive: node.id === input.currentTopicId,
-    });
-  });
+      topicId: node.id,
+      childCount: branchSegments.length,
+      isCollapsed,
+    };
+    const topicHeight = estimateTopicNodeHeight(topicData);
+    const utteranceHeights = visibleSegments.map((segment) =>
+      estimateTopicNodeHeight({ label: summarizeTranscriptForMindmap(segment.text), kind: "utterance", states: [] }),
+    );
+    const utteranceBlockHeight = utteranceHeights.reduce((sum, height, index) => sum + height + (index ? UTTERANCE_GAP : 0), 0);
+    const branchHeight = Math.max(topicHeight, utteranceBlockHeight);
+    const topicY = cursorY + (branchHeight - topicHeight) / 2;
+    const utteranceStartY = cursorY + (branchHeight - utteranceBlockHeight) / 2;
 
-  // Create topic node positioner for cumulative height layout
-  const topicPositions = createTopicNodePositioner(topicNodes, dataMap);
-
-  topicNodes.forEach((node, index) => {
-    const posData = topicPositions.get(node.id);
-    const position = { x: posData?.x ?? 180, y: posData?.y ?? 120 };
-    nodeIndexMap.set(node.id, position);
     flowNodes.push({
       id: node.id,
       type: "topic",
-      position,
-      data: {
-        label: node.title,
-        kind: "topic",
-        states: node.displayStates,
-        lifecycle: node.lifecycle,
-        mentionCount: node.mentionCount,
-        evidence: input.evidenceByTopicId.get(node.id),
-        isActive: node.id === input.currentTopicId,
-      },
+      position: { x: TOPIC_X, y: topicY },
+      data: topicData,
+      draggable: false,
     });
-  });
+    flowEdges.push({
+      id: `${input.graph.rootTopicId}-parent-${node.id}`,
+      source: input.graph.rootTopicId,
+      target: node.id,
+      type: "smoothstep",
+      data: { relation: "parent" },
+    });
 
-  const flowEdges: TopicGraphEdge[] = input.graph.edges.map((edge) => ({
-    id: edge.id,
-    source: edge.source,
-    target: edge.target,
-    type: "default",
-    data: {
-      relation: edge.type,
-    },
-  }));
-
-  const groupedGaps = new Map<string, TopicGap[]>();
-  input.graph.gaps.forEach((gap) => {
-    if (gap.closedAt) return;
-    const items = groupedGaps.get(gap.topicId) ?? [];
-    items.push(gap);
-    groupedGaps.set(gap.topicId, items);
-  });
-
-  const gapPositioner = createGapPositioner();
-
-  groupedGaps.forEach((gaps, topicId) => {
-    const topicPosition = nodeIndexMap.get(topicId) ?? { x: 700, y: 200 };
-    gaps.forEach((gap, index) => {
-      const gapData: GraphTopicNodeData = {
-        label: gap.title,
-        kind: "gap",
-        states: ["missing"],
-        detail: gap.detail,
-        isActive: false,
-      };
-      const position = gapPosition(index, topicId, topicPosition.y, gapData, gapPositioner);
+    let utteranceY = utteranceStartY;
+    visibleSegments.forEach((segment, index) => {
+      const label = summarizeTranscriptForMindmap(segment.text);
+      const utteranceHeight = utteranceHeights[index];
+      const utteranceNodeId = `utterance-${node.id}-${segment.id}`;
       flowNodes.push({
-        id: gap.id,
+        id: utteranceNodeId,
         type: "topic",
-        position,
-        data: gapData,
+        position: { x: UTTERANCE_X, y: utteranceY },
+        data: {
+          label,
+          kind: "utterance",
+          states: [],
+          sequence: index + 1,
+          sourceLabel: sourceLabel(segment.source),
+          topicId: node.id,
+        },
+        draggable: false,
       });
       flowEdges.push({
-        id: `${gap.id}-edge`,
-        source: topicId,
-        target: gap.id,
-        type: "default",
-        data: {
-          relation: "missing_of",
-        },
+        id: `${node.id}-utterance-${segment.id}`,
+        source: node.id,
+        target: utteranceNodeId,
+        type: "smoothstep",
+        data: { relation: "utterance" },
+      });
+      utteranceY += utteranceHeight + UTTERANCE_GAP;
+    });
+    cursorY += branchHeight + BRANCH_GAP;
+  });
+
+  // Extra relations are preserved when the engine explicitly has evidence for them.
+  input.graph.edges
+    .filter((edge) => edge.type !== "parent")
+    .forEach((edge) => {
+      flowEdges.push({
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        type: "smoothstep",
+        data: { relation: edge.type },
       });
     });
-  });
+
+  const mapHeight = Math.max(ROOT_HEIGHT, cursorY - INITIAL_Y - BRANCH_GAP);
+  rootNode.position.y = INITIAL_Y + (mapHeight - ROOT_HEIGHT) / 2;
 
   return { nodes: flowNodes, edges: flowEdges };
 }

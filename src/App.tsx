@@ -3,6 +3,7 @@ import { ControlPanel } from "./components/ControlPanel";
 import { IdeaModeView } from "./components/IdeaModeView";
 import { ManualReplayPanel } from "./components/ManualReplayPanel";
 import { MeetingReportPanel } from "./components/MeetingReportPanel";
+import { MeetingSummaryGraph } from "./components/MeetingSummaryGraph";
 import { TopicGraph } from "./components/TopicGraph";
 import { TopicInspector } from "./components/TopicInspector";
 import { TranscriptPanel } from "./components/TranscriptPanel";
@@ -75,6 +76,7 @@ function MeetingMode() {
   const topicEngine = useTopicEngine({ onLog: sendLog, llmSettings });
   const speech = useSpeechRecognition({ onFinalText: topicEngine.addTranscriptText });
   const [now, setNow] = useState(() => Date.now());
+  const [mapMode, setMapMode] = useState<"live" | "summary">("live");
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -87,6 +89,12 @@ function MeetingMode() {
   );
 
   const elapsedLabel = useMemo(() => formatReplayTime(now - topicEngine.meetingStartedAt), [now, topicEngine.meetingStartedAt]);
+  const organizeMeeting = () => {
+    speech.stop();
+    topicEngine.flushBuffer();
+    setMapMode("summary");
+    void topicEngine.organizeMeeting();
+  };
 
   return (
     <>
@@ -113,7 +121,21 @@ function MeetingMode() {
 
       <section className="dashboard-grid">
         <div className="graph-column">
-          <TopicGraph currentTopicId={topicEngine.currentTopicId} edges={topicEngine.edges} nodes={topicEngine.nodes} />
+          {mapMode === "summary" && topicEngine.meetingSummary ? (
+            <MeetingSummaryGraph
+              error={topicEngine.meetingSummaryError}
+              onBack={() => setMapMode("live")}
+              onRefresh={organizeMeeting}
+              onRename={topicEngine.renameMeetingSummaryNode}
+              segments={topicEngine.segmentArchive}
+              stale={topicEngine.meetingSummaryStale}
+              startedAt={topicEngine.meetingSummaryStartedAt}
+              status={topicEngine.meetingSummaryStatus}
+              summary={topicEngine.meetingSummary}
+            />
+          ) : (
+            <TopicGraph currentTopicId={topicEngine.currentTopicId} meetingGraph={topicEngine.meetingGraph} segments={topicEngine.segmentArchive} />
+          )}
         </div>
 
         <div className="rail-column">
@@ -138,7 +160,13 @@ function MeetingMode() {
           error={speech.error}
           isListening={speech.isListening}
           isSupported={speech.isSupported}
-          onReset={topicEngine.reset}
+          onReset={() => {
+            topicEngine.reset();
+            setMapMode("live");
+          }}
+          onOrganize={organizeMeeting}
+          canOrganize={topicEngine.segmentArchive.length > 0}
+          isOrganizing={topicEngine.meetingSummaryStatus === "refining"}
           onStart={speech.start}
           onStop={() => {
             speech.stop();

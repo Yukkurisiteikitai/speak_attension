@@ -10,14 +10,21 @@ import {
   type TopicEngineTransition,
 } from "../utils/topicEngine";
 import { refineTopicTitlesWithLlm, type TopicTitleCandidate } from "../utils/llmTopicTitle";
+import { refineMeetingSummaryWithLlm } from "../utils/llmMeetingSynthesis";
 import { type LlmSettings } from "../utils/llmClient";
-import type { AnalyzedSegment, SessionLogEntry, TimedTranscriptSegment, TranscriptSegmentMetadata, TranscriptInputSource } from "../types/topic";
+import { buildRuleBasedMeetingSummary, renameMeetingSummaryNode } from "../utils/meetingSynthesis";
+import type { AnalyzedSegment, MeetingSummary, MeetingSummaryStatus, SessionLogEntry, TimedTranscriptSegment, TranscriptSegmentMetadata, TranscriptInputSource } from "../types/topic";
 
 type TopicEngineStoreSnapshot = {
   engineState: TopicEngineState;
   bufferText: string;
   logs: SessionLogEntry[];
   segmentArchive: AnalyzedSegment[];
+  meetingSummary: MeetingSummary | null;
+  meetingSummaryStatus: MeetingSummaryStatus;
+  meetingSummaryError: string | null;
+  meetingSummaryStale: boolean;
+  meetingSummaryStartedAt: number | null;
 };
 
 type TopicEngineStoreOptions = {
@@ -30,6 +37,8 @@ type TopicEngineStore = {
   flushBuffer: () => void;
   getCurrentTopicGaps: () => ReturnType<typeof getCurrentTopicGaps>;
   getSnapshot: () => TopicEngineStoreSnapshot;
+  organizeMeeting: () => Promise<void>;
+  renameMeetingSummaryNode: (nodeId: string, title: string) => void;
   reset: () => void;
   setFocusLocked: (locked: boolean) => void;
   setLlmSettings: (settings: LlmSettings | null) => void;
@@ -74,12 +83,18 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
     bufferText: "",
     logs: [],
     segmentArchive: [],
+    meetingSummary: null,
+    meetingSummaryStatus: "idle",
+    meetingSummaryError: null,
+    meetingSummaryStale: false,
+    meetingSummaryStartedAt: null,
   };
   const listeners = new Set<() => void>();
   let currentLlmSettings: LlmSettings | null = null;
   let titleRefineQueue: string[] = [];
   let isRefiningTitle = false;
   let sessionEpoch = 0;
+  let summaryEpoch = 0;
 
   function emit() {
     listeners.forEach((listener) => listener());
@@ -122,6 +137,7 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
       // Engine state trims segments to the latest 80 for UI perf; keep the full
       // meeting here so the post-meeting report can quote every evidence segment.
       segmentArchive: [...snapshot.segmentArchive, transition.segment],
+      meetingSummaryStale: snapshot.meetingSummary ? true : snapshot.meetingSummaryStale,
     });
 
     if (transition.newlyClosedTopicIds.length > 0) {
@@ -215,14 +231,70 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
     getSnapshot() {
       return snapshot;
     },
+    async organizeMeeting() {
+      if (snapshot.segmentArchive.length === 0) return;
+      const fallback = buildRuleBasedMeetingSummary({
+        meetingGraph: snapshot.engineState.meetingGraph,
+        segments: snapshot.segmentArchive,
+      });
+      const requestEpoch = ++summaryEpoch;
+      const requestSessionEpoch = sessionEpoch;
+      const startedAt = Date.now();
+      const canUseLlm = Boolean(currentLlmSettings?.model);
+      writeSnapshot({
+        ...snapshot,
+        meetingSummary: fallback,
+        meetingSummaryStatus: canUseLlm ? "refining" : "rules",
+        meetingSummaryError: null,
+        meetingSummaryStale: false,
+        meetingSummaryStartedAt: startedAt,
+      });
+      if (!canUseLlm || !currentLlmSettings) return;
+
+      try {
+        const refined = await refineMeetingSummaryWithLlm(snapshot.segmentArchive, fallback, currentLlmSettings);
+        if (requestEpoch !== summaryEpoch || requestSessionEpoch !== sessionEpoch) return;
+        writeSnapshot({
+          ...snapshot,
+          meetingSummary: refined,
+          meetingSummaryStatus: "llm",
+          meetingSummaryError: null,
+          meetingSummaryStale: false,
+          meetingSummaryStartedAt: startedAt,
+        });
+      } catch (error) {
+        if (requestEpoch !== summaryEpoch || requestSessionEpoch !== sessionEpoch) return;
+        writeSnapshot({
+          ...snapshot,
+          meetingSummary: fallback,
+          meetingSummaryStatus: "error",
+          meetingSummaryError: error instanceof Error ? error.message : String(error),
+          meetingSummaryStale: false,
+          meetingSummaryStartedAt: startedAt,
+        });
+      }
+    },
+    renameMeetingSummaryNode(nodeId, title) {
+      if (!snapshot.meetingSummary) return;
+      writeSnapshot({
+        ...snapshot,
+        meetingSummary: renameMeetingSummaryNode(snapshot.meetingSummary, nodeId, title),
+      });
+    },
     reset() {
       titleRefineQueue = [];
       sessionEpoch += 1;
+      summaryEpoch += 1;
       writeSnapshot({
         engineState: createInitialTopicEngineState(),
         bufferText: "",
         logs: [],
         segmentArchive: [],
+        meetingSummary: null,
+        meetingSummaryStatus: "idle",
+        meetingSummaryError: null,
+        meetingSummaryStale: false,
+        meetingSummaryStartedAt: null,
       });
     },
     setFocusLocked(locked) {

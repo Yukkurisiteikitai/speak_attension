@@ -1,5 +1,6 @@
 node_modules/
 dist/
+docs/plans/
 .vite/
 npm-debug.log*
 docs/sample.md

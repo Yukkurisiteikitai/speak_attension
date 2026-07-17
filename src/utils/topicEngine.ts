@@ -53,6 +53,7 @@ export function createInitialTopicEngineState(now = Date.now()): TopicEngineStat
     graph: meetingGraph,
     currentTopicId: null,
     evidenceByTopicId: new Map(),
+    segments: [],
   });
   return {
     meetingGraph,

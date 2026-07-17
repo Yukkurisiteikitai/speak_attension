@@ -1,10 +1,13 @@
-import { Mic, RefreshCw, Square } from "lucide-react";
+import { Mic, RefreshCw, Sparkles, Square } from "lucide-react";
 
 type ControlPanelProps = {
   error: string | null;
   isListening: boolean;
   isSupported: boolean;
   onReset: () => void;
+  onOrganize: () => void;
+  canOrganize: boolean;
+  isOrganizing: boolean;
   onStart: () => void;
   onStop: () => void;
   statusLabel: string;
@@ -15,6 +18,9 @@ export function ControlPanel({
   isListening,
   isSupported,
   onReset,
+  onOrganize,
+  canOrganize,
+  isOrganizing,
   onStart,
   onStop,
   statusLabel,
@@ -36,6 +42,11 @@ export function ControlPanel({
           <RefreshCw size={18} />
         </button>
       </div>
+
+      <button className="primary-button organize-button" type="button" onClick={onOrganize} disabled={!canOrganize || isOrganizing}>
+        <Sparkles size={18} />
+        <span>{isOrganizing ? "会議を整理中…" : "会議を整理"}</span>
+      </button>
 
       <div className={`status-pill ${isListening ? "active" : ""}`}>{statusLabel}</div>
       {error ? <div className="error-message">{error}</div> : null}

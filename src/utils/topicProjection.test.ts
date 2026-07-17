@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createInitialMeetingGraph, projectGraphToFlow, estimateTopicNodeHeight } from "./topicProjection";
+import { createInitialMeetingGraph, createTopicEdge, projectGraphToFlow, estimateTopicNodeHeight } from "./topicProjection";
 import type { GraphTopicNodeData, MeetingGraph, TopicNode } from "../types/topic";
 
 function createTestTopic(
@@ -82,8 +82,19 @@ describe("estimateTopicNodeHeight", () => {
   });
 });
 
-describe("projectGraphToFlow - topic grid layout", () => {
-  it("produces non-overlapping nodes for 6+ topics in multi-row grid", () => {
+function createTestSegment(id: string, text: string, topicId: string, createdAt: number) {
+  return {
+    id,
+    text,
+    createdAt,
+    source: "manual",
+    matchedTopicIds: [topicId],
+    analysis: {},
+  } as import("../types/topic").AnalyzedSegment;
+}
+
+describe("projectGraphToFlow - expandable meeting mind map", () => {
+  it("stacks topic branches without overlaps for 6+ topics", () => {
     const graph: MeetingGraph = createInitialMeetingGraph("Test Meeting");
 
     // Add 6 topics to create multi-row layout
@@ -104,12 +115,12 @@ describe("projectGraphToFlow - topic grid layout", () => {
       evidenceByTopicId: new Map(),
     });
 
-    // Collect AABB rectangles for all nodes except root
+    // Topic branches share one column and need enough vertical room for long labels.
     const rects: Rect[] = result.nodes
       .filter((node) => node.id !== graph.rootTopicId)
       .map((node) => {
         const data = node.data as GraphTopicNodeData;
-        const width = 200; // approximate topic node width
+        const width = 270;
         const height = estimateTopicNodeHeight(data);
         return {
           x: node.position.x,
@@ -122,7 +133,7 @@ describe("projectGraphToFlow - topic grid layout", () => {
     assertNoOverlaps(rects);
   });
 
-  it("guarantees zero overlaps with gap nodes in separate column", () => {
+  it("does not create gap nodes; gaps stay on their topic while structural branches remain visible", () => {
     const graph: MeetingGraph = createInitialMeetingGraph("Test Meeting");
 
     const topics = [
@@ -133,7 +144,8 @@ describe("projectGraphToFlow - topic grid layout", () => {
 
     graph.nodes = [graph.nodes[0], ...topics];
 
-    // Add gaps for each topic
+    // Gaps still exist on the graph (surfaced in the Meeting Gaps panel), but should
+    // never turn into graph nodes/edges - that's what caused the line clutter.
     graph.gaps = [
       {
         id: "gap-1-a",
@@ -142,16 +154,6 @@ describe("projectGraphToFlow - topic grid layout", () => {
         title: "Gap 1.1",
         detail: "Detail",
         severity: "high",
-        createdAt: 0,
-        closedAt: null,
-      },
-      {
-        id: "gap-1-b",
-        topicId: "t1",
-        type: "missing_reason",
-        title: "Gap 1.2",
-        detail: "Detail",
-        severity: "medium",
         createdAt: 0,
         closedAt: null,
       },
@@ -165,16 +167,6 @@ describe("projectGraphToFlow - topic grid layout", () => {
         createdAt: 0,
         closedAt: null,
       },
-      {
-        id: "gap-3-a",
-        topicId: "t3",
-        type: "missing_decision",
-        title: "Gap 3.1",
-        detail: "Detail",
-        severity: "low",
-        createdAt: 0,
-        closedAt: null,
-      },
     ];
 
     const result = projectGraphToFlow({
@@ -183,28 +175,26 @@ describe("projectGraphToFlow - topic grid layout", () => {
       evidenceByTopicId: new Map(),
     });
 
-    // Collect AABB rectangles for all nodes
-    const rects: Rect[] = result.nodes
-      .filter((node) => node.id !== graph.rootTopicId)
-      .map((node) => {
-        const data = node.data as GraphTopicNodeData;
-        const width = data.kind === "gap" ? 180 : 200;
-        const height = data.kind === "gap" ? 60 : estimateTopicNodeHeight(data);
-        return {
-          x: node.position.x,
-          y: node.position.y,
-          width,
-          height,
-        };
-      });
+    expect(result.nodes).toHaveLength(4); // root + 3 topics, no gap nodes
+    expect(result.nodes.every((node) => (node.data as GraphTopicNodeData).kind === "root" || (node.data as GraphTopicNodeData).kind === "topic")).toBe(true);
+    expect(result.edges).toHaveLength(3); // root-to-topic branches only
+    expect(result.edges.every((edge) => edge.data?.relation === "parent")).toBe(true);
+  });
 
-    assertNoOverlaps(rects);
+  it("always draws a root-to-topic branch, even when the stored parent edge is absent", () => {
+    const graph: MeetingGraph = createInitialMeetingGraph("Test Meeting");
+    const topic = createTestTopic("t1", "Topic 1");
+    graph.nodes = [graph.nodes[0], topic];
+    graph.edges = [createTopicEdge(graph.rootTopicId, topic.id, "parent")];
 
-    // Verify gaps are in a separate column (x >= 1000)
-    const gapNodes = result.nodes.filter((node) => (node.data as GraphTopicNodeData).kind === "gap");
-    gapNodes.forEach((node) => {
-      expect(node.position.x).toBeGreaterThanOrEqual(1000);
+    const result = projectGraphToFlow({
+      graph,
+      currentTopicId: null,
+      evidenceByTopicId: new Map(),
     });
+
+    expect(result.edges).toHaveLength(1);
+    expect(result.edges[0]).toMatchObject({ source: graph.rootTopicId, target: topic.id, data: { relation: "parent" } });
   });
 
   it("is deterministic for the same input", () => {
@@ -245,7 +235,7 @@ describe("projectGraphToFlow - topic grid layout", () => {
     expect(result1.nodes.map((n) => n.position)).toEqual(result2.nodes.map((n) => n.position));
   });
 
-  it("maintains 3-column grid layout", () => {
+  it("keeps all top-level topics in one branch column", () => {
     const graph: MeetingGraph = createInitialMeetingGraph("Test Meeting");
 
     const topics = Array.from({ length: 6 }, (_, i) => createTestTopic(`t${i + 1}`, `Topic ${i + 1}`));
@@ -259,17 +249,40 @@ describe("projectGraphToFlow - topic grid layout", () => {
 
     const topicNodes = result.nodes.filter((n) => (n.data as GraphTopicNodeData).kind === "topic");
 
-    // Verify 3-column layout: topics 0-2 should have same X with 300px spacing
-    const x0 = topicNodes[0].position.x;
-    const x1 = topicNodes[1].position.x;
-    const x2 = topicNodes[2].position.x;
+    expect(new Set(topicNodes.map((node) => node.position.x)).size).toBe(1);
+    expect(topicNodes.slice(1).every((node, index) => node.position.y > topicNodes[index].position.y)).toBe(true);
+  });
 
-    expect(x1 - x0).toBeCloseTo(300, 0);
-    expect(x2 - x1).toBeCloseTo(300, 0);
+  it("adds matched utterances in chronological order and removes them when their topic is collapsed", () => {
+    const graph = createInitialMeetingGraph("Test Meeting");
+    const topic = createTestTopic("t1", "予算の見直し");
+    graph.nodes = [graph.nodes[0], topic];
+    const segments = [
+      createTestSegment("seg-new", "次回までに予算案をまとめます", topic.id, 30),
+      createTestSegment("seg-old", "今年の予算を確認しましょう", topic.id, 10),
+    ];
 
-    // Topics 3-5 should have same X coordinates as 0-2
-    expect(topicNodes[3].position.x).toBeCloseTo(x0, 0);
-    expect(topicNodes[4].position.x).toBeCloseTo(x1, 0);
-    expect(topicNodes[5].position.x).toBeCloseTo(x2, 0);
+    const expanded = projectGraphToFlow({
+      graph,
+      currentTopicId: topic.id,
+      evidenceByTopicId: new Map(),
+      segments,
+    });
+    const utterances = expanded.nodes.filter((node) => (node.data as GraphTopicNodeData).kind === "utterance");
+    expect(utterances.map((node) => (node.data as GraphTopicNodeData).label)).toEqual([
+      "今年の予算を確認しましょう",
+      "次回までに予算案をまとめます",
+    ]);
+    expect(expanded.edges.filter((edge) => edge.data?.relation === "utterance")).toHaveLength(2);
+
+    const collapsed = projectGraphToFlow({
+      graph,
+      currentTopicId: topic.id,
+      evidenceByTopicId: new Map(),
+      segments,
+      collapsedTopicIds: new Set([topic.id]),
+    });
+    expect(collapsed.nodes.some((node) => (node.data as GraphTopicNodeData).kind === "utterance")).toBe(false);
+    expect((collapsed.nodes.find((node) => node.id === topic.id)?.data as GraphTopicNodeData).isCollapsed).toBe(true);
   });
 });
