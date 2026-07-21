@@ -11,7 +11,7 @@ function keyword(id: string, label: string, overrides: Partial<IdeaKeyword> = {}
     utteranceIds: [`utt-${id}`],
     firstMentionedAt: 0,
     groupId: null,
-    picked: false,
+    decision: "hold",
     ...overrides,
   };
 }
@@ -44,10 +44,10 @@ describe("estimateIdeaNodeSize", () => {
     expect(long.width).toBeGreaterThan(short.width);
   });
 
-  it("reserves the pick-mark badge width regardless of mentionCount", () => {
-    const unpicked = estimateIdeaNodeSize("通知", "keyword", { mentionCount: 1 });
+  it("reserves the decision badge width regardless of mentionCount", () => {
+    const singleMention = estimateIdeaNodeSize("通知", "keyword", { mentionCount: 1 });
     const mentioned = estimateIdeaNodeSize("通知", "keyword", { mentionCount: 5 });
-    expect(mentioned.width).toBeGreaterThan(unpicked.width);
+    expect(mentioned.width).toBeGreaterThan(singleMention.width);
   });
 });
 

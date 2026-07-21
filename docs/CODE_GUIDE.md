@@ -36,6 +36,8 @@
 -> IdeaModeView
 ```
 
+会議整理マップで課題・未解決項目を選んだ場合は、`createIdeaSessionFromMeetingSelection` が根拠発言を重複排除し、会議内の出典参照を付けた capture フェーズのセッションを作る。`App.tsx` が保持するアイデアストアへそのセッションを渡してからモードを切り替える。
+
 ### 会議モード
 
 ```txt
@@ -45,7 +47,7 @@ speech / manual text / replay
 -> processTopicSegment
 -> topic extraction + scoring + coverage + lifecycle
 -> MeetingGraph update
--> TopicInspector / TopicGraph render
+-> TopicInspector / TopicGraph render（議題枝を左右へバランス配置）
 -> (明示的な「会議を整理」) meetingSynthesis + local LLM refinement
 -> MeetingSummaryGraph render
 ```
@@ -58,7 +60,7 @@ speech / manual text / replay
 
 ### `src/utils/ideaSession.ts`
 
-アイデア出しセッションの状態遷移、キーワードと発話の対応、Markdown/JSON エクスポート。
+アイデア出しセッションの状態遷移、採用・保留・却下、グループ名編集、キーワードと発話の対応、会議整理からの引継ぎ、Markdown/JSON エクスポート。
 
 ### `src/utils/ideaExtraction.ts`
 
@@ -79,6 +81,10 @@ speech / manual text / replay
 ### `src/components/IdeaModeView.tsx`
 
 アイデアマップ、音声・手入力、グループ化、採用選択、エクスポート UI。
+
+### `src/components/MapViewportControls.tsx`
+
+3種類の React Flow マップで共用するズーム操作と「全体を表示」。`fitKey` が変わる初回・フェーズ切替・再整理時だけ自動で全体表示し、通常のデータ追加ではユーザーの閲覧位置を維持する。
 
 ### `src/hooks/useTopicEngine.ts`
 
@@ -112,6 +118,8 @@ Coverage mutation, topic closure, and important mention creation.
 
 Diagnostic side panel. It shows current topic, gaps, coverage, latest analysis, and the developer drawer.
 
+会議画面の右レールは `App.tsx` で「進行」「分析」に分け、手入力・リプレイ・発話ログは初期状態で閉じた入力ドックにまとめる。非表示パネルもマウントを維持するため、入力途中の内容やレポート状態はタブ切替で失われない。
+
 ### `src/lib/download.ts`
 
 ブラウザーでのファイルダウンロード補助。DOM 副作用を持つため `src/utils` ではなく `src/lib` に置く。
@@ -134,7 +142,7 @@ Diagnostic side panel. It shows current topic, gaps, coverage, latest analysis, 
 | --- | --- |
 | キーワード抽出・グループ化・セッション出力 | `src/utils/ideaExtraction.test.ts`、`ideaGrouping.test.ts`、`ideaSession.test.ts` |
 | 放射状・マインドマップの座標 | `src/utils/ideaLayout.test.ts`。長い日本語ラベル、複数リング、未グループ化キーワードを確認する。 |
-| 会議のトピック・Focus・レポート | 対応する `src/utils/*.test.ts` と `src/hooks/topicEngineStore.test.ts`。リプレイ用の代表発話は各テストに併置されている。 |
+| 会議のトピック・Focus・レポート・左右レイアウト | 対応する `src/utils/*.test.ts` と `src/hooks/topicEngineStore.test.ts`。`topicProjection.test.ts` では左右配置、長短ラベル、発言順、Handle方向を確認する。リプレイ用の代表発話は各テストに併置されている。 |
 | 終了時の整理マップ | `meetingSynthesis.test.ts`、`llmMeetingSynthesis.test.ts`、`topicEngineStore.test.ts`。相槌除外、根拠発言ID、LM Studio失敗時の規則ベース維持を確認する。 |
 | リプレイ JSON の入力形式 | `src/utils/transcript-importer.test.ts`。入力形式または検証規則を変えるときに更新する。 |
 

@@ -1,8 +1,9 @@
-import { Background, Controls, Handle, Position, ReactFlow, useReactFlow, type NodeProps } from "@xyflow/react";
+import { Background, Handle, Position, ReactFlow, type NodeProps } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import type { AnalyzedSegment, GraphTopicNodeData, MeetingGraph, TopicGraphNode } from "../types/topic";
 import { projectGraphToFlow } from "../utils/topicProjection";
+import { MapViewportControls } from "./MapViewportControls";
 
 type TopicGraphProps = {
   currentTopicId: string | null;
@@ -27,10 +28,11 @@ const stateLabels = {
 } as const;
 
 function TopicNode({ data }: NodeProps<TopicGraphNode & { data: GraphTopicNodeData }>) {
+  const isLeftBranch = data.branchSide === "left";
   if (data.kind === "utterance") {
     return (
       <div className="topic-node kind-utterance">
-        <Handle type="target" position={Position.Left} />
+        <Handle type="target" id="parent" position={isLeftBranch ? Position.Right : Position.Left} />
         <div className="utterance-node-meta">
           <span>発言 {String(data.sequence ?? 1).padStart(2, "0")}</span>
           {data.sourceLabel ? <span>{data.sourceLabel}</span> : null}
@@ -43,7 +45,14 @@ function TopicNode({ data }: NodeProps<TopicGraphNode & { data: GraphTopicNodeDa
   const canToggle = data.kind === "topic" && Boolean(data.childCount);
   return (
     <div className={`topic-node kind-${data.kind} ${data.isActive ? "is-active" : ""}`}>
-      {data.kind !== "root" ? <Handle type="target" position={Position.Left} /> : null}
+      {data.kind === "root" ? (
+        <>
+          <Handle type="source" id="parent-left" position={Position.Left} />
+          <Handle type="source" id="parent-right" position={Position.Right} />
+        </>
+      ) : (
+        <Handle type="target" id="parent" position={isLeftBranch ? Position.Right : Position.Left} />
+      )}
       <div className="topic-node-head">
         <strong>{data.label}</strong>
         {typeof data.mentionCount === "number" ? <span>発言 {data.mentionCount}</span> : null}
@@ -72,7 +81,9 @@ function TopicNode({ data }: NodeProps<TopicGraphNode & { data: GraphTopicNodeDa
           会話 {data.childCount}件
         </button>
       ) : null}
-      <Handle type="source" position={Position.Right} />
+      {data.kind !== "root" ? (
+        <Handle type="source" id="utterances" position={isLeftBranch ? Position.Left : Position.Right} />
+      ) : null}
     </div>
   );
 }
@@ -80,21 +91,6 @@ function TopicNode({ data }: NodeProps<TopicGraphNode & { data: GraphTopicNodeDa
 const nodeTypes = {
   topic: TopicNode,
 };
-
-function FitMindmapOnChange({ layoutKey }: { layoutKey: string }) {
-  const { fitView } = useReactFlow();
-  const didFit = useRef(false);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void fitView({ duration: didFit.current ? 280 : 0, padding: 0.16 });
-      didFit.current = true;
-    }, 50);
-    return () => window.clearTimeout(timer);
-  }, [fitView, layoutKey]);
-
-  return null;
-}
 
 export function TopicGraph({ currentTopicId, meetingGraph, segments }: TopicGraphProps) {
   const [collapsedTopicIds, setCollapsedTopicIds] = useState<Set<string>>(() => new Set());
@@ -129,8 +125,6 @@ export function TopicGraph({ currentTopicId, meetingGraph, segments }: TopicGrap
       ),
     };
   }, [collapsedTopicIds, currentTopicId, meetingGraph, segments]);
-  const layoutKey = nodes.map((node) => node.id).join("|");
-
   return (
     <section className="graph-panel meeting-mindmap" aria-label="会議のマインドマップ">
       <div className="graph-title">
@@ -151,7 +145,6 @@ export function TopicGraph({ currentTopicId, meetingGraph, segments }: TopicGrap
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
-        fitView
         minZoom={0.2}
         maxZoom={1.5}
         nodesDraggable={false}
@@ -160,9 +153,8 @@ export function TopicGraph({ currentTopicId, meetingGraph, segments }: TopicGrap
           if (node.data.kind === "topic" && node.data.childCount) toggleTopic(node.id);
         }}
       >
-        <FitMindmapOnChange layoutKey={layoutKey} />
         <Background gap={24} color="#e2e7e3" />
-        <Controls showInteractive={false} />
+        <MapViewportControls fitKey="meeting-live" />
       </ReactFlow>
     </section>
   );

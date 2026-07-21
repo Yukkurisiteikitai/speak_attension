@@ -1,8 +1,9 @@
-import { Background, Controls, Handle, Position, ReactFlow, type Edge, type Node, type NodeProps } from "@xyflow/react";
+import { Background, Handle, Position, ReactFlow, type Edge, type Node, type NodeProps } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useEffect, useMemo, useState } from "react";
 import type { AnalyzedSegment, MeetingSummary, MeetingSummaryCategory, MeetingSummaryStatus } from "../types/topic";
 import { MEETING_SUMMARY_CATEGORY_LABELS, MEETING_SUMMARY_CATEGORY_ORDER } from "../utils/meetingSynthesis";
+import { MapViewportControls } from "./MapViewportControls";
 
 type SummaryNodeKind = "root" | "topic" | "category" | "item" | "evidence";
 type SummaryNodeData = {
@@ -13,10 +14,16 @@ type SummaryNodeData = {
   isCollapsed?: boolean;
   onToggle?: (nodeId: string) => void;
   onRename?: (nodeId: string, title: string) => void;
+  selectableForIdeas?: boolean;
+  selectedForIdeas?: boolean;
+  onIdeaSelectionChange?: (nodeId: string) => void;
 };
 
 type SummaryNode = Node<SummaryNodeData, "summary">;
-const NODE_HEIGHT: Record<SummaryNodeKind, number> = { root: 82, topic: 72, category: 54, item: 70, evidence: 76 };
+// Item nodes may contain a three-line Japanese title, selection checkbox and
+// evidence toggle. Reserve their full rendered footprint so adjacent branches
+// stay clear even for representative long labels.
+const NODE_HEIGHT: Record<SummaryNodeKind, number> = { root: 82, topic: 72, category: 54, item: 138, evidence: 76 };
 const NODE_WIDTH: Record<SummaryNodeKind, number> = { root: 240, topic: 230, category: 180, item: 270, evidence: 330 };
 
 function SummaryNodeView({ data }: NodeProps<SummaryNode>) {
@@ -28,7 +35,7 @@ function SummaryNodeView({ data }: NodeProps<SummaryNode>) {
     if (data.nodeId) data.onRename?.(data.nodeId, title);
   };
   return (
-    <div className={`summary-node summary-${data.kind}`}>
+    <div className={`summary-node summary-${data.kind}${data.selectedForIdeas ? " is-idea-selected" : ""}`}>
       {data.kind !== "root" ? <Handle type="target" position={Position.Left} /> : null}
       <div className="summary-node-head">
         {editing ? (
@@ -47,6 +54,16 @@ function SummaryNodeView({ data }: NodeProps<SummaryNode>) {
         )}
         {canRename && !editing ? <button type="button" onClick={() => setEditing(true)}>編集</button> : null}
       </div>
+      {data.selectableForIdeas && data.nodeId ? (
+        <label className="summary-idea-select" onClick={(event) => event.stopPropagation()}>
+          <input
+            type="checkbox"
+            checked={Boolean(data.selectedForIdeas)}
+            onChange={() => data.onIdeaSelectionChange?.(data.nodeId!)}
+          />
+          アイデア出しへ送る
+        </label>
+      ) : null}
       {canToggle ? (
         <button
           type="button"
@@ -63,7 +80,15 @@ function SummaryNodeView({ data }: NodeProps<SummaryNode>) {
 
 const nodeTypes = { summary: SummaryNodeView };
 
-type Tree = { id: string; label: string; kind: SummaryNodeKind; children: Tree[]; childCount?: number; editable?: boolean };
+type Tree = {
+  id: string;
+  label: string;
+  kind: SummaryNodeKind;
+  children: Tree[];
+  childCount?: number;
+  editable?: boolean;
+  selectableForIdeas?: boolean;
+};
 
 function buildTree(summary: MeetingSummary, collapsedIds: Set<string>, segmentById: Map<string, AnalyzedSegment>): Tree {
   return {
@@ -86,6 +111,7 @@ function buildTree(summary: MeetingSummary, collapsedIds: Set<string>, segmentBy
             label: item.title,
             kind: "item" as const,
             editable: true,
+            selectableForIdeas: item.category === "issue" || item.category === "unresolved",
             childCount: evidence.length,
             children: collapsedIds.has(item.id) ? [] : evidence,
           };
@@ -110,7 +136,14 @@ function buildTree(summary: MeetingSummary, collapsedIds: Set<string>, segmentBy
   };
 }
 
-function projectTree(tree: Tree, collapsedIds: Set<string>, onToggle: (id: string) => void, onRename: (id: string, title: string) => void) {
+function projectTree(
+  tree: Tree,
+  collapsedIds: Set<string>,
+  selectedIdeaItemIds: Set<string>,
+  onToggle: (id: string) => void,
+  onRename: (id: string, title: string) => void,
+  onIdeaSelectionChange: (id: string) => void,
+) {
   const nodes: SummaryNode[] = [];
   const edges: Edge[] = [];
   const gap = 22;
@@ -122,7 +155,18 @@ function projectTree(tree: Tree, collapsedIds: Set<string>, onToggle: (id: strin
       id: node.id,
       type: "summary",
       position: { x: 40 + depth * 310, y: top + (height - NODE_HEIGHT[node.kind]) / 2 },
-      data: { label: node.label, kind: node.kind, nodeId: node.id, childCount: node.childCount ?? (node.children.length || undefined), isCollapsed: collapsedIds.has(node.id), onToggle, onRename },
+      data: {
+        label: node.label,
+        kind: node.kind,
+        nodeId: node.id,
+        childCount: node.childCount ?? (node.children.length || undefined),
+        isCollapsed: collapsedIds.has(node.id),
+        onToggle,
+        onRename,
+        selectableForIdeas: node.selectableForIdeas,
+        selectedForIdeas: selectedIdeaItemIds.has(node.id),
+        onIdeaSelectionChange,
+      },
       draggable: false,
     });
     let childTop = top + (height - node.children.reduce((sum, child, index) => sum + measure(child) + (index ? gap : 0), 0)) / 2;
@@ -147,6 +191,7 @@ type MeetingSummaryGraphProps = {
   onBack: () => void;
   onRefresh: () => void;
   onRename: (nodeId: string, title: string) => void;
+  onStartIdeaSession: (selectedItemIds: string[]) => void;
 };
 
 function estimateOrganizationSeconds(segmentCount: number): number {
@@ -182,9 +227,13 @@ function OrganizationProgress({ startedAt, status, segmentCount }: { startedAt: 
   );
 }
 
-export function MeetingSummaryGraph({ summary, status, error, stale, startedAt, segments, onBack, onRefresh, onRename }: MeetingSummaryGraphProps) {
+export function MeetingSummaryGraph({ summary, status, error, stale, startedAt, segments, onBack, onRefresh, onRename, onStartIdeaSession }: MeetingSummaryGraphProps) {
   const [collapsedIds, setCollapsedIds] = useState<Set<string>>(() => new Set());
-  useEffect(() => setCollapsedIds(new Set(summary.topics.flatMap((topic) => topic.items.map((item) => item.id)))), [summary.generatedAt]);
+  const [selectedIdeaItemIds, setSelectedIdeaItemIds] = useState<Set<string>>(() => new Set());
+  useEffect(() => {
+    setCollapsedIds(new Set(summary.topics.flatMap((topic) => topic.items.map((item) => item.id))));
+    setSelectedIdeaItemIds(new Set());
+  }, [summary.generatedAt]);
   const segmentById = useMemo(() => new Map(segments.map((segment) => [segment.id, segment])), [segments]);
   const toggle = (nodeId: string) => setCollapsedIds((current) => {
     const next = new Set(current);
@@ -192,19 +241,47 @@ export function MeetingSummaryGraph({ summary, status, error, stale, startedAt, 
     else next.add(nodeId);
     return next;
   });
-  const { nodes, edges } = useMemo(() => projectTree(buildTree(summary, collapsedIds, segmentById), collapsedIds, toggle, onRename), [collapsedIds, onRename, segmentById, summary]);
+  const toggleIdeaItem = (nodeId: string) => setSelectedIdeaItemIds((current) => {
+    const next = new Set(current);
+    if (next.has(nodeId)) next.delete(nodeId);
+    else next.add(nodeId);
+    return next;
+  });
+  const { nodes, edges } = useMemo(
+    () => projectTree(
+      buildTree(summary, collapsedIds, segmentById),
+      collapsedIds,
+      selectedIdeaItemIds,
+      toggle,
+      onRename,
+      toggleIdeaItem,
+    ),
+    [collapsedIds, onRename, segmentById, selectedIdeaItemIds, summary],
+  );
   const sourceLabel = status === "refining" ? "規則で整理済み・LM Studioで整え中…" : status === "llm" ? "LM Studioで整理" : status === "error" ? "規則で整理（LM Studioは利用できませんでした）" : "規則で整理";
   return (
     <section className="graph-panel meeting-summary-map" aria-label="会議終了時の整理マップ">
       <div className="graph-title">
         <div><h2>会議の整理マップ</h2><span>{sourceLabel}</span></div>
-        <div className="summary-actions"><button type="button" onClick={onBack}>ライブ表示に戻る</button><button type="button" onClick={onRefresh}>再整理</button></div>
+        <div className="summary-actions">
+          <button type="button" onClick={onBack}>ライブ表示に戻る</button>
+          <button type="button" onClick={onRefresh}>再整理</button>
+          <button
+            type="button"
+            className="summary-start-ideas"
+            disabled={selectedIdeaItemIds.size === 0}
+            onClick={() => onStartIdeaSession([...selectedIdeaItemIds])}
+          >
+            選択した課題でアイデア出し ({selectedIdeaItemIds.size})
+          </button>
+        </div>
       </div>
       {stale ? <p className="summary-stale">新しい発言があります。再整理すると反映されます。</p> : null}
       {error ? <p className="summary-error">{error}</p> : null}
       <OrganizationProgress startedAt={startedAt} status={status} segmentCount={segments.length} />
-      <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} fitView minZoom={0.15} maxZoom={1.5} nodesDraggable={false} proOptions={{ hideAttribution: true }}>
-        <Background gap={24} color="#e2e7e3" /><Controls showInteractive={false} />
+      <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} minZoom={0.15} maxZoom={1.5} nodesDraggable={false} proOptions={{ hideAttribution: true }}>
+        <Background gap={24} color="#e2e7e3" />
+        <MapViewportControls fitKey={summary.generatedAt} />
       </ReactFlow>
     </section>
   );

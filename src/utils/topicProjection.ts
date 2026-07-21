@@ -87,13 +87,29 @@ export function estimateTopicNodeHeight(data: GraphTopicNodeData): number {
   return Math.ceil(totalHeight * 1.2); // Extra 20% buffer for CSS rendering variations
 }
 
-const ROOT_X = 40;
-const TOPIC_X = 390;
-const UTTERANCE_X = 750;
+const ROOT_WIDTH = 300;
+const TOPIC_WIDTH = 270;
+const UTTERANCE_WIDTH = 320;
+const ROOT_X = -ROOT_WIDTH / 2;
 const INITIAL_Y = 80;
 const BRANCH_GAP = 42;
 const UTTERANCE_GAP = 14;
 const ROOT_HEIGHT = 122;
+const ROOT_TO_TOPIC_GAP = 160;
+const TOPIC_TO_UTTERANCE_GAP = 110;
+
+type BranchSide = NonNullable<GraphTopicNodeData["branchSide"]>;
+
+type ProjectedTopicBranch = {
+  node: TopicNode;
+  topicData: GraphTopicNodeData;
+  topicHeight: number;
+  visibleSegments: AnalyzedSegment[];
+  utteranceHeights: number[];
+  utteranceBlockHeight: number;
+  branchHeight: number;
+  side: BranchSide;
+};
 
 function sourceLabel(source: AnalyzedSegment["source"]): string {
   if (source === "speech") return "音声";
@@ -148,9 +164,7 @@ export function projectGraphToFlow(input: {
 
   const flowNodes: TopicGraphNode[] = [rootNode];
   const flowEdges: TopicGraphEdge[] = [];
-  let cursorY = INITIAL_Y;
-
-  topicNodes.forEach((node) => {
+  const branches: ProjectedTopicBranch[] = topicNodes.map((node) => {
     const branchSegments = topicSegments.get(node.id) ?? [];
     const isCollapsed = collapsedTopicIds.has(node.id);
     const visibleSegments = isCollapsed ? [] : branchSegments;
@@ -172,54 +186,97 @@ export function projectGraphToFlow(input: {
     );
     const utteranceBlockHeight = utteranceHeights.reduce((sum, height, index) => sum + height + (index ? UTTERANCE_GAP : 0), 0);
     const branchHeight = Math.max(topicHeight, utteranceBlockHeight);
-    const topicY = cursorY + (branchHeight - topicHeight) / 2;
-    const utteranceStartY = cursorY + (branchHeight - utteranceBlockHeight) / 2;
 
-    flowNodes.push({
-      id: node.id,
-      type: "topic",
-      position: { x: TOPIC_X, y: topicY },
-      data: topicData,
-      draggable: false,
-    });
-    flowEdges.push({
-      id: `${input.graph.rootTopicId}-parent-${node.id}`,
-      source: input.graph.rootTopicId,
-      target: node.id,
-      type: "smoothstep",
-      data: { relation: "parent" },
-    });
+    return {
+      node,
+      topicData,
+      topicHeight,
+      visibleSegments,
+      utteranceHeights,
+      utteranceBlockHeight,
+      branchHeight,
+      side: "right",
+    };
+  });
 
-    let utteranceY = utteranceStartY;
-    visibleSegments.forEach((segment, index) => {
-      const label = summarizeTranscriptForMindmap(segment.text);
-      const utteranceHeight = utteranceHeights[index];
-      const utteranceNodeId = `utterance-${node.id}-${segment.id}`;
+  const sideHeights: Record<BranchSide, number> = { left: 0, right: 0 };
+  for (const branch of branches) {
+    const side: BranchSide = sideHeights.right <= sideHeights.left ? "right" : "left";
+    branch.side = side;
+    sideHeights[side] += (sideHeights[side] > 0 ? BRANCH_GAP : 0) + branch.branchHeight;
+  }
+
+  const mapHeight = Math.max(ROOT_HEIGHT, sideHeights.left, sideHeights.right);
+  const centerY = INITIAL_Y + mapHeight / 2;
+  rootNode.position.y = centerY - ROOT_HEIGHT / 2;
+
+  for (const side of ["left", "right"] as const) {
+    const sideBranches = branches.filter((branch) => branch.side === side);
+    let cursorY = centerY - sideHeights[side] / 2;
+
+    for (const branch of sideBranches) {
+      const { node, topicData, topicHeight, visibleSegments, utteranceHeights, utteranceBlockHeight, branchHeight } = branch;
+      const topicY = cursorY + (branchHeight - topicHeight) / 2;
+      const utteranceStartY = cursorY + (branchHeight - utteranceBlockHeight) / 2;
+      const topicX = side === "right"
+        ? ROOT_X + ROOT_WIDTH + ROOT_TO_TOPIC_GAP
+        : ROOT_X - ROOT_TO_TOPIC_GAP - TOPIC_WIDTH;
+      const utteranceX = side === "right"
+        ? topicX + TOPIC_WIDTH + TOPIC_TO_UTTERANCE_GAP
+        : topicX - TOPIC_TO_UTTERANCE_GAP - UTTERANCE_WIDTH;
+
+      topicData.branchSide = side;
       flowNodes.push({
-        id: utteranceNodeId,
+        id: node.id,
         type: "topic",
-        position: { x: UTTERANCE_X, y: utteranceY },
-        data: {
-          label,
-          kind: "utterance",
-          states: [],
-          sequence: index + 1,
-          sourceLabel: sourceLabel(segment.source),
-          topicId: node.id,
-        },
+        position: { x: topicX, y: topicY },
+        data: topicData,
         draggable: false,
       });
       flowEdges.push({
-        id: `${node.id}-utterance-${segment.id}`,
-        source: node.id,
-        target: utteranceNodeId,
+        id: `${input.graph.rootTopicId}-parent-${node.id}`,
+        source: input.graph.rootTopicId,
+        sourceHandle: `parent-${side}`,
+        target: node.id,
+        targetHandle: "parent",
         type: "smoothstep",
-        data: { relation: "utterance" },
+        data: { relation: "parent" },
       });
-      utteranceY += utteranceHeight + UTTERANCE_GAP;
-    });
-    cursorY += branchHeight + BRANCH_GAP;
-  });
+
+      let utteranceY = utteranceStartY;
+      visibleSegments.forEach((segment, index) => {
+        const label = summarizeTranscriptForMindmap(segment.text);
+        const utteranceHeight = utteranceHeights[index];
+        const utteranceNodeId = `utterance-${node.id}-${segment.id}`;
+        flowNodes.push({
+          id: utteranceNodeId,
+          type: "topic",
+          position: { x: utteranceX, y: utteranceY },
+          data: {
+            label,
+            kind: "utterance",
+            states: [],
+            sequence: index + 1,
+            sourceLabel: sourceLabel(segment.source),
+            topicId: node.id,
+            branchSide: side,
+          },
+          draggable: false,
+        });
+        flowEdges.push({
+          id: `${node.id}-utterance-${segment.id}`,
+          source: node.id,
+          sourceHandle: "utterances",
+          target: utteranceNodeId,
+          targetHandle: "parent",
+          type: "smoothstep",
+          data: { relation: "utterance" },
+        });
+        utteranceY += utteranceHeight + UTTERANCE_GAP;
+      });
+      cursorY += branchHeight + BRANCH_GAP;
+    }
+  }
 
   // Extra relations are preserved when the engine explicitly has evidence for them.
   input.graph.edges
@@ -233,9 +290,6 @@ export function projectGraphToFlow(input: {
         data: { relation: edge.type },
       });
     });
-
-  const mapHeight = Math.max(ROOT_HEIGHT, cursorY - INITIAL_Y - BRANCH_GAP);
-  rootNode.position.y = INITIAL_Y + (mapHeight - ROOT_HEIGHT) / 2;
 
   return { nodes: flowNodes, edges: flowEdges };
 }

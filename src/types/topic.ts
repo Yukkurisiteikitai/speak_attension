@@ -260,6 +260,7 @@ export type SpeechStatus = "idle" | "listening" | "unsupported" | "error";
 export type GraphTopicNodeData = {
   label: string;
   kind: "root" | "topic" | "utterance";
+  branchSide?: "left" | "right";
   states: TopicDisplayState[];
   lifecycle?: TopicLifecycle;
   mentionCount?: number;

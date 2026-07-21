@@ -27,8 +27,8 @@ export function estimateIdeaNodeSize(
     if ((opts.mentionCount ?? 1) > 1) {
       width += BADGE_GAP + estimateTextWidth(`×${opts.mentionCount}`, 11);
     }
-    // Always reserve the "採用" pick-mark badge so toggling a pick never
-    // shifts the node's footprint mid-session.
+    // Always reserve the decision badge so changing 採用・保留・却下 never
+    // shifts the node's footprint mid-session (all labels are two kanji).
     width += BADGE_GAP + estimateTextWidth("採用", 10) + 16;
   }
 

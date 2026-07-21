@@ -115,7 +115,7 @@ describe("projectGraphToFlow - expandable meeting mind map", () => {
       evidenceByTopicId: new Map(),
     });
 
-    // Topic branches share one column and need enough vertical room for long labels.
+    // Topic branches use two columns and need enough vertical room for long labels.
     const rects: Rect[] = result.nodes
       .filter((node) => node.id !== graph.rootTopicId)
       .map((node) => {
@@ -181,6 +181,38 @@ describe("projectGraphToFlow - expandable meeting mind map", () => {
     expect(result.edges.every((edge) => edge.data?.relation === "parent")).toBe(true);
   });
 
+  it("keeps long topic and utterance nodes clear across both sides", () => {
+    const graph = createInitialMeetingGraph("長い会議タイトルを含むテスト会議");
+    const topics = Array.from({ length: 6 }, (_, index) =>
+      createTestTopic(`t${index + 1}`, `議題${index + 1}: オフライン環境でも迷わず利用できる操作設計`),
+    );
+    graph.nodes = [graph.nodes[0], ...topics];
+    const segments = topics.flatMap((topic, topicIndex) =>
+      Array.from({ length: (topicIndex % 3) + 1 }, (_, segmentIndex) =>
+        createTestSegment(
+          `seg-${topic.id}-${segmentIndex}`,
+          `この議題に関する代表的な長い日本語の発言です ${topicIndex + 1}-${segmentIndex + 1}`,
+          topic.id,
+          topicIndex * 10 + segmentIndex,
+        ),
+      ),
+    );
+
+    const result = projectGraphToFlow({
+      graph,
+      currentTopicId: null,
+      evidenceByTopicId: new Map(),
+      segments,
+    });
+    const rects = result.nodes.map((node) => {
+      const data = node.data as GraphTopicNodeData;
+      const width = data.kind === "root" ? 300 : data.kind === "utterance" ? 320 : 270;
+      return { ...node.position, width, height: estimateTopicNodeHeight(data) };
+    });
+
+    assertNoOverlaps(rects);
+  });
+
   it("always draws a root-to-topic branch, even when the stored parent edge is absent", () => {
     const graph: MeetingGraph = createInitialMeetingGraph("Test Meeting");
     const topic = createTestTopic("t1", "Topic 1");
@@ -235,7 +267,7 @@ describe("projectGraphToFlow - expandable meeting mind map", () => {
     expect(result1.nodes.map((n) => n.position)).toEqual(result2.nodes.map((n) => n.position));
   });
 
-  it("keeps all top-level topics in one branch column", () => {
+  it("balances top-level topics across left and right branch columns", () => {
     const graph: MeetingGraph = createInitialMeetingGraph("Test Meeting");
 
     const topics = Array.from({ length: 6 }, (_, i) => createTestTopic(`t${i + 1}`, `Topic ${i + 1}`));
@@ -249,8 +281,66 @@ describe("projectGraphToFlow - expandable meeting mind map", () => {
 
     const topicNodes = result.nodes.filter((n) => (n.data as GraphTopicNodeData).kind === "topic");
 
-    expect(new Set(topicNodes.map((node) => node.position.x)).size).toBe(1);
-    expect(topicNodes.slice(1).every((node, index) => node.position.y > topicNodes[index].position.y)).toBe(true);
+    const left = topicNodes.filter((node) => (node.data as GraphTopicNodeData).branchSide === "left");
+    const right = topicNodes.filter((node) => (node.data as GraphTopicNodeData).branchSide === "right");
+
+    expect(left).toHaveLength(3);
+    expect(right).toHaveLength(3);
+    expect(new Set(left.map((node) => node.position.x)).size).toBe(1);
+    expect(new Set(right.map((node) => node.position.x)).size).toBe(1);
+    expect(left.every((node) => node.position.x < 0)).toBe(true);
+    expect(right.every((node) => node.position.x > 0)).toBe(true);
+    expect(left.slice(1).every((node, index) => node.position.y > left[index].position.y)).toBe(true);
+    expect(right.slice(1).every((node, index) => node.position.y > right[index].position.y)).toBe(true);
+  });
+
+  it("balances by branch height when one topic has many utterances", () => {
+    const graph = createInitialMeetingGraph("Test Meeting");
+    const topics = [createTestTopic("t1", "発言の多い議題"), createTestTopic("t2", "短い議題"), createTestTopic("t3", "もう一つの短い議題")];
+    graph.nodes = [graph.nodes[0], ...topics];
+    const segments = Array.from({ length: 7 }, (_, index) =>
+      createTestSegment(`seg-${index}`, `発言 ${index + 1}`, "t1", index + 1),
+    );
+
+    const result = projectGraphToFlow({
+      graph,
+      currentTopicId: null,
+      evidenceByTopicId: new Map(),
+      segments,
+    });
+
+    expect((result.nodes.find((node) => node.id === "t1")?.data as GraphTopicNodeData).branchSide).toBe("right");
+    expect((result.nodes.find((node) => node.id === "t2")?.data as GraphTopicNodeData).branchSide).toBe("left");
+    expect((result.nodes.find((node) => node.id === "t3")?.data as GraphTopicNodeData).branchSide).toBe("left");
+  });
+
+  it("places utterances outside their topic and connects direction-specific handles", () => {
+    const graph = createInitialMeetingGraph("Test Meeting");
+    const topics = [createTestTopic("t1", "右の議題"), createTestTopic("t2", "左の議題")];
+    graph.nodes = [graph.nodes[0], ...topics];
+    const segments = [
+      createTestSegment("seg-right", "右側の発言です", "t1", 10),
+      createTestSegment("seg-left", "左側の発言です", "t2", 20),
+    ];
+
+    const result = projectGraphToFlow({
+      graph,
+      currentTopicId: null,
+      evidenceByTopicId: new Map(),
+      segments,
+    });
+    const rightTopic = result.nodes.find((node) => node.id === "t1")!;
+    const leftTopic = result.nodes.find((node) => node.id === "t2")!;
+    const rightUtterance = result.nodes.find((node) => node.id === "utterance-t1-seg-right")!;
+    const leftUtterance = result.nodes.find((node) => node.id === "utterance-t2-seg-left")!;
+    const rightParent = result.edges.find((edge) => edge.target === "t1")!;
+    const leftParent = result.edges.find((edge) => edge.target === "t2")!;
+
+    expect(rightUtterance.position.x).toBeGreaterThan(rightTopic.position.x);
+    expect(leftUtterance.position.x).toBeLessThan(leftTopic.position.x);
+    expect(rightParent.sourceHandle).toBe("parent-right");
+    expect(leftParent.sourceHandle).toBe("parent-left");
+    expect(result.edges.filter((edge) => edge.data?.relation === "utterance").every((edge) => edge.sourceHandle === "utterances" && edge.targetHandle === "parent")).toBe(true);
   });
 
   it("adds matched utterances in chronological order and removes them when their topic is collapsed", () => {
