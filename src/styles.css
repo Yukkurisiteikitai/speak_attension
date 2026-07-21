@@ -172,6 +172,14 @@ input:focus {
   min-height: 0;
 }
 
+.meeting-header + .dashboard-grid > .graph-column {
+  align-self: start;
+  height: max(640px, calc(100vh - 36px));
+  max-height: 820px;
+  position: sticky;
+  top: 18px;
+}
+
 .meeting-rail {
   display: grid;
   align-content: start;
@@ -606,6 +614,123 @@ input:focus {
   height: 9px;
   border: 2px solid #fff;
   background: #83bde2;
+}
+
+.conversation-node {
+  position: relative;
+  width: 300px;
+  min-height: 82px;
+  border: 2px solid rgba(75, 106, 91, 0.34);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--ink);
+  padding: 14px 14px 12px;
+  box-shadow: 0 10px 26px rgba(36, 46, 39, 0.1);
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.conversation-node.role-root {
+  width: 210px;
+  min-height: 76px;
+  display: flex;
+  align-items: center;
+  border-color: rgba(17, 97, 71, 0.42);
+  background: linear-gradient(135deg, #116147, #26856a);
+  color: #fff;
+}
+
+.conversation-node.is-selected {
+  border-color: var(--green);
+  box-shadow: 0 0 0 4px rgba(17, 97, 71, 0.16), 0 12px 30px rgba(36, 46, 39, 0.14);
+}
+
+.conversation-node-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.conversation-node-head strong {
+  line-height: 1.45;
+}
+
+.conversation-node-head > span {
+  flex: none;
+  border-radius: 999px;
+  background: rgba(75, 106, 91, 0.1);
+  color: var(--muted);
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.conversation-node.role-topic { border-color: rgba(17, 97, 71, 0.58); }
+.conversation-node.role-issue { border-color: rgba(177, 66, 58, 0.52); }
+.conversation-node.role-cause { border-color: rgba(183, 106, 31, 0.52); }
+.conversation-node.role-action { border-color: rgba(71, 86, 166, 0.52); }
+.conversation-node.role-alternative { border-color: rgba(46, 125, 132, 0.52); }
+
+.conversation-rating {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  padding: 4px 9px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.conversation-rating.is-rated {
+  border-color: rgba(17, 97, 71, 0.42);
+  background: var(--green-soft);
+  color: var(--green);
+}
+
+.conversation-tree-map .react-flow__edge-path {
+  stroke: rgba(75, 106, 91, 0.5);
+  stroke-width: 1.8;
+}
+
+.conversation-node-editor {
+  border-color: rgba(17, 97, 71, 0.22);
+}
+
+.conversation-node-editor > p {
+  margin: 8px 0 12px;
+  line-height: 1.45;
+}
+
+.conversation-node-editor label {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.conversation-node-editor select {
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  padding: 7px 9px;
+}
+
+.conversation-node-editor small {
+  display: block;
+  margin-top: 10px;
+  color: var(--muted);
+  line-height: 1.4;
 }
 
 .meeting-mindmap .react-flow__controls {
@@ -1212,6 +1337,12 @@ input:focus {
     align-items: start;
     flex-direction: column;
   }
+
+  .meeting-header + .dashboard-grid > .graph-column {
+    height: 680px;
+    max-height: none;
+    position: static;
+  }
 }
 
 /* --- idea brainstorm mode --- */
@@ -1316,8 +1447,6 @@ input:focus {
 .idea-node-handle {
   opacity: 0;
   pointer-events: none;
-  left: 50%;
-  top: 50%;
 }
 
 .idea-mode .button-row {

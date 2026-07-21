@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Download, FileText, Sparkles, ThumbsDown, ThumbsUp } from "lucide-react";
 import { downloadFile } from "../lib/download";
-import type { AnalyzedSegment, ImportantMention, MeetingGraph } from "../types/topic";
+import type { AnalyzedSegment, ConversationTreeState, ImportantMention, MeetingGraph } from "../types/topic";
 import { type LlmSettings } from "../utils/llmClient";
 import { checkLlmConnection } from "../utils/llmConnection";
 import { reviewReportWithLlm } from "../utils/llmGapReview";
@@ -9,6 +9,7 @@ import { buildMeetingReport, renderMeetingReportMarkdown, type MeetingReport, ty
 import { buildEvaluationDataset, summarizeFeedback, type FindingVerdict, type ReportFeedbackMap } from "../utils/reportFeedback";
 
 type MeetingReportPanelProps = {
+  conversationTree: ConversationTreeState;
   meetingGraph: MeetingGraph;
   importantMentions: ImportantMention[];
   segmentArchive: AnalyzedSegment[];
@@ -89,7 +90,7 @@ function FindingCard({
 // Post-meeting deliverable: turn the engine state into a reviewable missing-items
 // report, collect helpful/noise verdicts as evaluation data, and optionally get a
 // second opinion from a local LLM (LM Studio's OpenAI-compatible server).
-export function MeetingReportPanel({ meetingGraph, importantMentions, segmentArchive, llmSettings, onUpdateLlmSettings }: MeetingReportPanelProps) {
+export function MeetingReportPanel({ conversationTree, meetingGraph, importantMentions, segmentArchive, llmSettings, onUpdateLlmSettings }: MeetingReportPanelProps) {
   const [report, setReport] = useState<MeetingReport | null>(null);
   const [feedback, setFeedback] = useState<ReportFeedbackMap>({});
   const [llmStatus, setLlmStatus] = useState<string | null>(null);
@@ -150,7 +151,7 @@ export function MeetingReportPanel({ meetingGraph, importantMentions, segmentArc
     if (!report) return;
     downloadFile(
       `meeting-evaluation-${report.generatedAt}.json`,
-      JSON.stringify(buildEvaluationDataset(report, feedback), null, 2),
+      JSON.stringify(buildEvaluationDataset(report, feedback, Date.now(), conversationTree.nodes), null, 2),
       "application/json",
     );
   };

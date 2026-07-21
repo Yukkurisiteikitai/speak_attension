@@ -39,6 +39,7 @@ type IdeaFlowNode = Node<IdeaFlowNodeData>;
 
 function IdeaNode({ data }: NodeProps<IdeaFlowNode>) {
   const pickable = data.kind === "keyword" && data.phase === "select";
+  const isHierarchy = data.phase === "grouping" || data.phase === "select";
   const classNames = [
     "idea-node",
     `idea-node-${data.kind}`,
@@ -50,11 +51,11 @@ function IdeaNode({ data }: NodeProps<IdeaFlowNode>) {
 
   return (
     <div className={classNames} style={data.color ? { borderColor: data.color } : undefined}>
-      <Handle type="target" position={Position.Top} className="idea-node-handle" />
+      <Handle type="target" position={isHierarchy ? Position.Left : Position.Top} className="idea-node-handle" />
       <strong>{data.label}</strong>
       {typeof data.mentionCount === "number" && data.mentionCount > 1 ? <span>×{data.mentionCount}</span> : null}
       {data.decision ? <span className="idea-decision-mark">{decisionLabel(data.decision)}</span> : null}
-      <Handle type="source" position={Position.Top} className="idea-node-handle" />
+      <Handle type="source" position={isHierarchy ? Position.Right : Position.Top} className="idea-node-handle" />
     </div>
   );
 }

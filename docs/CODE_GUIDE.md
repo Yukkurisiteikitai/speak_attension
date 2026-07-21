@@ -46,8 +46,9 @@ speech / manual text / replay
 -> topicEngineStore
 -> processTopicSegment
 -> topic extraction + scoring + coverage + lifecycle
--> MeetingGraph update
--> TopicInspector / TopicGraph render（議題枝を左右へバランス配置）
+-> MeetingGraph update（既存分析用）
+-> conversationTree（ライブ意味階層をルールベースで追記）
+-> TopicInspector / TopicGraph render（任意深度の右向きツリー）
 -> (明示的な「会議を整理」) meetingSynthesis + local LLM refinement
 -> MeetingSummaryGraph render
 ```
@@ -72,7 +73,7 @@ speech / manual text / replay
 
 ### `src/utils/ideaLayout.ts`
 
-収集時の放射状配置と、グループ化後のマインドマップ配置。ラベルからノード寸法を保守的に見積もり、重なりを避ける。
+収集時の放射状配置と、グループ化後の「テーマ → グループ → キーワード」という右向き階層配置。ラベルからノード寸法を保守的に見積もり、重なりを避ける。
 
 ### `src/hooks/ideaSessionStore.ts` / `src/hooks/useIdeaSession.ts`
 
@@ -110,6 +111,10 @@ Topic matching and topic creation rules.
 
 Coverage detection, gap generation, lifecycle derivation, and gap sorting.
 
+### `src/utils/conversationTree.ts` / `src/utils/conversationTreeLayout.ts`
+
+リアルタイム発言を話題・課題・原因・アクション・別案・通常発言へ分類し、親を追加時に固定する純粋関数。レイアウトは部分木の高さを先に見積もり、任意深度の右向きツリーを重なりなく配置する。
+
 ### `src/utils/topicLifecycle.ts`
 
 Coverage mutation, topic closure, and important mention creation.
@@ -117,6 +122,10 @@ Coverage mutation, topic closure, and important mention creation.
 ### `src/components/TopicInspector.tsx`
 
 Diagnostic side panel. It shows current topic, gaps, coverage, latest analysis, and the developer drawer.
+
+### `src/components/TopicGraph.tsx` / `src/components/ConversationNodeEditor.tsx`
+
+ライブ意味階層のReact Flow表示と、0/1高評価、選択ノードの役割・親修正UI。従来の`MeetingGraph`は表示元ではなく、右レールの分析と会議整理のため並行して保持する。
 
 会議画面の右レールは `App.tsx` で「進行」「分析」に分け、手入力・リプレイ・発話ログは初期状態で閉じた入力ドックにまとめる。非表示パネルもマウントを維持するため、入力途中の内容やレポート状態はタブ切替で失われない。
 
@@ -142,7 +151,7 @@ Diagnostic side panel. It shows current topic, gaps, coverage, latest analysis, 
 | --- | --- |
 | キーワード抽出・グループ化・セッション出力 | `src/utils/ideaExtraction.test.ts`、`ideaGrouping.test.ts`、`ideaSession.test.ts` |
 | 放射状・マインドマップの座標 | `src/utils/ideaLayout.test.ts`。長い日本語ラベル、複数リング、未グループ化キーワードを確認する。 |
-| 会議のトピック・Focus・レポート・左右レイアウト | 対応する `src/utils/*.test.ts` と `src/hooks/topicEngineStore.test.ts`。`topicProjection.test.ts` では左右配置、長短ラベル、発言順、Handle方向を確認する。リプレイ用の代表発話は各テストに併置されている。 |
+| 会議のライブ意味階層・Focus・レポート | `conversationTree.test.ts`、`conversationTreeLayout.test.ts`、対応する `src/utils/*.test.ts` と `src/hooks/topicEngineStore.test.ts`。提示Replayの親子関係、相槌除外、高評価、手動修正、任意深度と長短ラベルを確認する。従来分析用の投影は`topicProjection.test.ts`で保護する。 |
 | 終了時の整理マップ | `meetingSynthesis.test.ts`、`llmMeetingSynthesis.test.ts`、`topicEngineStore.test.ts`。相槌除外、根拠発言ID、LM Studio失敗時の規則ベース維持を確認する。 |
 | リプレイ JSON の入力形式 | `src/utils/transcript-importer.test.ts`。入力形式または検証規則を変えるときに更新する。 |
 

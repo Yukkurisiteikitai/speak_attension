@@ -96,21 +96,32 @@ describe("mindmapPositions", () => {
     assertNoOverlaps(collectRects(layout, groups, keywords));
   });
 
-  it("keeps each side's nodes clear of the center node", () => {
+  it("places every group and keyword to the right in hierarchy order", () => {
     const layout = mindmapPositions(groups, keywords, title);
     const centerSize = estimateIdeaNodeSize(title, "center");
-    const centerLeft = layout.centerPosition.x;
     const centerRight = layout.centerPosition.x + centerSize.width;
 
-    // groups alternate sides by index: g1, g3 -> right (direction +1); g2, g4 -> left (direction -1)
-    for (const id of ["g1", "g3"]) {
-      const pos = layout.groupPositions.get(id)!;
-      expect(pos.x).toBeGreaterThanOrEqual(centerRight);
+    for (const currentGroup of groups) {
+      const groupPos = layout.groupPositions.get(currentGroup.id)!;
+      const groupSize = estimateIdeaNodeSize(currentGroup.title, "group");
+      expect(groupPos.x).toBeGreaterThanOrEqual(centerRight);
+
+      for (const keywordId of currentGroup.keywordIds) {
+        const keywordPos = layout.keywordPositions.get(keywordId)!;
+        expect(keywordPos.x).toBeGreaterThanOrEqual(groupPos.x + groupSize.width);
+      }
     }
-    for (const id of ["g2", "g4"]) {
-      const pos = layout.groupPositions.get(id)!;
-      const size = estimateIdeaNodeSize(groups.find((g) => g.id === id)!.title, "group");
-      expect(pos.x + size.width).toBeLessThanOrEqual(centerLeft);
+  });
+
+  it("keeps each group's keyword rows together and preserves group order", () => {
+    const layout = mindmapPositions(groups, keywords, title);
+    const ranges = groups.map((currentGroup) => {
+      const rows = currentGroup.keywordIds.map((id) => layout.keywordPositions.get(id)!.y);
+      return { min: Math.min(...rows), max: Math.max(...rows) };
+    });
+
+    for (let index = 1; index < ranges.length; index += 1) {
+      expect(ranges[index - 1].max).toBeLessThan(ranges[index].min);
     }
   });
 

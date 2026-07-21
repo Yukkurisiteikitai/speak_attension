@@ -31,6 +31,38 @@ export type TranscriptSegmentMetadata = {
   raw?: unknown;
 };
 
+export type ConversationNodeRole = "topic" | "issue" | "cause" | "action" | "alternative" | "statement";
+
+export type ConversationTreeNode = {
+  id: string;
+  segmentId: string;
+  parentId: string | null;
+  role: ConversationNodeRole;
+  label: string;
+  originalText: string;
+  createdAt: number;
+  source: TranscriptInputSource;
+  rating: 0 | 1;
+  manuallyAdjusted: boolean;
+};
+
+export type ConversationTreeState = {
+  nodes: ConversationTreeNode[];
+  activeTopicNodeId: string | null;
+};
+
+export type ConversationGraphNodeData = {
+  label: string;
+  role: "root" | ConversationNodeRole;
+  rating: 0 | 1;
+  originalText?: string;
+  selected?: boolean;
+  onRate?: (nodeId: string) => void;
+};
+
+export type ConversationGraphNode = Node<ConversationGraphNodeData, "conversation">;
+export type ConversationGraphEdge = Edge<{ relation: "conversation" }>;
+
 export type TopicCoverageKey =
   | "decision"
   | "reason"

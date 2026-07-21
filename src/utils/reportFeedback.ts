@@ -1,4 +1,5 @@
 import type { MeetingReport, MeetingReportFinding } from "./meetingReport";
+import type { ConversationTreeNode } from "../types/topic";
 
 export type FindingVerdict = "helpful" | "noise";
 
@@ -27,13 +28,14 @@ export type EvaluationDatasetEntry = {
 };
 
 export type EvaluationDataset = {
-  version: 1;
+  version: 2;
   meetingId: string;
   meetingTitle: string;
   reportGeneratedAt: number;
   exportedAt: number;
   summary: FeedbackSummary;
   entries: EvaluationDatasetEntry[];
+  conversationRatings: Array<Pick<ConversationTreeNode, "id" | "segmentId" | "parentId" | "role" | "label" | "rating">>;
 };
 
 // helpfulRate is the precision proxy: rated-helpful over all rated findings.
@@ -61,9 +63,10 @@ export function buildEvaluationDataset(
   report: MeetingReport,
   feedback: ReportFeedbackMap,
   exportedAt = Date.now(),
+  conversationNodes: ConversationTreeNode[] = [],
 ): EvaluationDataset {
   return {
-    version: 1,
+    version: 2,
     meetingId: report.meetingId,
     meetingTitle: report.meetingTitle,
     reportGeneratedAt: report.generatedAt,
@@ -81,6 +84,14 @@ export function buildEvaluationDataset(
       verdict: feedback[finding.id] ?? null,
       llmVerdict: finding.llm?.verdict ?? null,
       llmReason: finding.llm?.reason ?? null,
+    })),
+    conversationRatings: conversationNodes.map(({ id, segmentId, parentId, role, label, rating }) => ({
+      id,
+      segmentId,
+      parentId,
+      role,
+      label,
+      rating,
     })),
   };
 }

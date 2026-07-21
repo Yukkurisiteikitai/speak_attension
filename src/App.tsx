@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ConfirmDialog } from "./components/ConfirmDialog";
+import { ConversationNodeEditor } from "./components/ConversationNodeEditor";
 import { ControlPanel } from "./components/ControlPanel";
 import { IdeaModeView } from "./components/IdeaModeView";
 import { ManualReplayPanel } from "./components/ManualReplayPanel";
@@ -102,6 +103,7 @@ function MeetingMode({
   const [inputDockOpen, setInputDockOpen] = useState(false);
   const [inputTab, setInputTab] = useState<MeetingInputTab>("manual");
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
+  const [selectedConversationNodeId, setSelectedConversationNodeId] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -162,7 +164,12 @@ function MeetingMode({
               summary={topicEngine.meetingSummary}
             />
           ) : (
-            <TopicGraph currentTopicId={topicEngine.currentTopicId} meetingGraph={topicEngine.meetingGraph} segments={topicEngine.segmentArchive} />
+            <TopicGraph
+              conversationTree={topicEngine.conversationTree}
+              selectedNodeId={selectedConversationNodeId}
+              onRate={topicEngine.toggleConversationNodeRating}
+              onSelect={setSelectedConversationNodeId}
+            />
           )}
         </div>
 
@@ -197,6 +204,11 @@ function MeetingMode({
             aria-labelledby="meeting-progress-tab"
             hidden={railTab !== "progress"}
           >
+            <ConversationNodeEditor
+              conversationTree={topicEngine.conversationTree}
+              selectedNodeId={selectedConversationNodeId}
+              onUpdate={topicEngine.updateConversationNode}
+            />
             <ControlPanel
               error={speech.error}
               isListening={speech.isListening}
@@ -235,6 +247,7 @@ function MeetingMode({
             hidden={railTab !== "analysis"}
           >
             <MeetingReportPanel
+              conversationTree={topicEngine.conversationTree}
               importantMentions={topicEngine.importantMentions}
               llmSettings={llmSettings}
               meetingGraph={topicEngine.meetingGraph}
@@ -302,6 +315,7 @@ function MeetingMode({
         confirmLabel="リセットする"
         onConfirm={() => {
           topicEngine.reset();
+          setSelectedConversationNodeId(null);
           setMapMode("live");
           setIsResetConfirmOpen(false);
         }}

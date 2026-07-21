@@ -46,6 +46,7 @@ export function useTopicEngine({ onLog, llmSettings }: UseTopicEngineOptions = {
     addLog: store.addLog,
     addTranscriptText: store.addTranscriptText,
     bufferText: snapshot.bufferText,
+    conversationTree: snapshot.conversationTree,
     currentTopic,
     currentTopicGaps,
     currentTopicId: snapshot.engineState.currentTopicId,
@@ -72,5 +73,7 @@ export function useTopicEngine({ onLog, llmSettings }: UseTopicEngineOptions = {
     setManualFocus: store.setManualFocus,
     submitTimedTranscript: store.submitTimedTranscript,
     submitTranscript: store.submitTranscript,
+    toggleConversationNodeRating: store.toggleConversationNodeRating,
+    updateConversationNode: store.updateConversationNode,
   };
 }

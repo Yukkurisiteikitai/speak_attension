@@ -1,5 +1,11 @@
 import { createId } from "../utils/topicProjection";
 import {
+  appendConversationSegment,
+  createInitialConversationTreeState,
+  toggleConversationNodeRating,
+  updateConversationNode,
+} from "../utils/conversationTree";
+import {
   applyTopicTitleRefinements,
   createInitialTopicEngineState,
   getCurrentTopicGaps,
@@ -13,10 +19,11 @@ import { refineTopicTitlesWithLlm, type TopicTitleCandidate } from "../utils/llm
 import { refineMeetingSummaryWithLlm } from "../utils/llmMeetingSynthesis";
 import { type LlmSettings } from "../utils/llmClient";
 import { buildRuleBasedMeetingSummary, renameMeetingSummaryNode } from "../utils/meetingSynthesis";
-import type { AnalyzedSegment, MeetingSummary, MeetingSummaryStatus, SessionLogEntry, TimedTranscriptSegment, TranscriptSegmentMetadata, TranscriptInputSource } from "../types/topic";
+import type { AnalyzedSegment, ConversationNodeRole, ConversationTreeState, MeetingSummary, MeetingSummaryStatus, SessionLogEntry, TimedTranscriptSegment, TranscriptSegmentMetadata, TranscriptInputSource } from "../types/topic";
 
 type TopicEngineStoreSnapshot = {
   engineState: TopicEngineState;
+  conversationTree: ConversationTreeState;
   bufferText: string;
   logs: SessionLogEntry[];
   segmentArchive: AnalyzedSegment[];
@@ -46,6 +53,8 @@ type TopicEngineStore = {
   setOnLog: (onLog?: (entry: SessionLogEntry) => void) => void;
   submitTimedTranscript: (segment: TimedTranscriptSegment) => void;
   submitTranscript: (text: string, source: Exclude<TranscriptInputSource, "speech">) => void;
+  toggleConversationNodeRating: (nodeId: string) => void;
+  updateConversationNode: (nodeId: string, patch: { role?: ConversationNodeRole; parentId?: string | null }) => void;
   subscribe: (listener: () => void) => () => void;
 };
 
@@ -80,6 +89,7 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
   let onLog = options.onLog;
   let snapshot: TopicEngineStoreSnapshot = {
     engineState: createInitialTopicEngineState(),
+    conversationTree: createInitialConversationTreeState(),
     bufferText: "",
     logs: [],
     segmentArchive: [],
@@ -134,6 +144,7 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
     writeSnapshot({
       ...snapshot,
       engineState: transition.state,
+      conversationTree: appendConversationSegment(snapshot.conversationTree, transition.segment),
       // Engine state trims segments to the latest 80 for UI perf; keep the full
       // meeting here so the post-meeting report can quote every evidence segment.
       segmentArchive: [...snapshot.segmentArchive, transition.segment],
@@ -287,6 +298,7 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
       summaryEpoch += 1;
       writeSnapshot({
         engineState: createInitialTopicEngineState(),
+        conversationTree: createInitialConversationTreeState(),
         bufferText: "",
         logs: [],
         segmentArchive: [],
@@ -348,6 +360,16 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
       const nextText = cleanText(text);
       if (!nextText) return;
       processSegment(nextText, source);
+    },
+    toggleConversationNodeRating(nodeId) {
+      const nextTree = toggleConversationNodeRating(snapshot.conversationTree, nodeId);
+      if (nextTree === snapshot.conversationTree) return;
+      writeSnapshot({ ...snapshot, conversationTree: nextTree });
+    },
+    updateConversationNode(nodeId, patch) {
+      const nextTree = updateConversationNode(snapshot.conversationTree, nodeId, patch);
+      if (nextTree === snapshot.conversationTree) return;
+      writeSnapshot({ ...snapshot, conversationTree: nextTree });
     },
     subscribe(listener) {
       listeners.add(listener);

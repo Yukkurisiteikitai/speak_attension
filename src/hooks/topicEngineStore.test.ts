@@ -79,6 +79,38 @@ describe("topicEngineStore", () => {
     expect(snapshot.logs).toEqual([]);
     expect(snapshot.engineState.segments).toEqual([]);
     expect(snapshot.engineState.currentTopicId).toBeNull();
+    expect(snapshot.conversationTree.nodes).toEqual([]);
+  });
+
+  it("builds, corrects and rates the live conversation hierarchy", () => {
+    vi.spyOn(Date, "now")
+      .mockReturnValueOnce(1_000)
+      .mockReturnValueOnce(2_000)
+      .mockReturnValueOnce(3_000)
+      .mockReturnValueOnce(4_000)
+      .mockReturnValueOnce(5_000)
+      .mockReturnValueOnce(6_000);
+    const store = createTopicEngineStore();
+    [
+      "今日は採用フローの短縮について決めます",
+      "候補者連絡の遅さが問題です",
+      "理由は担当が曖昧だからです",
+      "佐藤さんが金曜までに改善案を出します",
+      "ただ、別案も見た方がいいです",
+      "そうですね",
+    ].forEach((text) => store.submitTranscript(text, "manual"));
+
+    const nodes = store.getSnapshot().conversationTree.nodes;
+    expect(nodes).toHaveLength(5);
+    expect(nodes[4].parentId).toBe(nodes[2].id);
+    store.toggleConversationNodeRating(nodes[4].id);
+    expect(store.getSnapshot().conversationTree.nodes[4].rating).toBe(1);
+    store.updateConversationNode(nodes[4].id, { role: "statement", parentId: nodes[1].id });
+    expect(store.getSnapshot().conversationTree.nodes[4]).toMatchObject({
+      role: "statement",
+      parentId: nodes[1].id,
+      manuallyAdjusted: true,
+    });
   });
 
   it("creates a rule-based meeting summary and marks it stale when new speech arrives", async () => {
