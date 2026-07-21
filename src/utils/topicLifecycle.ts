@@ -137,6 +137,7 @@ export function projectState(graph: MeetingGraph, currentTopicId: string | null,
   graph: MeetingGraph;
   currentTopicId: string | null;
   evidenceByTopicId: Map<string, string>;
+  segments?: AnalyzedSegment[];
 }) => { nodes: AnalyzedSegment extends never ? never : import("../types/topic").TopicGraphNode[]; edges: import("../types/topic").TopicGraphEdge[] }): {
   nodes: import("../types/topic").TopicGraphNode[];
   edges: import("../types/topic").TopicGraphEdge[];
@@ -151,6 +152,7 @@ export function projectState(graph: MeetingGraph, currentTopicId: string | null,
     graph,
     currentTopicId,
     evidenceByTopicId,
+    segments,
   });
 }
 

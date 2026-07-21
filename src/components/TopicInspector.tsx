@@ -25,8 +25,18 @@ type TopicInspectorProps = {
 };
 
 function topicLabel(graph: MeetingGraph, topicId: string | null): string {
-  if (!topicId) return "none";
-  return graph.nodes.find((node) => node.id === topicId)?.title ?? "unknown";
+  if (!topicId) return "なし";
+  return graph.nodes.find((node) => node.id === topicId)?.title ?? "不明";
+}
+
+function severityLabel(severity: TopicGap["severity"]): string {
+  if (severity === "high") return "高";
+  if (severity === "medium") return "中";
+  return "低";
+}
+
+function focusSetByLabel(focusSetBy: FocusState["focusSetBy"]): string {
+  return focusSetBy === "manual" ? "手動" : "自動";
 }
 
 function coverageChecklist(topicId: string | null, graph: MeetingGraph) {
@@ -85,19 +95,19 @@ export function TopicInspector({
     <aside className="panel inspector-panel" aria-label="meeting inspector">
       <section>
         <div className="section-head">
-          <h2>Current Topic</h2>
-          <span>{focusState.focusSetBy}{focusState.locked ? " / locked" : ""}</span>
+          <h2>現在の議題</h2>
+          <span>{focusSetByLabel(focusState.focusSetBy)}{focusState.locked ? " / 固定" : ""}</span>
         </div>
         <div className="current-topic-card">
           <strong>{currentTopic?.title ?? "まだ議題がありません"}</strong>
-          <p>{currentTopic ? "active" : "会話から最初の議題を抽出します。"}</p>
+          <p>{currentTopic ? "進行中" : "会話から最初の議題を抽出します。"}</p>
         </div>
       </section>
 
       <section>
         <div className="section-head">
           <h2>初見ガイド</h2>
-          <span>first read</span>
+          <span>初回向け</span>
         </div>
         <article className="guide-card">
           <strong>この画面が今伝えていること</strong>
@@ -123,7 +133,7 @@ export function TopicInspector({
 
       <section>
         <div className="section-head">
-          <h2>Coverage</h2>
+          <h2>カバレッジ</h2>
           <span>{checklist.filter((item) => item.value).length} / {checklist.length}</span>
         </div>
         <div className="checklist-grid">
@@ -131,7 +141,7 @@ export function TopicInspector({
             checklist.map((item) => (
               <div className={`checklist-item ${item.value ? "is-complete" : ""}`} key={item.key}>
                 <strong>{item.key}</strong>
-                <span>{item.value ? "captured" : "missing"}</span>
+                <span>{item.value ? "取得済み" : "未取得"}</span>
               </div>
             ))
           ) : (
@@ -143,7 +153,7 @@ export function TopicInspector({
 
       <section>
         <div className="section-head">
-          <h2>Meeting Gaps</h2>
+          <h2>会議の抜け漏れ</h2>
           <span>{meetingGraph.gapSummary.gaps.length}</span>
         </div>
         {meetingGaps.length ? (
@@ -151,7 +161,7 @@ export function TopicInspector({
             {meetingGaps.map((gap) => (
               <article className={`gap-card severity-${gap.severity}`} key={gap.id}>
                 <strong>{topicLabel(meetingGraph, gap.topicId)} / {gap.title}</strong>
-                <span>{gap.severity}</span>
+                <span>{severityLabel(gap.severity)}</span>
                 <p>{gap.detail}</p>
               </article>
             ))}
@@ -162,7 +172,7 @@ export function TopicInspector({
       </section>
 
       <details className="dev-drawer">
-        <summary>Dev Drawer</summary>
+        <summary>開発者向け詳細</summary>
 
         <section className="dev-section">
           <div className="section-head">

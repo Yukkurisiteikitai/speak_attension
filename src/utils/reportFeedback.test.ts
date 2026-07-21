@@ -61,7 +61,7 @@ describe("buildEvaluationDataset", () => {
     ];
     const dataset = buildEvaluationDataset(createReport(findings), { a: "helpful" }, 2_000);
 
-    expect(dataset.version).toBe(1);
+    expect(dataset.version).toBe(2);
     expect(dataset.exportedAt).toBe(2_000);
     expect(dataset.entries).toHaveLength(2);
     expect(dataset.entries[0]).toMatchObject({
@@ -72,5 +72,33 @@ describe("buildEvaluationDataset", () => {
     });
     expect(dataset.entries[1]).toMatchObject({ findingId: "b", verdict: null, llmVerdict: null });
     expect(dataset.summary.helpful).toBe(1);
+    expect(dataset.conversationRatings).toEqual([]);
+  });
+
+  it("includes conversation hierarchy ratings", () => {
+    const dataset = buildEvaluationDataset(createReport([]), {}, 2_000, [
+      {
+        id: "conversation-seg-1",
+        segmentId: "seg-1",
+        parentId: null,
+        role: "topic",
+        label: "採用フローの短縮",
+        originalText: "採用フローの短縮について決めます",
+        createdAt: 1,
+        source: "replay",
+        rating: 1,
+        manuallyAdjusted: false,
+      },
+    ]);
+    expect(dataset.conversationRatings).toEqual([
+      {
+        id: "conversation-seg-1",
+        segmentId: "seg-1",
+        parentId: null,
+        role: "topic",
+        label: "採用フローの短縮",
+        rating: 1,
+      },
+    ]);
   });
 });

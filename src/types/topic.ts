@@ -31,6 +31,38 @@ export type TranscriptSegmentMetadata = {
   raw?: unknown;
 };
 
+export type ConversationNodeRole = "topic" | "issue" | "cause" | "action" | "alternative" | "statement";
+
+export type ConversationTreeNode = {
+  id: string;
+  segmentId: string;
+  parentId: string | null;
+  role: ConversationNodeRole;
+  label: string;
+  originalText: string;
+  createdAt: number;
+  source: TranscriptInputSource;
+  rating: 0 | 1;
+  manuallyAdjusted: boolean;
+};
+
+export type ConversationTreeState = {
+  nodes: ConversationTreeNode[];
+  activeTopicNodeId: string | null;
+};
+
+export type ConversationGraphNodeData = {
+  label: string;
+  role: "root" | ConversationNodeRole;
+  rating: 0 | 1;
+  originalText?: string;
+  selected?: boolean;
+  onRate?: (nodeId: string) => void;
+};
+
+export type ConversationGraphNode = Node<ConversationGraphNodeData, "conversation">;
+export type ConversationGraphEdge = Edge<{ relation: "conversation" }>;
+
 export type TopicCoverageKey =
   | "decision"
   | "reason"
@@ -49,7 +81,7 @@ export type TopicLifecycle = "active" | "discussed" | "decided" | "unresolved";
 
 export type TopicDisplayState = "active" | "discussed" | "shallow" | "missing" | "decided" | "unresolved";
 
-export type TopicEdgeType = "parent" | "related" | "depends_on" | "contradicts" | "follow_up" | "missing_of";
+export type TopicEdgeType = "parent" | "related" | "depends_on" | "contradicts" | "follow_up";
 
 export type TopicGapType =
   | "shallow"
@@ -113,6 +145,42 @@ export type MeetingGraph = {
   gaps: TopicGap[];
   gapSummary: MeetingGapSummary;
 };
+
+export const MEETING_SUMMARY_CATEGORIES = [
+  "issue",
+  "cause",
+  "proposal",
+  "concern",
+  "decision",
+  "action",
+  "unresolved",
+] as const;
+
+export type MeetingSummaryCategory = (typeof MEETING_SUMMARY_CATEGORIES)[number];
+
+export type MeetingSummaryItem = {
+  id: string;
+  category: MeetingSummaryCategory;
+  title: string;
+  evidenceSegmentIds: string[];
+};
+
+export type MeetingSummaryTopic = {
+  id: string;
+  title: string;
+  items: MeetingSummaryItem[];
+};
+
+export type MeetingSummary = {
+  meetingId: string;
+  title: string;
+  generatedAt: number;
+  source: "rules" | "llm";
+  topics: MeetingSummaryTopic[];
+  ignoredSegmentIds: string[];
+};
+
+export type MeetingSummaryStatus = "idle" | "rules" | "refining" | "llm" | "error";
 
 export type FocusState = {
   focusTopicId: string | null;
@@ -223,19 +291,26 @@ export type SpeechStatus = "idle" | "listening" | "unsupported" | "error";
 
 export type GraphTopicNodeData = {
   label: string;
-  kind: "root" | "topic" | "gap";
+  kind: "root" | "topic" | "utterance";
+  branchSide?: "left" | "right";
   states: TopicDisplayState[];
   lifecycle?: TopicLifecycle;
   mentionCount?: number;
   evidence?: string;
   detail?: string;
   isActive?: boolean;
+  topicId?: string;
+  childCount?: number;
+  isCollapsed?: boolean;
+  sequence?: number;
+  sourceLabel?: string;
+  onToggle?: (topicId: string) => void;
 };
 
 export type TopicGraphNode = Node<GraphTopicNodeData, "topic">;
 
 export type TopicGraphEdgeData = {
-  relation: TopicEdgeType;
+  relation: TopicEdgeType | "utterance";
 };
 
 export type TopicGraphEdge = Edge<TopicGraphEdgeData>;

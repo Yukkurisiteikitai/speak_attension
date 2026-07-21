@@ -1,10 +1,13 @@
-import { Mic, RefreshCw, Square } from "lucide-react";
+import { Mic, RefreshCw, Sparkles, Square } from "lucide-react";
 
 type ControlPanelProps = {
   error: string | null;
   isListening: boolean;
   isSupported: boolean;
   onReset: () => void;
+  onOrganize: () => void;
+  canOrganize: boolean;
+  isOrganizing: boolean;
   onStart: () => void;
   onStop: () => void;
   statusLabel: string;
@@ -15,6 +18,9 @@ export function ControlPanel({
   isListening,
   isSupported,
   onReset,
+  onOrganize,
+  canOrganize,
+  isOrganizing,
   onStart,
   onStop,
   statusLabel,
@@ -22,9 +28,9 @@ export function ControlPanel({
   return (
     <section className="panel control-panel" aria-label="meeting controls">
       <div className="panel-heading">
-        <p className="eyebrow">Meeting Input</p>
-        <h1>attension_mindmap</h1>
-        <p className="panel-copy">会話から議題を立ち上げ、抜けを見つけるローカル会議マップです。</p>
+        <p className="eyebrow">会議操作</p>
+        <h2>会議の進行</h2>
+        <p className="panel-copy">音声入力を操作し、必要なタイミングで会議を整理します。</p>
       </div>
 
       <div className="control-row">
@@ -36,6 +42,11 @@ export function ControlPanel({
           <RefreshCw size={18} />
         </button>
       </div>
+
+      <button className="primary-button organize-button" type="button" onClick={onOrganize} disabled={!canOrganize || isOrganizing}>
+        <Sparkles size={18} />
+        <span>{isOrganizing ? "会議を整理中…" : "会議を整理"}</span>
+      </button>
 
       <div className={`status-pill ${isListening ? "active" : ""}`}>{statusLabel}</div>
       {error ? <div className="error-message">{error}</div> : null}

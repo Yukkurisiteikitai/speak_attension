@@ -97,6 +97,6 @@ describe("buildReaderGuide", () => {
     expect(guide.summary).toContain("認証フロー");
     expect(guide.unknowns.some((item) => item.includes("「これ」"))).toBe(true);
     expect(guide.unknowns.some((item) => item.includes("担当不足"))).toBe(true);
-    expect(guide.hints.some((item) => item.includes("Coverage"))).toBe(true);
+    expect(guide.hints.some((item) => item.includes("カバレッジ"))).toBe(true);
   });
 });

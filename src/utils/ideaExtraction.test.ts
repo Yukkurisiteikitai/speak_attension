@@ -25,4 +25,12 @@ describe("extractIdeaKeywords", () => {
 
     expect(labels.filter((label) => label === "通知")).toHaveLength(1);
   });
+
+  it("drops generic business filler words that would otherwise become noise keywords", () => {
+    const labels = extractIdeaKeywords("料金モデル案について詳しく検討する必要がある").map((item) => item.label);
+
+    expect(labels).not.toContain("検討");
+    expect(labels).not.toContain("必要");
+    expect(labels).toContain("料金モデル案");
+  });
 });

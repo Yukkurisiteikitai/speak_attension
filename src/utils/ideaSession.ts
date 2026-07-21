@@ -1,17 +1,32 @@
 import { extractIdeaKeywords } from "./ideaExtraction";
 import { normalizeForMatch } from "./topicExtraction";
 import { createId } from "./topicProjection";
+import type { AnalyzedSegment, MeetingSummary, MeetingSummaryCategory } from "../types/topic";
 
 export type IdeaPhase = "capture" | "grouping" | "select";
 
-export type IdeaUtteranceSource = "speech" | "manual";
+export type IdeaUtteranceSource = "speech" | "manual" | "meeting";
+
+export type IdeaMeetingSourceReference = {
+  kind: "meeting";
+  meetingId: string;
+  topicId: string;
+  topicTitle: string;
+  itemId: string;
+  itemTitle: string;
+  category: MeetingSummaryCategory;
+  segmentId: string;
+};
 
 export type IdeaUtterance = {
   id: string;
   text: string;
   source: IdeaUtteranceSource;
   at: number;
+  sourceReferences?: IdeaMeetingSourceReference[];
 };
+
+export type IdeaDecision = "adopted" | "hold" | "rejected";
 
 export type IdeaKeyword = {
   id: string;
@@ -21,7 +36,7 @@ export type IdeaKeyword = {
   utteranceIds: string[];
   firstMentionedAt: number;
   groupId: string | null;
-  picked: boolean;
+  decision: IdeaDecision;
 };
 
 export type IdeaGroup = {
@@ -62,6 +77,7 @@ export function addIdeaUtterance(
   text: string,
   source: IdeaUtteranceSource,
   now: number = Date.now(),
+  sourceReferences?: IdeaMeetingSourceReference[],
 ): IdeaSessionState {
   const cleanText = text.replace(/\s+/g, " ").trim();
   if (!cleanText || state.phase !== "capture") return state;
@@ -71,6 +87,7 @@ export function addIdeaUtterance(
     text: cleanText,
     source,
     at: now,
+    ...(sourceReferences?.length ? { sourceReferences } : {}),
   };
 
   const keywords = [...state.keywords];
@@ -96,7 +113,7 @@ export function addIdeaUtterance(
       utteranceIds: [utterance.id],
       firstMentionedAt: now,
       groupId: null,
-      picked: false,
+      decision: "hold",
     });
   }
 
@@ -164,13 +181,33 @@ export function resumeCapture(state: IdeaSessionState): IdeaSessionState {
   };
 }
 
-export function toggleKeywordPick(state: IdeaSessionState, keywordId: string): IdeaSessionState {
+export function setKeywordDecision(
+  state: IdeaSessionState,
+  keywordId: string,
+  decision: IdeaDecision,
+): IdeaSessionState {
   if (state.phase !== "select") return state;
   return {
     ...state,
     keywords: state.keywords.map((keyword) =>
-      keyword.id === keywordId ? { ...keyword, picked: !keyword.picked } : keyword,
+      keyword.id === keywordId ? { ...keyword, decision } : keyword,
     ),
+  };
+}
+
+export function cycleKeywordDecision(state: IdeaSessionState, keywordId: string): IdeaSessionState {
+  const current = state.keywords.find((keyword) => keyword.id === keywordId)?.decision;
+  const next: IdeaDecision = current === "hold" ? "adopted" : current === "adopted" ? "rejected" : "hold";
+  return setKeywordDecision(state, keywordId, next);
+}
+
+export function renameIdeaGroup(state: IdeaSessionState, groupId: string, title: string): IdeaSessionState {
+  if (state.phase !== "select") return state;
+  const nextTitle = title.replace(/\s+/g, " ").trim();
+  if (!nextTitle) return state;
+  return {
+    ...state,
+    groups: state.groups.map((group) => (group.id === groupId ? { ...group, title: nextTitle } : group)),
   };
 }
 
@@ -183,8 +220,18 @@ function keywordSourceLines(keyword: IdeaKeyword, utterancesById: Map<string, Id
     .map((id) => utterancesById.get(id))
     .filter((utterance): utterance is IdeaUtterance => Boolean(utterance))
     .slice(0, 3)
-    .map((utterance) => `    - 出典: 「${utterance.text}」`);
+    .map((utterance) => {
+      const meetingSource = utterance.sourceReferences?.[0];
+      const context = meetingSource ? `（会議: ${meetingSource.topicTitle} / ${meetingSource.itemTitle}）` : "";
+      return `    - 出典${context}: 「${utterance.text}」`;
+    });
 }
+
+const DECISION_LABELS: Record<IdeaDecision, string> = {
+  adopted: "採用",
+  hold: "保留",
+  rejected: "却下",
+};
 
 export function renderIdeaMarkdown(state: IdeaSessionState, generatedAt: number = Date.now()): string {
   const utterancesById = new Map(state.utterances.map((utterance) => [utterance.id, utterance]));
@@ -195,45 +242,43 @@ export function renderIdeaMarkdown(state: IdeaSessionState, generatedAt: number 
     `- 生成日時: ${formatTimestamp(generatedAt)}`,
     `- 発言数: ${state.utterances.length}`,
     `- キーワード数: ${state.keywords.length}`,
-    `- 採用: ${state.keywords.filter((keyword) => keyword.picked).length}`,
+    `- 採用: ${state.keywords.filter((keyword) => keyword.decision === "adopted").length}`,
+    `- 保留: ${state.keywords.filter((keyword) => keyword.decision === "hold").length}`,
+    `- 却下: ${state.keywords.filter((keyword) => keyword.decision === "rejected").length}`,
     `- グルーピング: ${state.groupingSource === "llm" ? "ローカルLLM" : state.groupingSource === "rules" ? "ルールベース" : "未実施"}`,
     "",
     "## 採用アイデア",
   ];
 
-  let pickedTotal = 0;
-  for (const group of state.groups) {
-    const picked = group.keywordIds
-      .map((id) => keywordsById.get(id))
-      .filter((keyword): keyword is IdeaKeyword => Boolean(keyword?.picked));
-    if (picked.length === 0) continue;
-    pickedTotal += picked.length;
-    lines.push("", `### ${group.title}`);
-    for (const keyword of picked) {
-      lines.push(`- ${keyword.label}(言及${keyword.mentionCount}回)`);
-      lines.push(...keywordSourceLines(keyword, utterancesById));
+  for (const decision of ["adopted", "hold", "rejected"] as const) {
+    if (decision !== "adopted") lines.push("", `## ${DECISION_LABELS[decision]}アイデア`);
+    let decisionTotal = 0;
+    for (const group of state.groups) {
+      const matching = group.keywordIds
+        .map((id) => keywordsById.get(id))
+        .filter((keyword): keyword is IdeaKeyword => keyword?.decision === decision);
+      if (matching.length === 0) continue;
+      decisionTotal += matching.length;
+      lines.push("", `### ${group.title}`);
+      for (const keyword of matching) {
+        lines.push(`- ${keyword.label}(言及${keyword.mentionCount}回)`);
+        lines.push(...keywordSourceLines(keyword, utterancesById));
+      }
     }
-  }
-  if (pickedTotal === 0) lines.push("", "(採用されたキーワードはありません)");
-
-  lines.push("", "## 未採用キーワード");
-  const unpicked = state.keywords.filter((keyword) => !keyword.picked);
-  if (unpicked.length === 0) {
-    lines.push("", "(なし)");
-  } else {
-    lines.push("", unpicked.map((keyword) => keyword.label).join(" / "));
+    if (decisionTotal === 0) lines.push("", "(なし)");
   }
 
   lines.push("", "## 会話ログ", "");
   for (const utterance of state.utterances) {
-    lines.push(`- [${formatTimestamp(utterance.at)}] ${utterance.text}`);
+    const sourceLabel = utterance.source === "meeting" ? "会議から引継ぎ" : utterance.source === "speech" ? "音声" : "手入力";
+    lines.push(`- [${formatTimestamp(utterance.at)} / ${sourceLabel}] ${utterance.text}`);
   }
 
   return `${lines.join("\n")}\n`;
 }
 
 export type IdeaSessionExport = {
-  version: 1;
+  version: 2;
   kind: "idea_session";
   generatedAt: number;
   startedAt: number;
@@ -248,7 +293,7 @@ export type IdeaSessionExport = {
 // re-ingested later as retrieval context (RAG) for a follow-up session.
 export function buildIdeaSessionExport(state: IdeaSessionState, generatedAt: number = Date.now()): IdeaSessionExport {
   return {
-    version: 1,
+    version: 2,
     kind: "idea_session",
     generatedAt,
     startedAt: state.startedAt,
@@ -258,4 +303,55 @@ export function buildIdeaSessionExport(state: IdeaSessionState, generatedAt: num
     groups: state.groups,
     groupingSource: state.groupingSource,
   };
+}
+
+export function createIdeaSessionFromMeetingSelection(
+  summary: MeetingSummary,
+  segments: AnalyzedSegment[],
+  selectedItemIds: string[],
+  now: number = Date.now(),
+): IdeaSessionState {
+  const selectedIds = new Set(selectedItemIds);
+  const referencesBySegmentId = new Map<string, IdeaMeetingSourceReference[]>();
+
+  for (const topic of summary.topics) {
+    for (const item of topic.items) {
+      if (!selectedIds.has(item.id)) continue;
+      for (const segmentId of item.evidenceSegmentIds) {
+        const references = referencesBySegmentId.get(segmentId) ?? [];
+        references.push({
+          kind: "meeting",
+          meetingId: summary.meetingId,
+          topicId: topic.id,
+          topicTitle: topic.title,
+          itemId: item.id,
+          itemTitle: item.title,
+          category: item.category,
+          segmentId,
+        });
+        referencesBySegmentId.set(segmentId, references);
+      }
+    }
+  }
+
+  let state = {
+    ...createInitialIdeaSessionState(now),
+    title: `${summary.title}からのアイデア出し`,
+  };
+  const segmentById = new Map(segments.map((segment) => [segment.id, segment]));
+  const selectedSegments = [...referencesBySegmentId.keys()]
+    .map((segmentId) => segmentById.get(segmentId))
+    .filter((segment): segment is AnalyzedSegment => Boolean(segment))
+    .sort((left, right) => left.createdAt - right.createdAt);
+
+  for (const segment of selectedSegments) {
+    state = addIdeaUtterance(
+      state,
+      segment.text,
+      "meeting",
+      segment.createdAt,
+      referencesBySegmentId.get(segment.id),
+    );
+  }
+  return state;
 }

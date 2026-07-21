@@ -11,7 +11,7 @@ function keyword(id: string, label: string, overrides: Partial<IdeaKeyword> = {}
     utteranceIds: [`utt-${id}`],
     firstMentionedAt: 0,
     groupId: null,
-    picked: false,
+    decision: "hold",
     ...overrides,
   };
 }

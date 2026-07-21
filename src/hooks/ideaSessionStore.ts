@@ -3,9 +3,12 @@ import {
   addIdeaUtterance,
   applyGrouping,
   beginGrouping,
+  cycleKeywordDecision,
   createInitialIdeaSessionState,
+  renameIdeaGroup,
   resumeCapture,
-  toggleKeywordPick,
+  setKeywordDecision,
+  type IdeaDecision,
   type IdeaSessionState,
   type IdeaUtteranceSource,
 } from "../utils/ideaSession";
@@ -27,18 +30,21 @@ export type IdeaSessionStore = {
   addUtterance: (text: string, source: IdeaUtteranceSource) => void;
   finishCapture: (options?: FinishCaptureOptions) => Promise<void>;
   getSnapshot: () => IdeaSessionStoreSnapshot;
+  renameGroup: (groupId: string, title: string) => void;
+  replaceSession: (session: IdeaSessionState) => void;
   reset: () => void;
   resumeCapture: () => void;
-  togglePick: (keywordId: string) => void;
+  cycleDecision: (keywordId: string) => void;
+  setDecision: (keywordId: string, decision: IdeaDecision) => void;
   subscribe: (listener: () => void) => () => void;
 };
 
 // Owns brainstorm session state. Grouping is the only async transition:
 // LLM grouping is attempted when settings are provided and silently falls
 // back to rule-based clustering so 出し終わった always completes.
-export function createIdeaSessionStore(): IdeaSessionStore {
+export function createIdeaSessionStore(initialSession: IdeaSessionState = createInitialIdeaSessionState()): IdeaSessionStore {
   let snapshot: IdeaSessionStoreSnapshot = {
-    session: createInitialIdeaSessionState(),
+    session: initialSession,
     groupingStatus: "idle",
     groupingNote: null,
   };
@@ -90,6 +96,14 @@ export function createIdeaSessionStore(): IdeaSessionStore {
     getSnapshot() {
       return snapshot;
     },
+    renameGroup(groupId, title) {
+      const next = renameIdeaGroup(snapshot.session, groupId, title);
+      if (next === snapshot.session) return;
+      write({ session: next });
+    },
+    replaceSession(session) {
+      write({ session, groupingStatus: "idle", groupingNote: null });
+    },
     reset() {
       write({
         session: createInitialIdeaSessionState(),
@@ -102,8 +116,13 @@ export function createIdeaSessionStore(): IdeaSessionStore {
       if (next === snapshot.session) return;
       write({ session: next, groupingStatus: "idle", groupingNote: null });
     },
-    togglePick(keywordId) {
-      const next = toggleKeywordPick(snapshot.session, keywordId);
+    cycleDecision(keywordId) {
+      const next = cycleKeywordDecision(snapshot.session, keywordId);
+      if (next === snapshot.session) return;
+      write({ session: next });
+    },
+    setDecision(keywordId, decision) {
+      const next = setKeywordDecision(snapshot.session, keywordId, decision);
       if (next === snapshot.session) return;
       write({ session: next });
     },

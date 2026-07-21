@@ -1,23 +1,28 @@
 import {
   Background,
-  Controls,
   Handle,
   Position,
   ReactFlow,
-  useReactFlow,
   type Edge,
   type Node,
   type NodeProps,
 } from "@xyflow/react";
-import "@xyflow/react/dist/style.css";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import type { IdeaSessionStore } from "../hooks/ideaSessionStore";
 import { useIdeaSession } from "../hooks/useIdeaSession";
 import { useLlmSettings } from "../hooks/useLlmSettings";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 import { downloadFile } from "../lib/download";
 import { mindmapPositions, radialPositions } from "../utils/ideaLayout";
-import { buildIdeaSessionExport, renderIdeaMarkdown, type IdeaPhase } from "../utils/ideaSession";
+import {
+  buildIdeaSessionExport,
+  renderIdeaMarkdown,
+  type IdeaDecision,
+  type IdeaPhase,
+} from "../utils/ideaSession";
 import { checkLlmConnection } from "../utils/llmConnection";
+import { ConfirmDialog } from "./ConfirmDialog";
+import { MapViewportControls } from "./MapViewportControls";
 
 const GROUP_COLORS = ["#116147", "#b76a1f", "#4756a6", "#a64845", "#6c6218", "#2e7d84", "#8a4d8f", "#5a6b3b"];
 
@@ -25,7 +30,7 @@ type IdeaFlowNodeData = {
   label: string;
   kind: "center" | "group" | "keyword";
   mentionCount?: number;
-  picked?: boolean;
+  decision?: IdeaDecision;
   color?: string;
   phase: IdeaPhase;
 };
@@ -34,10 +39,11 @@ type IdeaFlowNode = Node<IdeaFlowNodeData>;
 
 function IdeaNode({ data }: NodeProps<IdeaFlowNode>) {
   const pickable = data.kind === "keyword" && data.phase === "select";
+  const isHierarchy = data.phase === "grouping" || data.phase === "select";
   const classNames = [
     "idea-node",
     `idea-node-${data.kind}`,
-    data.picked ? "is-picked" : "",
+    data.decision ? `is-${data.decision}` : "",
     pickable ? "is-pickable" : "",
   ]
     .filter(Boolean)
@@ -45,44 +51,38 @@ function IdeaNode({ data }: NodeProps<IdeaFlowNode>) {
 
   return (
     <div className={classNames} style={data.color ? { borderColor: data.color } : undefined}>
-      <Handle type="target" position={Position.Top} className="idea-node-handle" />
+      <Handle type="target" position={isHierarchy ? Position.Left : Position.Top} className="idea-node-handle" />
       <strong>{data.label}</strong>
       {typeof data.mentionCount === "number" && data.mentionCount > 1 ? <span>×{data.mentionCount}</span> : null}
-      {data.picked ? <span className="idea-pick-mark">採用</span> : null}
-      <Handle type="source" position={Position.Top} className="idea-node-handle" />
+      {data.decision ? <span className="idea-decision-mark">{decisionLabel(data.decision)}</span> : null}
+      <Handle type="source" position={isHierarchy ? Position.Right : Position.Top} className="idea-node-handle" />
     </div>
   );
 }
 
 const nodeTypes = { idea: IdeaNode };
 
-// Re-fits the viewport with an animated transition whenever the phase flips,
-// so the radial→mindmap node movement and the camera move together.
-function FitOnPhaseChange({ phase }: { phase: IdeaPhase }) {
-  const { fitView } = useReactFlow();
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      void fitView({ duration: 700, padding: 0.15 });
-    }, 60);
-    return () => window.clearTimeout(timer);
-  }, [fitView, phase]);
-  return null;
-}
-
 function phaseLabel(phase: IdeaPhase): string {
   if (phase === "capture") return "発散中(キーワード収集)";
   if (phase === "grouping") return "グループ化中…";
-  return "選択中(採用する要素をクリック)";
+  return "整理中(採用・保留・却下を選択)";
 }
 
-export function IdeaModeView() {
-  const idea = useIdeaSession();
+function decisionLabel(decision: IdeaDecision): string {
+  if (decision === "adopted") return "採用";
+  if (decision === "rejected") return "却下";
+  return "保留";
+}
+
+export function IdeaModeView({ store }: { store?: IdeaSessionStore }) {
+  const idea = useIdeaSession(store);
   const speech = useSpeechRecognition({ onFinalText: (text) => idea.addUtterance(text, "speech") });
   const [manualText, setManualText] = useState("");
   const [useLlm, setUseLlm] = useState(false);
   const { llmSettings, updateLlmSettings } = useLlmSettings();
   const [llmStatus, setLlmStatus] = useState<string | null>(null);
   const [markdown, setMarkdown] = useState<string | null>(null);
+  const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
 
   const { session } = idea;
   const phase = session.phase;
@@ -125,7 +125,14 @@ export function IdeaModeView() {
           id: keyword.id,
           type: "idea",
           position: layoutPosition ?? { x: 0, y: 0 },
-          data: { label: keyword.label, kind: "keyword", mentionCount: keyword.mentionCount, picked: keyword.picked, color, phase },
+          data: {
+            label: keyword.label,
+            kind: "keyword",
+            mentionCount: keyword.mentionCount,
+            decision: keyword.decision,
+            color,
+            phase,
+          },
         });
         if (keyword.groupId) {
           flowEdges.push({
@@ -188,7 +195,24 @@ export function IdeaModeView() {
     setManualText("");
   };
 
-  const pickedCount = session.keywords.filter((keyword) => keyword.picked).length;
+  const decisionCounts = useMemo(
+    () => ({
+      adopted: session.keywords.filter((keyword) => keyword.decision === "adopted").length,
+      hold: session.keywords.filter((keyword) => keyword.decision === "hold").length,
+      rejected: session.keywords.filter((keyword) => keyword.decision === "rejected").length,
+    }),
+    [session.keywords],
+  );
+  const inheritedMeetingItems = useMemo(() => {
+    const byId = new Map<string, { id: string; title: string; category: "issue" | "unresolved" }>();
+    for (const utterance of session.utterances) {
+      for (const reference of utterance.sourceReferences ?? []) {
+        if (reference.category !== "issue" && reference.category !== "unresolved") continue;
+        byId.set(reference.itemId, { id: reference.itemId, title: reference.itemTitle, category: reference.category });
+      }
+    }
+    return [...byId.values()];
+  }, [session.utterances]);
   const utterancesById = useMemo(
     () => new Map(session.utterances.map((utterance) => [utterance.id, utterance])),
     [session.utterances],
@@ -199,24 +223,24 @@ export function IdeaModeView() {
       <div className="graph-column">
         <section className="graph-panel idea-flow" aria-label="idea map">
           <div className="graph-title">
-            <h2>Idea Map</h2>
+            <h2>アイデアマップ</h2>
             <span>{phaseLabel(phase)}</span>
           </div>
           <ReactFlow
             nodes={nodes}
             edges={edges}
             nodeTypes={nodeTypes}
-            fitView
             minZoom={0.2}
             maxZoom={1.6}
+            nodesDraggable={false}
+            nodesConnectable={false}
             proOptions={{ hideAttribution: true }}
             onNodeClick={(_, node) => {
-              if (phase === "select" && node.data.kind === "keyword") idea.togglePick(node.id);
+              if (phase === "select" && node.data.kind === "keyword") idea.cycleDecision(node.id);
             }}
           >
-            <FitOnPhaseChange phase={phase} />
+            <MapViewportControls fitKey={phase} padding={0.15} />
             <Background gap={20} color="#d5ddd8" />
-            <Controls showInteractive={false} />
           </ReactFlow>
         </section>
       </div>
@@ -225,6 +249,17 @@ export function IdeaModeView() {
         <section className="panel" aria-label="idea controls">
           <h2>アイデア出し</h2>
           <p className="idea-phase-note">{phaseLabel(phase)}</p>
+          {inheritedMeetingItems.length > 0 ? (
+            <div className="idea-meeting-source">
+              <strong>会議から引き継いだテーマ</strong>
+              <ul>
+                {inheritedMeetingItems.map((item) => (
+                  <li key={item.id}>{item.category === "issue" ? "課題" : "未解決"}: {item.title}</li>
+                ))}
+              </ul>
+              <small>根拠となる元発言も出典として保持しています。</small>
+            </div>
+          ) : null}
 
           {phase === "capture" ? (
             <>
@@ -254,7 +289,7 @@ export function IdeaModeView() {
                 <button type="button" onClick={submitManualText} disabled={!manualText.trim()}>
                   追加
                 </button>
-                <button type="button" onClick={() => { speech.stop(); idea.reset(); setMarkdown(null); }}>
+                <button type="button" onClick={() => setIsResetConfirmOpen(true)}>
                   リセット
                 </button>
               </div>
@@ -283,7 +318,15 @@ export function IdeaModeView() {
                         接続確認
                       </button>
                     </div>
-                    {llmStatus ? <p className="idea-llm-status">{llmStatus}</p> : null}
+                    {llmStatus ? (
+                      <p
+                        className={`idea-llm-status ${
+                          llmStatus.includes("失敗") ? "is-error" : llmStatus.includes("成功") ? "is-success" : ""
+                        }`}
+                      >
+                        {llmStatus}
+                      </p>
+                    ) : null}
                   </>
                 ) : null}
               </div>
@@ -295,14 +338,30 @@ export function IdeaModeView() {
           {phase === "select" ? (
             <>
               {idea.groupingNote ? <p className="idea-llm-status">{idea.groupingNote}</p> : null}
-              <p>
-                採用 {pickedCount} / {session.keywords.length} 件(マップ上のキーワードをクリックで切替)
-              </p>
+              <p>採用 {decisionCounts.adopted}・保留 {decisionCounts.hold}・却下 {decisionCounts.rejected}</p>
+              <p className="idea-phase-note">マップ上ではクリックするたびに「保留 → 採用 → 却下」と切り替わります。</p>
+              <div className="idea-group-editor" aria-label="グループ名の編集">
+                <strong>グループ名</strong>
+                {session.groups.map((group) => (
+                  <label key={group.id}>
+                    <span>{group.keywordIds.length}件</span>
+                    <input
+                      aria-label={`${group.title}のグループ名`}
+                      defaultValue={group.title}
+                      key={`${group.id}-${group.title}`}
+                      onBlur={(event) => idea.renameGroup(group.id, event.currentTarget.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") event.currentTarget.blur();
+                      }}
+                    />
+                  </label>
+                ))}
+              </div>
               <div className="button-row">
                 <button type="button" onClick={() => { idea.resumeCapture(); setMarkdown(null); }}>
                   まだ出す(発散に戻る)
                 </button>
-                <button type="button" onClick={() => setMarkdown(renderIdeaMarkdown(session))} disabled={pickedCount === 0}>
+                <button type="button" onClick={() => setMarkdown(renderIdeaMarkdown(session))}>
                   結果を出力
                 </button>
               </div>
@@ -310,7 +369,6 @@ export function IdeaModeView() {
                 <button
                   type="button"
                   onClick={() => downloadFile(`idea-session-${Date.now()}.md`, renderIdeaMarkdown(session), "text/markdown")}
-                  disabled={pickedCount === 0}
                 >
                   Markdown保存
                 </button>
@@ -340,16 +398,28 @@ export function IdeaModeView() {
               .map((keyword) => {
                 const firstUtterance = utterancesById.get(keyword.utteranceIds[0]);
                 return (
-                  <li key={keyword.id} className={keyword.picked ? "is-picked" : ""}>
-                    <button
-                      type="button"
-                      className="idea-keyword-chip"
-                      onClick={() => idea.togglePick(keyword.id)}
-                      disabled={phase !== "select"}
-                    >
-                      {keyword.label}
-                      {keyword.mentionCount > 1 ? ` ×${keyword.mentionCount}` : ""}
-                    </button>
+                  <li key={keyword.id} className={`is-${keyword.decision}`}>
+                    <div className="idea-keyword-row">
+                      <span className="idea-keyword-chip">
+                        {keyword.label}
+                        {keyword.mentionCount > 1 ? ` ×${keyword.mentionCount}` : ""}
+                      </span>
+                      {phase === "select" ? (
+                        <div className="idea-decision-buttons" aria-label={`${keyword.label}の状態`}>
+                          {(["adopted", "hold", "rejected"] as const).map((decision) => (
+                            <button
+                              type="button"
+                              className={`decision-${decision}`}
+                              aria-pressed={keyword.decision === decision}
+                              key={decision}
+                              onClick={() => idea.setDecision(keyword.id, decision)}
+                            >
+                              {decisionLabel(decision)}
+                            </button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
                     {firstUtterance ? <small>「{firstUtterance.text}」</small> : null}
                   </li>
                 );
@@ -358,6 +428,20 @@ export function IdeaModeView() {
           {session.keywords.length === 0 ? <p className="idea-phase-note">話し始めるとキーワードがこことマップに増えていきます。</p> : null}
         </section>
       </div>
+
+      <ConfirmDialog
+        open={isResetConfirmOpen}
+        title="セッションをリセットしますか?"
+        description="収集したキーワードと発言はすべて削除され、元に戻せません。"
+        confirmLabel="リセットする"
+        onConfirm={() => {
+          speech.stop();
+          idea.reset();
+          setMarkdown(null);
+          setIsResetConfirmOpen(false);
+        }}
+        onCancel={() => setIsResetConfirmOpen(false)}
+      />
     </section>
   );
 }

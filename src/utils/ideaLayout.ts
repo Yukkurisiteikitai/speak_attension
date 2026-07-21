@@ -27,8 +27,8 @@ export function estimateIdeaNodeSize(
     if ((opts.mentionCount ?? 1) > 1) {
       width += BADGE_GAP + estimateTextWidth(`×${opts.mentionCount}`, 11);
     }
-    // Always reserve the "採用" pick-mark badge so toggling a pick never
-    // shifts the node's footprint mid-session.
+    // Always reserve the decision badge so changing 採用・保留・却下 never
+    // shifts the node's footprint mid-session (all labels are two kanji).
     width += BADGE_GAP + estimateTextWidth("採用", 10) + 16;
   }
 
@@ -175,10 +175,9 @@ function layoutSideRows(sideGroups: IdeaGroup[], keywordById: Map<string, IdeaKe
   return { groupRows, keywordRows, maxGroupWidth, totalHeight: cursorY };
 }
 
-// 収束フェーズ: 中心の左右にグループ列、さらに外側にキーワード列を置く
-// 古典的マインドマップ配置。左右交互に振り分けて縦に積む。列の位置は
-// 中心ノード・グループノードの実寸見積もりから決め、React Flow が左上原点で
-// 解釈することに合わせて左サイドは右端基準にミラーリングする。
+// 収束フェーズ: 中心から右へ「グループ → キーワード」と進む一方向の
+// 階層配置。同じグループのキーワードを連続した縦ブロックにまとめることで、
+// 左右へ枝分かれしたときのように別グループ同士が一続きに見えることを防ぐ。
 export function mindmapPositions(groups: IdeaGroup[], keywords: IdeaKeyword[], centerLabel: string): MindmapLayout {
   const keywordById = new Map(keywords.map((keyword) => [keyword.id, keyword]));
   const groupedIds = new Set(groups.flatMap((group) => group.keywordIds));
@@ -187,32 +186,20 @@ export function mindmapPositions(groups: IdeaGroup[], keywords: IdeaKeyword[], c
   const effectiveGroups =
     orphanIds.length > 0 ? [...groups, { id: UNGROUPED_GROUP_ID, title: "その他", keywordIds: orphanIds }] : groups;
 
-  const sides: Array<{ direction: 1 | -1; groups: IdeaGroup[] }> = [
-    { direction: 1, groups: [] },
-    { direction: -1, groups: [] },
-  ];
-  effectiveGroups.forEach((group, index) => {
-    sides[index % 2].groups.push(group);
-  });
-
   const centerSize = estimateIdeaNodeSize(centerLabel, "center");
   const groupPositions = new Map<string, IdeaNodePosition>();
   const keywordPositions = new Map<string, IdeaNodePosition>();
 
-  for (const side of sides) {
-    const placement = layoutSideRows(side.groups, keywordById);
-    const yOffset = -placement.totalHeight / 2;
-    const groupColumnX = centerSize.width / 2 + MINDMAP_LINK_GAP;
-    const keywordColumnX = groupColumnX + placement.maxGroupWidth + MINDMAP_KEYWORD_GAP;
+  const placement = layoutSideRows(effectiveGroups, keywordById);
+  const yOffset = -placement.totalHeight / 2;
+  const groupColumnX = centerSize.width / 2 + MINDMAP_LINK_GAP;
+  const keywordColumnX = groupColumnX + placement.maxGroupWidth + MINDMAP_KEYWORD_GAP;
 
-    for (const [groupId, row] of placement.groupRows) {
-      const x = side.direction === 1 ? groupColumnX : -groupColumnX - row.width;
-      groupPositions.set(groupId, { x: Math.round(x), y: Math.round(row.y + yOffset) });
-    }
-    for (const [keywordId, row] of placement.keywordRows) {
-      const x = side.direction === 1 ? keywordColumnX : -keywordColumnX - row.width;
-      keywordPositions.set(keywordId, { x: Math.round(x), y: Math.round(row.y + yOffset) });
-    }
+  for (const [groupId, row] of placement.groupRows) {
+    groupPositions.set(groupId, { x: Math.round(groupColumnX), y: Math.round(row.y + yOffset) });
+  }
+  for (const [keywordId, row] of placement.keywordRows) {
+    keywordPositions.set(keywordId, { x: Math.round(keywordColumnX), y: Math.round(row.y + yOffset) });
   }
 
   return {
