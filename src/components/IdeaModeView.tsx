@@ -7,7 +7,6 @@ import {
   type Node,
   type NodeProps,
 } from "@xyflow/react";
-import "@xyflow/react/dist/style.css";
 import { useMemo, useState } from "react";
 import type { IdeaSessionStore } from "../hooks/ideaSessionStore";
 import { useIdeaSession } from "../hooks/useIdeaSession";
@@ -22,6 +21,7 @@ import {
   type IdeaPhase,
 } from "../utils/ideaSession";
 import { checkLlmConnection } from "../utils/llmConnection";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { MapViewportControls } from "./MapViewportControls";
 
 const GROUP_COLORS = ["#116147", "#b76a1f", "#4756a6", "#a64845", "#6c6218", "#2e7d84", "#8a4d8f", "#5a6b3b"];
@@ -81,6 +81,7 @@ export function IdeaModeView({ store }: { store?: IdeaSessionStore }) {
   const { llmSettings, updateLlmSettings } = useLlmSettings();
   const [llmStatus, setLlmStatus] = useState<string | null>(null);
   const [markdown, setMarkdown] = useState<string | null>(null);
+  const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
 
   const { session } = idea;
   const phase = session.phase;
@@ -221,7 +222,7 @@ export function IdeaModeView({ store }: { store?: IdeaSessionStore }) {
       <div className="graph-column">
         <section className="graph-panel idea-flow" aria-label="idea map">
           <div className="graph-title">
-            <h2>Idea Map</h2>
+            <h2>アイデアマップ</h2>
             <span>{phaseLabel(phase)}</span>
           </div>
           <ReactFlow
@@ -231,6 +232,7 @@ export function IdeaModeView({ store }: { store?: IdeaSessionStore }) {
             minZoom={0.2}
             maxZoom={1.6}
             nodesDraggable={false}
+            nodesConnectable={false}
             proOptions={{ hideAttribution: true }}
             onNodeClick={(_, node) => {
               if (phase === "select" && node.data.kind === "keyword") idea.cycleDecision(node.id);
@@ -286,7 +288,7 @@ export function IdeaModeView({ store }: { store?: IdeaSessionStore }) {
                 <button type="button" onClick={submitManualText} disabled={!manualText.trim()}>
                   追加
                 </button>
-                <button type="button" onClick={() => { speech.stop(); idea.reset(); setMarkdown(null); }}>
+                <button type="button" onClick={() => setIsResetConfirmOpen(true)}>
                   リセット
                 </button>
               </div>
@@ -315,7 +317,15 @@ export function IdeaModeView({ store }: { store?: IdeaSessionStore }) {
                         接続確認
                       </button>
                     </div>
-                    {llmStatus ? <p className="idea-llm-status">{llmStatus}</p> : null}
+                    {llmStatus ? (
+                      <p
+                        className={`idea-llm-status ${
+                          llmStatus.includes("失敗") ? "is-error" : llmStatus.includes("成功") ? "is-success" : ""
+                        }`}
+                      >
+                        {llmStatus}
+                      </p>
+                    ) : null}
                   </>
                 ) : null}
               </div>
@@ -417,6 +427,20 @@ export function IdeaModeView({ store }: { store?: IdeaSessionStore }) {
           {session.keywords.length === 0 ? <p className="idea-phase-note">話し始めるとキーワードがこことマップに増えていきます。</p> : null}
         </section>
       </div>
+
+      <ConfirmDialog
+        open={isResetConfirmOpen}
+        title="セッションをリセットしますか?"
+        description="収集したキーワードと発言はすべて削除され、元に戻せません。"
+        confirmLabel="リセットする"
+        onConfirm={() => {
+          speech.stop();
+          idea.reset();
+          setMarkdown(null);
+          setIsResetConfirmOpen(false);
+        }}
+        onCancel={() => setIsResetConfirmOpen(false)}
+      />
     </section>
   );
 }

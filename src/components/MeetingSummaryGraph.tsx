@@ -1,5 +1,4 @@
 import { Background, Handle, Position, ReactFlow, type Edge, type Node, type NodeProps } from "@xyflow/react";
-import "@xyflow/react/dist/style.css";
 import { useEffect, useMemo, useState } from "react";
 import type { AnalyzedSegment, MeetingSummary, MeetingSummaryCategory, MeetingSummaryStatus } from "../types/topic";
 import { MEETING_SUMMARY_CATEGORY_LABELS, MEETING_SUMMARY_CATEGORY_ORDER } from "../utils/meetingSynthesis";
@@ -279,7 +278,16 @@ export function MeetingSummaryGraph({ summary, status, error, stale, startedAt, 
       {stale ? <p className="summary-stale">新しい発言があります。再整理すると反映されます。</p> : null}
       {error ? <p className="summary-error">{error}</p> : null}
       <OrganizationProgress startedAt={startedAt} status={status} segmentCount={segments.length} />
-      <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes} minZoom={0.15} maxZoom={1.5} nodesDraggable={false} proOptions={{ hideAttribution: true }}>
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        nodeTypes={nodeTypes}
+        minZoom={0.15}
+        maxZoom={1.5}
+        nodesDraggable={false}
+        nodesConnectable={false}
+        proOptions={{ hideAttribution: true }}
+      >
         <Background gap={24} color="#e2e7e3" />
         <MapViewportControls fitKey={summary.generatedAt} />
       </ReactFlow>

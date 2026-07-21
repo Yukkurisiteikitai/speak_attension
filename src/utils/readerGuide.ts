@@ -19,7 +19,7 @@ function buildSummary({ currentTopic, focusState, latestSegment }: BuildReaderGu
   }
 
   if (!currentTopic) {
-    return "直近の発話は受け取っていますが、まだ安定した議題としてまとまっていません。話題名として拾える表現が増えると Current Topic が出ます。";
+    return "直近の発話は受け取っていますが、まだ安定した議題としてまとまっていません。話題名として拾える表現が増えると現在の議題が出ます。";
   }
 
   const relationLabel =
@@ -58,13 +58,13 @@ function buildUnknowns({ currentTopic, currentTopicGaps, latestSegment }: BuildR
 
 function buildHints({ currentTopic, currentTopicGaps }: BuildReaderGuideOptions): string[] {
   const hints = [
-    "Current Topic は、いま会話の中心だと判断している議題です。",
-    "Coverage は、その議題で『決定・理由・担当・期限』などが会話に出たかをチェックしています。",
-    "Current Gaps は、初見の人が後から見たときに説明が足りなくなる点を優先表示しています。",
+    "現在の議題は、いま会話の中心だと判断している議題です。",
+    "カバレッジは、その議題で『決定・理由・担当・期限』などが会話に出たかをチェックしています。",
+    "抜け漏れは、初見の人が後から見たときに説明が足りなくなる点を優先表示しています。",
   ];
 
   if (currentTopic && currentTopicGaps.length) {
-    hints.push("Gap が残っている間は、議題名が分かっても意思決定の背景や宿題が不足している可能性があります。");
+    hints.push("抜け漏れが残っている間は、議題名が分かっても意思決定の背景や宿題が不足している可能性があります。");
   }
 
   return hints;

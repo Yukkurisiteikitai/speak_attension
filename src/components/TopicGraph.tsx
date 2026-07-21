@@ -1,5 +1,4 @@
 import { Background, Handle, Position, ReactFlow, type NodeProps } from "@xyflow/react";
-import "@xyflow/react/dist/style.css";
 import { useMemo, useState } from "react";
 import type { AnalyzedSegment, GraphTopicNodeData, MeetingGraph, TopicGraphNode } from "../types/topic";
 import { projectGraphToFlow } from "../utils/topicProjection";
@@ -148,6 +147,7 @@ export function TopicGraph({ currentTopicId, meetingGraph, segments }: TopicGrap
         minZoom={0.2}
         maxZoom={1.5}
         nodesDraggable={false}
+        nodesConnectable={false}
         proOptions={{ hideAttribution: true }}
         onNodeClick={(_, node) => {
           if (node.data.kind === "topic" && node.data.childCount) toggleTopic(node.id);

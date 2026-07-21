@@ -1,5 +1,5 @@
-import { Controls, Panel, useReactFlow } from "@xyflow/react";
-import { ScanSearch } from "lucide-react";
+import { ControlButton, Controls, Panel, useReactFlow } from "@xyflow/react";
+import { Minus, Plus, ScanSearch } from "lucide-react";
 import { useCallback, useEffect } from "react";
 
 type MapViewportControlsProps = {
@@ -8,7 +8,7 @@ type MapViewportControlsProps = {
 };
 
 export function MapViewportControls({ fitKey, padding = 0.16 }: MapViewportControlsProps) {
-  const { fitView } = useReactFlow();
+  const { fitView, zoomIn, zoomOut } = useReactFlow();
   const showEntireMap = useCallback((duration = 300) => {
     void fitView({ duration, padding });
   }, [fitView, padding]);
@@ -26,7 +26,18 @@ export function MapViewportControls({ fitKey, padding = 0.16 }: MapViewportContr
           <span>全体を表示</span>
         </button>
       </Panel>
-      <Controls showFitView={false} showInteractive={false} aria-label="マップの拡大縮小" />
+      {/* Custom icons replace the library's default zoom in/out buttons: the
+          built-in icons render at 0 width in some flows for reasons not
+          fully isolated (see .react-flow__controls-button svg in styles.css
+          for the fix these still need). */}
+      <Controls showZoom={false} showFitView={false} showInteractive={false} aria-label="マップの拡大縮小">
+        <ControlButton onClick={() => void zoomIn()} aria-label="拡大">
+          <Plus size={12} aria-hidden="true" />
+        </ControlButton>
+        <ControlButton onClick={() => void zoomOut()} aria-label="縮小">
+          <Minus size={12} aria-hidden="true" />
+        </ControlButton>
+      </Controls>
     </>
   );
 }

@@ -288,6 +288,7 @@ input:focus {
   display: grid;
   grid-template-rows: auto minmax(560px, 1fr);
   overflow: hidden;
+  height: 100%;
 }
 
 .graph-title {
@@ -615,6 +616,32 @@ input:focus {
 .meeting-mindmap .react-flow__controls-button {
   border-bottom-color: var(--line);
   background: rgba(255, 255, 255, 0.9);
+}
+
+/* .graph-panel clips overflow for its rounded corners (border-radius: 24px);
+   the library's default 15px panel margin isn't enough to clear that curve,
+   so the bottom-left controls get their left edge cut off. */
+.graph-panel .react-flow__controls {
+  margin-left: 26px;
+  margin-bottom: 18px;
+}
+
+/* The zoom icon <svg> is a flex item (button is display:flex) with the
+   default flex-shrink:1; in some flows (observed in idea mode, not meeting
+   mode, from the same component) it gets shrunk to width:0 despite an
+   explicit width. flex: none pins it to its intrinsic size and fixes it. */
+.react-flow__controls-button svg {
+  flex: none;
+  width: 12px;
+  height: 12px;
+}
+
+/* The zoom icon <svg> is a flex item with the browser default flex-shrink:1;
+   in some flows (observed in idea mode, not meeting mode, for the same
+   markup) it gets shrunk to 0 width even though the container has room.
+   flex: none pins it to its intrinsic size and fixes the collapse. */
+.react-flow__controls-button svg {
+  flex: none;
 }
 
 .topic-node.is-active {
@@ -1355,6 +1382,16 @@ input:focus {
   font-size: 12px;
 }
 
+.idea-llm-status.is-error {
+  color: var(--red);
+  font-weight: 700;
+}
+
+.idea-llm-status.is-success {
+  color: var(--green);
+  font-weight: 700;
+}
+
 .idea-meeting-source {
   border-left: 3px solid var(--green);
   margin: 8px 0 12px;
@@ -1487,4 +1524,46 @@ input:focus {
   border-color: var(--red);
   background: rgba(255, 244, 242, 0.94);
   color: var(--red);
+}
+
+.confirm-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(30, 40, 32, 0.32);
+  z-index: 1000;
+  padding: 20px;
+}
+
+.confirm-dialog {
+  width: min(360px, 100%);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 22px;
+}
+
+.confirm-dialog h2 {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+}
+
+.confirm-dialog p {
+  margin: 0 0 16px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.confirm-dialog .button-row {
+  justify-content: flex-end;
+}
+
+.confirm-dialog-confirm {
+  border-color: rgba(166, 72, 69, 0.32);
+  background: var(--red-soft);
+  color: var(--red);
+  font-weight: 700;
 }

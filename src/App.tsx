@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ConfirmDialog } from "./components/ConfirmDialog";
 import { ControlPanel } from "./components/ControlPanel";
 import { IdeaModeView } from "./components/IdeaModeView";
 import { ManualReplayPanel } from "./components/ManualReplayPanel";
@@ -25,15 +26,15 @@ const WS_URL = "ws://127.0.0.1:8787";
 // Keeps a single browser WebSocket for session logs and hides the transport detail from the UI.
 function useSessionSocket() {
   const socketRef = useRef<WebSocket | null>(null);
-  const [connectionStatus, setConnectionStatus] = useState("ws: connecting");
+  const [connectionStatus, setConnectionStatus] = useState("接続中");
 
   useEffect(() => {
     const socket = new WebSocket(WS_URL);
     socketRef.current = socket;
 
-    socket.addEventListener("open", () => setConnectionStatus("ws: connected"));
-    socket.addEventListener("close", () => setConnectionStatus("ws: disconnected"));
-    socket.addEventListener("error", () => setConnectionStatus("ws: error"));
+    socket.addEventListener("open", () => setConnectionStatus("接続済み"));
+    socket.addEventListener("close", () => setConnectionStatus("切断"));
+    socket.addEventListener("error", () => setConnectionStatus("接続エラー"));
 
     return () => {
       socket.close();
@@ -51,9 +52,9 @@ function useSessionSocket() {
 }
 
 function statusLabel(isSupported: boolean, isListening: boolean): string {
-  if (!isSupported) return "Web Speech API unavailable";
-  if (isListening) return "listening: ja-JP";
-  return "idle";
+  if (!isSupported) return "Web Speech API が利用できません";
+  if (isListening) return "音声認識中(日本語)";
+  return "待機中";
 }
 
 export default function App() {
@@ -100,6 +101,7 @@ function MeetingMode({
   const [railTab, setRailTab] = useState<MeetingRailTab>("progress");
   const [inputDockOpen, setInputDockOpen] = useState(false);
   const [inputTab, setInputTab] = useState<MeetingInputTab>("manual");
+  const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -123,20 +125,20 @@ function MeetingMode({
     <>
       <header className="meeting-header">
         <div>
-          <p className="eyebrow">Meeting Dashboard</p>
+          <p className="eyebrow">会議ダッシュボード</p>
           <h1>{topicEngine.meetingGraph.title}</h1>
         </div>
         <div className="header-metrics">
           <div className="header-metric">
-            <span>elapsed</span>
+            <span>経過時間</span>
             <strong>{elapsedLabel}</strong>
           </div>
           <div className="header-metric">
-            <span>current topic</span>
-            <strong>{topicEngine.currentTopic?.title ?? "none"}</strong>
+            <span>現在の議題</span>
+            <strong>{topicEngine.currentTopic?.title ?? "なし"}</strong>
           </div>
           <div className="header-metric">
-            <span>status</span>
+            <span>接続状態</span>
             <strong>{connectionStatus}</strong>
           </div>
         </div>
@@ -199,10 +201,7 @@ function MeetingMode({
               error={speech.error}
               isListening={speech.isListening}
               isSupported={speech.isSupported}
-              onReset={() => {
-                topicEngine.reset();
-                setMapMode("live");
-              }}
+              onReset={() => setIsResetConfirmOpen(true)}
               onOrganize={organizeMeeting}
               canOrganize={topicEngine.segmentArchive.length > 0}
               isOrganizing={topicEngine.meetingSummaryStatus === "refining"}
@@ -295,6 +294,19 @@ function MeetingMode({
           </div>
         </div>
       </section>
+
+      <ConfirmDialog
+        open={isResetConfirmOpen}
+        title="セッションをリセットしますか?"
+        description="収集した発言・議題・要約はすべて削除され、元に戻せません。"
+        confirmLabel="リセットする"
+        onConfirm={() => {
+          topicEngine.reset();
+          setMapMode("live");
+          setIsResetConfirmOpen(false);
+        }}
+        onCancel={() => setIsResetConfirmOpen(false)}
+      />
     </>
   );
 }

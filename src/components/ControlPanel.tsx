@@ -28,7 +28,7 @@ export function ControlPanel({
   return (
     <section className="panel control-panel" aria-label="meeting controls">
       <div className="panel-heading">
-        <p className="eyebrow">Meeting Controls</p>
+        <p className="eyebrow">会議操作</p>
         <h2>会議の進行</h2>
         <p className="panel-copy">音声入力を操作し、必要なタイミングで会議を整理します。</p>
       </div>
