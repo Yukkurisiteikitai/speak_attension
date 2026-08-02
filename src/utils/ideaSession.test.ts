@@ -4,6 +4,8 @@ import {
   applyGrouping,
   beginGrouping,
   buildIdeaSessionExport,
+  collectIdeaMeetingSourceItems,
+  countIdeaDecisions,
   createIdeaSessionFromMeetingSelection,
   createInitialIdeaSessionState,
   renameIdeaGroup,
@@ -87,6 +89,11 @@ describe("setKeywordDecision / renderIdeaMarkdown", () => {
     expect(markdown).toContain("## 却下アイデア");
     expect(markdown).toContain("プッシュ通知(言及2回)");
     expect(markdown).toContain("出典: 「プッシュ通知が欲しい」");
+    expect(countIdeaDecisions(state.keywords)).toEqual({
+      adopted: 1,
+      hold: state.keywords.length - 1,
+      rejected: 0,
+    });
   });
 
   it("renames a group without changing its keyword membership", () => {
@@ -147,6 +154,10 @@ describe("createIdeaSessionFromMeetingSelection", () => {
       topicId: "topic-1",
       segmentId: "seg-1",
     });
+    expect(collectIdeaMeetingSourceItems(state.utterances)).toEqual([
+      { id: "item-1", title: "通知に気づけない", category: "issue" },
+      { id: "item-2", title: "通知方法が未決定", category: "unresolved" },
+    ]);
 
     const exported = buildIdeaSessionExport(state, 11_000);
     expect(exported.utterances[0]?.sourceReferences?.[0]?.itemTitle).toBe("通知に気づけない");

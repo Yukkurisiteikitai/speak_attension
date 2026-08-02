@@ -1,9 +1,9 @@
 import { useMemo, useState } from "react";
 import { Download, FileText, Sparkles, ThumbsDown, ThumbsUp } from "lucide-react";
+import { useLlmConnectionCheck } from "../hooks/useLlmConnectionCheck";
 import { downloadFile } from "../lib/download";
 import type { AnalyzedSegment, ConversationTreeState, ImportantMention, MeetingGraph } from "../types/topic";
 import { type LlmSettings } from "../utils/llmClient";
-import { checkLlmConnection } from "../utils/llmConnection";
 import { reviewReportWithLlm } from "../utils/llmGapReview";
 import { buildMeetingReport, renderMeetingReportMarkdown, type MeetingReport, type MeetingReportFinding } from "../utils/meetingReport";
 import { buildEvaluationDataset, summarizeFeedback, type FindingVerdict, type ReportFeedbackMap } from "../utils/reportFeedback";
@@ -93,7 +93,15 @@ function FindingCard({
 export function MeetingReportPanel({ conversationTree, meetingGraph, importantMentions, segmentArchive, llmSettings, onUpdateLlmSettings }: MeetingReportPanelProps) {
   const [report, setReport] = useState<MeetingReport | null>(null);
   const [feedback, setFeedback] = useState<ReportFeedbackMap>({});
-  const [llmStatus, setLlmStatus] = useState<string | null>(null);
+  const {
+    connectionStatus: llmStatus,
+    setConnectionStatus: setLlmStatus,
+    checkConnection: checkLlmConnection,
+  } = useLlmConnectionCheck({
+    settings: llmSettings,
+    onUpdateSettings: onUpdateLlmSettings,
+    pendingMessage: "接続確認中...",
+  });
   const [isReviewing, setIsReviewing] = useState(false);
 
   const summary = useMemo(() => (report ? summarizeFeedback(report.findings, feedback) : null), [feedback, report]);
@@ -114,13 +122,6 @@ export function MeetingReportPanel({ conversationTree, meetingGraph, importantMe
       window.localStorage.setItem(feedbackStorageKey(report), JSON.stringify(next));
       return next;
     });
-  };
-
-  const handleCheckConnection = async () => {
-    setLlmStatus("接続確認中...");
-    const result = await checkLlmConnection(llmSettings);
-    if (result.autofillModel) onUpdateLlmSettings({ model: result.autofillModel });
-    setLlmStatus(result.statusMessage);
   };
 
   const runLlmReview = async () => {
@@ -208,7 +209,7 @@ export function MeetingReportPanel({ conversationTree, meetingGraph, importantMe
           onChange={(event) => onUpdateLlmSettings({ model: event.currentTarget.value })}
         />
         <div className="report-actions">
-          <button type="button" onClick={handleCheckConnection}>
+          <button type="button" onClick={() => void checkLlmConnection()}>
             <span>接続確認</span>
           </button>
           <button type="button" onClick={runLlmReview} disabled={!report || isReviewing || !llmSettings.model}>

@@ -47,6 +47,14 @@ export type IdeaGroup = {
 
 export type IdeaGroupingSource = "llm" | "rules";
 
+export type IdeaDecisionCounts = Record<IdeaDecision, number>;
+
+export type IdeaMeetingSourceItem = {
+  id: string;
+  title: string;
+  category: "issue" | "unresolved";
+};
+
 export type IdeaSessionState = {
   phase: IdeaPhase;
   startedAt: number;
@@ -211,6 +219,28 @@ export function renameIdeaGroup(state: IdeaSessionState, groupId: string, title:
   };
 }
 
+export function countIdeaDecisions(keywords: IdeaKeyword[]): IdeaDecisionCounts {
+  return keywords.reduce<IdeaDecisionCounts>(
+    (counts, keyword) => ({ ...counts, [keyword.decision]: counts[keyword.decision] + 1 }),
+    { adopted: 0, hold: 0, rejected: 0 },
+  );
+}
+
+export function collectIdeaMeetingSourceItems(utterances: IdeaUtterance[]): IdeaMeetingSourceItem[] {
+  const itemsById = new Map<string, IdeaMeetingSourceItem>();
+  for (const utterance of utterances) {
+    for (const reference of utterance.sourceReferences ?? []) {
+      if (reference.category !== "issue" && reference.category !== "unresolved") continue;
+      itemsById.set(reference.itemId, {
+        id: reference.itemId,
+        title: reference.itemTitle,
+        category: reference.category,
+      });
+    }
+  }
+  return [...itemsById.values()];
+}
+
 function formatTimestamp(at: number): string {
   return new Date(at).toLocaleString("ja-JP");
 }
@@ -236,15 +266,16 @@ const DECISION_LABELS: Record<IdeaDecision, string> = {
 export function renderIdeaMarkdown(state: IdeaSessionState, generatedAt: number = Date.now()): string {
   const utterancesById = new Map(state.utterances.map((utterance) => [utterance.id, utterance]));
   const keywordsById = new Map(state.keywords.map((keyword) => [keyword.id, keyword]));
+  const decisionCounts = countIdeaDecisions(state.keywords);
   const lines: string[] = [
     `# ${state.title} 結果`,
     "",
     `- 生成日時: ${formatTimestamp(generatedAt)}`,
     `- 発言数: ${state.utterances.length}`,
     `- キーワード数: ${state.keywords.length}`,
-    `- 採用: ${state.keywords.filter((keyword) => keyword.decision === "adopted").length}`,
-    `- 保留: ${state.keywords.filter((keyword) => keyword.decision === "hold").length}`,
-    `- 却下: ${state.keywords.filter((keyword) => keyword.decision === "rejected").length}`,
+    `- 採用: ${decisionCounts.adopted}`,
+    `- 保留: ${decisionCounts.hold}`,
+    `- 却下: ${decisionCounts.rejected}`,
     `- グルーピング: ${state.groupingSource === "llm" ? "ローカルLLM" : state.groupingSource === "rules" ? "ルールベース" : "未実施"}`,
     "",
     "## 採用アイデア",

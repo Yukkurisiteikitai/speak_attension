@@ -1,77 +1,29 @@
 import {
   Background,
-  Handle,
-  Position,
   ReactFlow,
-  type Edge,
-  type Node,
-  type NodeProps,
 } from "@xyflow/react";
 import { useMemo, useState } from "react";
 import type { IdeaSessionStore } from "../hooks/ideaSessionStore";
 import { useIdeaSession } from "../hooks/useIdeaSession";
+import { useLlmConnectionCheck } from "../hooks/useLlmConnectionCheck";
 import { useLlmSettings } from "../hooks/useLlmSettings";
 import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 import { downloadFile } from "../lib/download";
-import { mindmapPositions, radialPositions } from "../utils/ideaLayout";
 import {
   buildIdeaSessionExport,
+  collectIdeaMeetingSourceItems,
+  countIdeaDecisions,
   renderIdeaMarkdown,
-  type IdeaDecision,
   type IdeaPhase,
 } from "../utils/ideaSession";
-import { checkLlmConnection } from "../utils/llmConnection";
 import { ConfirmDialog } from "./ConfirmDialog";
+import { buildIdeaFlowElements, decisionLabel, ideaNodeTypes } from "./ideaFlow";
 import { MapViewportControls } from "./MapViewportControls";
-
-const GROUP_COLORS = ["#116147", "#b76a1f", "#4756a6", "#a64845", "#6c6218", "#2e7d84", "#8a4d8f", "#5a6b3b"];
-
-type IdeaFlowNodeData = {
-  label: string;
-  kind: "center" | "group" | "keyword";
-  mentionCount?: number;
-  decision?: IdeaDecision;
-  color?: string;
-  phase: IdeaPhase;
-};
-
-type IdeaFlowNode = Node<IdeaFlowNodeData>;
-
-function IdeaNode({ data }: NodeProps<IdeaFlowNode>) {
-  const pickable = data.kind === "keyword" && data.phase === "select";
-  const isHierarchy = data.phase === "grouping" || data.phase === "select";
-  const classNames = [
-    "idea-node",
-    `idea-node-${data.kind}`,
-    data.decision ? `is-${data.decision}` : "",
-    pickable ? "is-pickable" : "",
-  ]
-    .filter(Boolean)
-    .join(" ");
-
-  return (
-    <div className={classNames} style={data.color ? { borderColor: data.color } : undefined}>
-      <Handle type="target" position={isHierarchy ? Position.Left : Position.Top} className="idea-node-handle" />
-      <strong>{data.label}</strong>
-      {typeof data.mentionCount === "number" && data.mentionCount > 1 ? <span>×{data.mentionCount}</span> : null}
-      {data.decision ? <span className="idea-decision-mark">{decisionLabel(data.decision)}</span> : null}
-      <Handle type="source" position={isHierarchy ? Position.Right : Position.Top} className="idea-node-handle" />
-    </div>
-  );
-}
-
-const nodeTypes = { idea: IdeaNode };
 
 function phaseLabel(phase: IdeaPhase): string {
   if (phase === "capture") return "発散中(キーワード収集)";
   if (phase === "grouping") return "グループ化中…";
   return "整理中(採用・保留・却下を選択)";
-}
-
-function decisionLabel(decision: IdeaDecision): string {
-  if (decision === "adopted") return "採用";
-  if (decision === "rejected") return "却下";
-  return "保留";
 }
 
 export function IdeaModeView({ store }: { store?: IdeaSessionStore }) {
@@ -80,108 +32,20 @@ export function IdeaModeView({ store }: { store?: IdeaSessionStore }) {
   const [manualText, setManualText] = useState("");
   const [useLlm, setUseLlm] = useState(false);
   const { llmSettings, updateLlmSettings } = useLlmSettings();
-  const [llmStatus, setLlmStatus] = useState<string | null>(null);
+  const { connectionStatus: llmStatus, checkConnection: checkLlmConnection } = useLlmConnectionCheck({
+    settings: llmSettings,
+    onUpdateSettings: updateLlmSettings,
+  });
   const [markdown, setMarkdown] = useState<string | null>(null);
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
 
   const { session } = idea;
   const phase = session.phase;
 
-  const { nodes, edges } = useMemo(() => {
-    const flowEdges: Edge[] = [];
-    const colorByGroup = new Map(session.groups.map((group, index) => [group.id, GROUP_COLORS[index % GROUP_COLORS.length]]));
-
-    if (phase === "select" || phase === "grouping") {
-      const layout = mindmapPositions(session.groups, session.keywords, session.title);
-      const flowNodes: IdeaFlowNode[] = [
-        {
-          id: "idea-center",
-          type: "idea",
-          position: layout.centerPosition,
-          data: { label: session.title, kind: "center", phase },
-          draggable: false,
-        },
-      ];
-      for (const group of session.groups) {
-        const color = colorByGroup.get(group.id);
-        flowNodes.push({
-          id: group.id,
-          type: "idea",
-          position: layout.groupPositions.get(group.id) ?? { x: 0, y: 0 },
-          data: { label: group.title, kind: "group", color, phase },
-        });
-        flowEdges.push({
-          id: `edge-center-${group.id}`,
-          source: "idea-center",
-          target: group.id,
-          type: "straight",
-          style: { stroke: color, strokeWidth: 2 },
-        });
-      }
-      for (const keyword of session.keywords) {
-        const color = keyword.groupId ? colorByGroup.get(keyword.groupId) : undefined;
-        const layoutPosition = layout.keywordPositions.get(keyword.id);
-        flowNodes.push({
-          id: keyword.id,
-          type: "idea",
-          position: layoutPosition ?? { x: 0, y: 0 },
-          data: {
-            label: keyword.label,
-            kind: "keyword",
-            mentionCount: keyword.mentionCount,
-            decision: keyword.decision,
-            color,
-            phase,
-          },
-        });
-        if (keyword.groupId) {
-          flowEdges.push({
-            id: `edge-${keyword.groupId}-${keyword.id}`,
-            source: keyword.groupId,
-            target: keyword.id,
-            type: "straight",
-            style: { stroke: color, strokeWidth: 1.4, opacity: 0.7 },
-          });
-        }
-      }
-      return { nodes: flowNodes, edges: flowEdges };
-    }
-
-    const layout = radialPositions(session.keywords, session.title);
-    const flowNodes: IdeaFlowNode[] = [
-      {
-        id: "idea-center",
-        type: "idea",
-        position: layout.centerPosition,
-        data: { label: session.title, kind: "center", phase },
-        draggable: false,
-      },
-    ];
-    for (const keyword of session.keywords) {
-      flowNodes.push({
-        id: keyword.id,
-        type: "idea",
-        position: layout.keywordPositions.get(keyword.id) ?? { x: 0, y: 0 },
-        data: { label: keyword.label, kind: "keyword", mentionCount: keyword.mentionCount, phase },
-      });
-      flowEdges.push({
-        id: `edge-center-${keyword.id}`,
-        source: "idea-center",
-        target: keyword.id,
-        type: "straight",
-        style: { stroke: "rgba(62, 76, 65, 0.25)", strokeWidth: 1 },
-      });
-    }
-
-    return { nodes: flowNodes, edges: flowEdges };
-  }, [phase, session.groups, session.keywords, session.title]);
-
-  const handleCheckConnection = async () => {
-    setLlmStatus("接続確認中…");
-    const result = await checkLlmConnection(llmSettings);
-    if (result.autofillModel) updateLlmSettings({ model: result.autofillModel });
-    setLlmStatus(result.statusMessage);
-  };
+  const { nodes, edges } = useMemo(
+    () => buildIdeaFlowElements(session),
+    [phase, session.groups, session.keywords, session.title],
+  );
 
   const finishCapture = () => {
     speech.stop();
@@ -196,23 +60,13 @@ export function IdeaModeView({ store }: { store?: IdeaSessionStore }) {
   };
 
   const decisionCounts = useMemo(
-    () => ({
-      adopted: session.keywords.filter((keyword) => keyword.decision === "adopted").length,
-      hold: session.keywords.filter((keyword) => keyword.decision === "hold").length,
-      rejected: session.keywords.filter((keyword) => keyword.decision === "rejected").length,
-    }),
+    () => countIdeaDecisions(session.keywords),
     [session.keywords],
   );
-  const inheritedMeetingItems = useMemo(() => {
-    const byId = new Map<string, { id: string; title: string; category: "issue" | "unresolved" }>();
-    for (const utterance of session.utterances) {
-      for (const reference of utterance.sourceReferences ?? []) {
-        if (reference.category !== "issue" && reference.category !== "unresolved") continue;
-        byId.set(reference.itemId, { id: reference.itemId, title: reference.itemTitle, category: reference.category });
-      }
-    }
-    return [...byId.values()];
-  }, [session.utterances]);
+  const inheritedMeetingItems = useMemo(
+    () => collectIdeaMeetingSourceItems(session.utterances),
+    [session.utterances],
+  );
   const utterancesById = useMemo(
     () => new Map(session.utterances.map((utterance) => [utterance.id, utterance])),
     [session.utterances],
@@ -229,7 +83,7 @@ export function IdeaModeView({ store }: { store?: IdeaSessionStore }) {
           <ReactFlow
             nodes={nodes}
             edges={edges}
-            nodeTypes={nodeTypes}
+            nodeTypes={ideaNodeTypes}
             minZoom={0.2}
             maxZoom={1.6}
             nodesDraggable={false}
@@ -314,7 +168,7 @@ export function IdeaModeView({ store }: { store?: IdeaSessionStore }) {
                       placeholder="model id(接続確認で自動入力)"
                     />
                     <div className="button-row">
-                      <button type="button" onClick={() => void handleCheckConnection()}>
+                      <button type="button" onClick={() => void checkLlmConnection()}>
                         接続確認
                       </button>
                     </div>
