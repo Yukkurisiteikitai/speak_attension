@@ -61,7 +61,7 @@ speech / manual text / replay
 
 ### `src/utils/ideaSession.ts`
 
-アイデア出しセッションの状態遷移、採用・保留・却下、グループ名編集、キーワードと発話の対応、会議整理からの引継ぎ、Markdown/JSON エクスポート。
+アイデア出しセッションの状態遷移、採用・保留・却下、グループ名編集、キーワードと発話の対応、会議整理からの引継ぎ、表示用の集計セレクター、Markdown/JSON エクスポート。
 
 ### `src/utils/ideaExtraction.ts`
 
@@ -82,6 +82,10 @@ speech / manual text / replay
 ### `src/components/IdeaModeView.tsx`
 
 アイデアマップ、音声・手入力、グループ化、採用選択、エクスポート UI。
+
+### `src/components/ideaFlow.tsx`
+
+アイデアセッションを React Flow のノード・エッジへ変換する表示アダプターと、ノード表示。収集時の放射状マップと整理時の一方向階層を、UI の状態管理から分離する。
 
 ### `src/components/MapViewportControls.tsx`
 
@@ -111,6 +115,10 @@ Topic matching and topic creation rules.
 
 Coverage detection, gap generation, lifecycle derivation, and gap sorting.
 
+### `src/utils/topicProjection.ts`
+
+従来分析用の `MeetingGraph` を表示ノード・エッジへ投影する純粋関数。発言の時系列整理、枝ごとの寸法計算、左右の高さバランス、座標計算、表示要素生成を段階ごとの内部関数に分けている。
+
 ### `src/utils/conversationTree.ts` / `src/utils/conversationTreeLayout.ts`
 
 リアルタイム発言を話題・課題・原因・アクション・別案・通常発言へ分類し、親を追加時に固定する純粋関数。レイアウトは部分木の高さを先に見積もり、任意深度の右向きツリーを重なりなく配置する。
@@ -136,6 +144,8 @@ Diagnostic side panel. It shows current topic, gaps, coverage, latest analysis, 
 ### `src/utils/llmClient.ts`
 
 ローカル LLM との通信共通部。`ideaGrouping` と `llmGapReview` から利用する。接続確認は `src/utils/llmConnection.ts` の `checkLlmConnection` を両モードの設定 UI から共用する。
+
+`src/hooks/useLlmConnectionCheck.ts` は接続確認中・成功・失敗の表示状態と、未設定モデルの自動入力を両モードで共通管理する。
 
 ### `src/utils/llmGapReview.ts` / `src/utils/llmTopicTitle.ts` / `src/utils/llmMeetingSynthesis.ts`
 
