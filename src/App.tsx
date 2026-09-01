@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ConfirmDialog } from "./components/ConfirmDialog";
 import { ConversationNodeEditor } from "./components/ConversationNodeEditor";
 import { ControlPanel } from "./components/ControlPanel";
+import { DesignHingePanel } from "./components/DesignHingePanel";
 import { IdeaModeView } from "./components/IdeaModeView";
 import { ManualReplayPanel } from "./components/ManualReplayPanel";
 import { MeetingReportPanel } from "./components/MeetingReportPanel";
@@ -11,6 +12,7 @@ import { TopicInspector } from "./components/TopicInspector";
 import { TranscriptPanel } from "./components/TranscriptPanel";
 import { TranscriptReplayPanel } from "./components/TranscriptReplayPanel";
 import { createIdeaSessionStore } from "./hooks/ideaSessionStore";
+import { useDesignHingeStore } from "./hooks/useDesignHingeStore";
 import { useSpeechRecognition } from "./hooks/useSpeechRecognition";
 import { useLlmSettings } from "./hooks/useLlmSettings";
 import { useTopicEngine } from "./hooks/useTopicEngine";
@@ -19,7 +21,7 @@ import { formatReplayTime } from "./utils/transcriptReplay";
 import type { AnalyzedSegment, MeetingSummary, SessionLogEntry } from "./types/topic";
 
 type AppMode = "idea" | "meeting";
-type MeetingRailTab = "progress" | "analysis";
+type MeetingRailTab = "progress" | "analysis" | "hinge";
 type MeetingInputTab = "manual" | "replay" | "transcript";
 
 const WS_URL = "ws://127.0.0.1:8787";
@@ -70,7 +72,7 @@ export default function App() {
   );
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell is-${mode}-mode`}>
       <nav className="mode-switch" aria-label="app mode">
         <button type="button" className={mode === "idea" ? "is-active" : ""} onClick={() => setMode("idea")}>
           アイデア出しモード
@@ -96,7 +98,13 @@ function MeetingMode({
   const { connectionStatus, sendLog } = useSessionSocket();
   const { llmSettings, updateLlmSettings } = useLlmSettings();
   const topicEngine = useTopicEngine({ onLog: sendLog, llmSettings });
-  const speech = useSpeechRecognition({ onFinalText: topicEngine.addTranscriptText });
+  const designHinge = useDesignHingeStore({ llmSettings });
+  const speech = useSpeechRecognition({
+    onFinalText: (text) => {
+      topicEngine.addTranscriptText(text);
+      designHinge.ingestUtterance(text, "speech");
+    },
+  });
   const [now, setNow] = useState(() => Date.now());
   const [mapMode, setMapMode] = useState<"live" | "summary">("live");
   const [railTab, setRailTab] = useState<MeetingRailTab>("progress");
@@ -195,6 +203,16 @@ function MeetingMode({
             >
               分析
             </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={railTab === "hinge"}
+              aria-controls="meeting-hinge-panel"
+              id="meeting-hinge-tab"
+              onClick={() => setRailTab("hinge")}
+            >
+              設計仮説
+            </button>
           </div>
 
           <div
@@ -255,6 +273,31 @@ function MeetingMode({
               segmentArchive={topicEngine.segmentArchive}
             />
           </div>
+
+          <div
+            className="meeting-tab-panel"
+            role="tabpanel"
+            id="meeting-hinge-panel"
+            aria-labelledby="meeting-hinge-tab"
+            hidden={railTab !== "hinge"}
+          >
+            <DesignHingePanel
+              activeCard={designHinge.activeCard}
+              graph={designHinge.graph}
+              pendingProposals={designHinge.pendingProposals}
+              pendingCandidateQueue={designHinge.pendingCandidateQueue}
+              policyEnabled={designHinge.policyEnabled}
+              acceptNodeProposal={designHinge.acceptNodeProposal}
+              acceptEdgeProposal={designHinge.acceptEdgeProposal}
+              rejectEdgeProposal={designHinge.rejectEdgeProposal}
+              approveIntervention={designHinge.approveIntervention}
+              dismissIntervention={designHinge.dismissIntervention}
+              createCounterfactual={designHinge.createCounterfactual}
+              requestManualIntervention={designHinge.requestManualIntervention}
+              setPolicyEnabled={designHinge.setPolicyEnabled}
+              exportSession={designHinge.exportSession}
+            />
+          </div>
         </div>
       </section>
 
@@ -291,10 +334,20 @@ function MeetingMode({
           </div>
 
           <div role="tabpanel" id="meeting-input-manual-panel" aria-labelledby="meeting-input-manual-tab" hidden={inputTab !== "manual"}>
-            <ManualReplayPanel onSubmit={topicEngine.submitTranscript} />
+            <ManualReplayPanel
+              onSubmit={(text, source) => {
+                topicEngine.submitTranscript(text, source);
+                designHinge.ingestUtterance(text, source);
+              }}
+            />
           </div>
           <div role="tabpanel" id="meeting-input-replay-panel" aria-labelledby="meeting-input-replay-tab" hidden={inputTab !== "replay"}>
-            <TranscriptReplayPanel onSubmit={topicEngine.submitTimedTranscript} />
+            <TranscriptReplayPanel
+              onSubmit={(segment) => {
+                topicEngine.submitTimedTranscript(segment);
+                designHinge.ingestUtterance(segment.text, "replay");
+              }}
+            />
           </div>
           <div role="tabpanel" id="meeting-input-transcript-panel" aria-labelledby="meeting-input-transcript-tab" hidden={inputTab !== "transcript"}>
             <TranscriptPanel
@@ -315,6 +368,7 @@ function MeetingMode({
         confirmLabel="リセットする"
         onConfirm={() => {
           topicEngine.reset();
+          designHinge.reset();
           setSelectedConversationNodeId(null);
           setMapMode("live");
           setIsResetConfirmOpen(false);

@@ -11,7 +11,8 @@
     "check": "tsc --noEmit && vitest run",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "shadow-replay": "tsx design-hinge/replay/runShadowMode.ts"
   },
   "dependencies": {
     "@xyflow/react": "^12.8.4",
