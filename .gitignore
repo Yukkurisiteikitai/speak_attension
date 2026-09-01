@@ -4,3 +4,4 @@ docs/plans/
 .vite/
 npm-debug.log*
 docs/sample.md
+.DS_Store
