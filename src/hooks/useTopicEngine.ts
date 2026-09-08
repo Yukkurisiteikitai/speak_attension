@@ -50,6 +50,7 @@ export function useTopicEngine({ onLog, llmSettings }: UseTopicEngineOptions = {
     currentTopic,
     currentTopicGaps,
     currentTopicId: snapshot.engineState.currentTopicId,
+    decisionGraph: snapshot.engineState.decisionGraph,
     decisionLogs: snapshot.engineState.decisionLogs,
     edges: snapshot.engineState.edges,
     focusState: snapshot.engineState.focusState,

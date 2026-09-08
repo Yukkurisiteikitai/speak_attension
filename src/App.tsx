@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ConfirmDialog } from "./components/ConfirmDialog";
+import { ActionView } from "./components/ActionView";
 import { ConversationNodeEditor } from "./components/ConversationNodeEditor";
 import { ControlPanel } from "./components/ControlPanel";
 import { DesignHingePanel } from "./components/DesignHingePanel";
@@ -222,6 +223,7 @@ function MeetingMode({
             aria-labelledby="meeting-progress-tab"
             hidden={railTab !== "progress"}
           >
+            <ActionView graph={topicEngine.decisionGraph} />
             <ConversationNodeEditor
               conversationTree={topicEngine.conversationTree}
               selectedNodeId={selectedConversationNodeId}

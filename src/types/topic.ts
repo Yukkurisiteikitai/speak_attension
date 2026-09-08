@@ -63,6 +63,71 @@ export type ConversationGraphNodeData = {
 export type ConversationGraphNode = Node<ConversationGraphNodeData, "conversation">;
 export type ConversationGraphEdge = Edge<{ relation: "conversation" }>;
 
+// A traceable, typed record of the meeting state.  Edges intentionally point
+// from a conclusion back to its supporting context so an action is a natural
+// entry point for a "why?" traversal.
+export type MeetingNodeType =
+  | "utterance"
+  | "question"
+  | "evidence"
+  | "proposal"
+  | "reason"
+  | "concern"
+  | "risk"
+  | "decision"
+  | "action"
+  | "outcome";
+
+export type MeetingNodeState = "human_stated" | "decided" | "proposed" | "ai_suggested" | "unconfirmed";
+
+export type Provenance = {
+  utteranceIds: string[];
+  createdBy: "human" | "ai";
+  confidence?: number;
+};
+
+export type ActionData = {
+  what: string;
+  why?: string;
+  whyNow?: string;
+  owner?: string;
+  deadline?: string;
+  urgency?: "low" | "medium" | "high" | "critical";
+  status?: "proposed" | "decided" | "in_progress" | "done";
+};
+
+export type MeetingDecisionNode = {
+  id: string;
+  type: MeetingNodeType;
+  label: string;
+  state: MeetingNodeState;
+  provenance: Provenance;
+  createdAt: number;
+  action?: ActionData;
+};
+
+export type MeetingDecisionRelation =
+  | "supports"
+  | "opposes"
+  | "answers"
+  | "motivates"
+  | "decided_from"
+  | "results_in"
+  | "assigned_to"
+  | "derived_from";
+
+export type MeetingDecisionEdge = {
+  id: string;
+  source: string;
+  target: string;
+  relation: MeetingDecisionRelation;
+};
+
+export type MeetingDecisionGraph = {
+  nodes: MeetingDecisionNode[];
+  edges: MeetingDecisionEdge[];
+};
+
 export type TopicCoverageKey =
   | "decision"
   | "reason"

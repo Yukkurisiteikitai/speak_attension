@@ -3,6 +3,7 @@ import type {
   FocusState,
   ImportantMention,
   MeetingGraph,
+  MeetingDecisionGraph,
   TopicDecisionLog,
   TopicGap,
   TopicGraphEdge,
@@ -10,6 +11,7 @@ import type {
   TopicNode,
   TranscriptInputSource,
 } from "../types/topic";
+import { appendMeetingDecisionSegment, createInitialMeetingDecisionGraph } from "./meetingDecisionGraph";
 import { detectUtteranceIntent } from "./intentRules";
 import { detectCoverageUpdates, sortGaps } from "./topicCoverage";
 import { extractTopicPhrases, resolveTopicReference } from "./topicExtraction";
@@ -18,6 +20,7 @@ import { createId, createInitialMeetingGraph, createTopicEdge, getRootTopicId, p
 import { appendEvidenceSegmentIds, chooseSelectedTopic, createTopicFromPhrase, mergeAliases, mergeAliasStrings } from "./topicSelection";
 
 export type TopicEngineState = {
+  decisionGraph: MeetingDecisionGraph;
   meetingGraph: MeetingGraph;
   nodes: TopicGraphNode[];
   edges: TopicGraphEdge[];
@@ -56,6 +59,7 @@ export function createInitialTopicEngineState(now = Date.now()): TopicEngineStat
     segments: [],
   });
   return {
+    decisionGraph: createInitialMeetingDecisionGraph(),
     meetingGraph,
     nodes: projection.nodes,
     edges: projection.edges,
@@ -277,10 +281,12 @@ export function processTopicSegment(
   const importantMention = createImportantMention(segmentId, text, selectedTopicId, segment.analysis.focusAlignmentScore);
   const nextSegments = [segment, ...state.segments].slice(0, 80);
   const projection = projectState(nextGraph, nextCurrentTopicId, nextSegments, projectGraphToFlow);
+  const decisionGraph = appendMeetingDecisionSegment(state.decisionGraph, segment);
 
   return {
     state: {
       ...state,
+      decisionGraph,
       meetingGraph: {
         ...nextGraph,
         gapSummary: {
