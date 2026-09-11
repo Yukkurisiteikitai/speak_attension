@@ -6,12 +6,13 @@
   "scripts": {
     "dev": "concurrently \"npm:dev:client\" \"npm:dev:server\"",
     "dev:client": "vite",
-    "dev:server": "tsx watch server/index.ts",
+    "dev:server": "tsx watch --env-file-if-exists=.env server/index.ts",
     "build": "tsc --noEmit && vite build",
     "check": "tsc --noEmit && vitest run",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "preview": "vite preview",
+    "report:discord": "tsx --env-file-if-exists=.env scripts/sendImplementationReport.ts",
     "shadow-replay": "tsx design-hinge/replay/runShadowMode.ts"
   },
   "dependencies": {
@@ -29,7 +30,8 @@
     "@vitejs/plugin-react": "^4.3.4",
     "concurrently": "^9.1.0",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2",
+    "typescript": "^5.9.3",
+    "typescript-language-server": "^6.0.0",
     "vite": "^6.0.3",
     "vitest": "^4.1.9"
   }

@@ -7,7 +7,10 @@ import { DesignHingePanel } from "./components/DesignHingePanel";
 import { IdeaModeView } from "./components/IdeaModeView";
 import { ManualReplayPanel } from "./components/ManualReplayPanel";
 import { MeetingReportPanel } from "./components/MeetingReportPanel";
+import { MissingContributionPanel } from "./components/MissingContributionPanel";
 import { MeetingSummaryGraph } from "./components/MeetingSummaryGraph";
+import { MeetingStateMap } from "./components/MeetingStateMap";
+import { MeetingProgressMap } from "./components/MeetingProgressMap";
 import { TopicGraph } from "./components/TopicGraph";
 import { TopicInspector } from "./components/TopicInspector";
 import { TranscriptPanel } from "./components/TranscriptPanel";
@@ -62,7 +65,8 @@ function statusLabel(isSupported: boolean, isListening: boolean): string {
 }
 
 export default function App() {
-  const [mode, setMode] = useState<AppMode>("idea");
+  const [mode, setMode] = useState<AppMode>("meeting");
+  const [meetingVisited, setMeetingVisited] = useState(true);
   const [ideaStore] = useState(() => createIdeaSessionStore());
   const startIdeaSessionFromMeeting = useCallback(
     (summary: MeetingSummary, segments: AnalyzedSegment[], selectedItemIds: string[]) => {
@@ -78,22 +82,23 @@ export default function App() {
         <button type="button" className={mode === "idea" ? "is-active" : ""} onClick={() => setMode("idea")}>
           アイデア出しモード
         </button>
-        <button type="button" className={mode === "meeting" ? "is-active" : ""} onClick={() => setMode("meeting")}>
+        <button type="button" className={mode === "meeting" ? "is-active" : ""} onClick={() => { setMeetingVisited(true); setMode("meeting"); }}>
           会議モード
         </button>
       </nav>
-      {mode === "idea" ? (
-        <IdeaModeView store={ideaStore} />
-      ) : (
-        <MeetingMode onStartIdeaSession={startIdeaSessionFromMeeting} />
-      )}
+      {mode === "idea" ? <IdeaModeView store={ideaStore} /> : null}
+      {meetingVisited ? <div hidden={mode !== "meeting"}>
+        <MeetingMode active={mode === "meeting"} onStartIdeaSession={startIdeaSessionFromMeeting} />
+      </div> : null}
     </main>
   );
 }
 
 function MeetingMode({
+  active,
   onStartIdeaSession,
 }: {
+  active: boolean;
   onStartIdeaSession: (summary: MeetingSummary, segments: AnalyzedSegment[], selectedItemIds: string[]) => void;
 }) {
   const { connectionStatus, sendLog } = useSessionSocket();
@@ -107,9 +112,13 @@ function MeetingMode({
     },
   });
   const [now, setNow] = useState(() => Date.now());
-  const [mapMode, setMapMode] = useState<"live" | "summary">("live");
+  const [mapMode, setMapMode] = useState<"progress" | "state" | "live" | "summary">("progress");
+  const [selectedDecisionId, setSelectedDecisionId] = useState<string | null>(null);
+  const stopSpeech = speech.stop;
+  const flushMeeting = topicEngine.flushBuffer;
+  useEffect(() => { if (!active) { stopSpeech(); flushMeeting(); } }, [active, stopSpeech, flushMeeting]);
   const [railTab, setRailTab] = useState<MeetingRailTab>("progress");
-  const [inputDockOpen, setInputDockOpen] = useState(false);
+  const [inputDockOpen, setInputDockOpen] = useState(true);
   const [inputTab, setInputTab] = useState<MeetingInputTab>("manual");
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
   const [selectedConversationNodeId, setSelectedConversationNodeId] = useState<string | null>(null);
@@ -156,8 +165,23 @@ function MeetingMode({
       </header>
 
       <section className="dashboard-grid">
-        <div className="graph-column">
-          {mapMode === "summary" && topicEngine.meetingSummary ? (
+        <div className={`graph-column ${mapMode === "state" || mapMode === "progress" ? "is-state-map" : ""}`}>
+          <div className="workspace-tabs" aria-label="会議マップの表示">
+            <button aria-pressed={mapMode === "progress"} onClick={() => setMapMode("progress")}>流れ・次の検討</button>
+            <button aria-pressed={mapMode === "state"} onClick={() => setMapMode("state")}>現在状態・根拠</button>
+            <button aria-pressed={mapMode === "live"} onClick={() => setMapMode("live")}>会話のマップ</button>
+            {topicEngine.meetingSummary ? <button aria-pressed={mapMode === "summary"} onClick={() => setMapMode("summary")}>整理マップ</button> : null}
+          </div>
+          {mapMode === "progress" ? (
+            <MeetingProgressMap tree={topicEngine.conversationTree} graph={topicEngine.decisionGraph} segments={topicEngine.segmentArchive}
+              prompts={topicEngine.discussionPrompts} reviewStatus={topicEngine.progressReviewStatus} reviewError={topicEngine.progressReviewError}
+              armedPromptId={topicEngine.armedDiscussionPrompt?.id ?? null} onArmPrompt={topicEngine.armDiscussionPrompt}
+              onAnswer={(id, text, needsResearch) => { topicEngine.answerDiscussionPrompt(id, text, needsResearch); designHinge.ingestUtterance(text, "manual"); }}
+              onDefer={topicEngine.setDiscussionPromptDeferred} onExplore={(id) => { setSelectedDecisionId(id); setMapMode("state"); }}
+              onSubmit={(text) => { topicEngine.submitTranscript(text, "manual"); designHinge.ingestUtterance(text, "manual"); }} />
+          ) : mapMode === "state" ? (
+            <MeetingStateMap graph={topicEngine.decisionGraph} meetingId={topicEngine.meetingGraph.meetingId} title={topicEngine.meetingGraph.title} selectedId={selectedDecisionId} onSelect={setSelectedDecisionId} />
+          ) : mapMode === "summary" && topicEngine.meetingSummary ? (
             <MeetingSummaryGraph
               error={topicEngine.meetingSummaryError}
               onBack={() => setMapMode("live")}
@@ -223,7 +247,8 @@ function MeetingMode({
             aria-labelledby="meeting-progress-tab"
             hidden={railTab !== "progress"}
           >
-            <ActionView graph={topicEngine.decisionGraph} />
+            <ActionView graph={topicEngine.decisionGraph} onUpdate={topicEngine.updateAction} onExplore={(id) => { setSelectedDecisionId(id); setMapMode("state"); }} />
+            {mapMode !== "progress" ? <MissingContributionPanel contributions={topicEngine.missingContributions} segments={topicEngine.segmentArchive} /> : null}
             <ConversationNodeEditor
               conversationTree={topicEngine.conversationTree}
               selectedNodeId={selectedConversationNodeId}
@@ -271,6 +296,7 @@ function MeetingMode({
               importantMentions={topicEngine.importantMentions}
               llmSettings={llmSettings}
               meetingGraph={topicEngine.meetingGraph}
+              decisionGraph={topicEngine.decisionGraph}
               onUpdateLlmSettings={updateLlmSettings}
               segmentArchive={topicEngine.segmentArchive}
             />
@@ -345,6 +371,7 @@ function MeetingMode({
           </div>
           <div role="tabpanel" id="meeting-input-replay-panel" aria-labelledby="meeting-input-replay-tab" hidden={inputTab !== "replay"}>
             <TranscriptReplayPanel
+              active={active}
               onSubmit={(segment) => {
                 topicEngine.submitTimedTranscript(segment);
                 designHinge.ingestUtterance(segment.text, "replay");
@@ -372,7 +399,8 @@ function MeetingMode({
           topicEngine.reset();
           designHinge.reset();
           setSelectedConversationNodeId(null);
-          setMapMode("live");
+          setSelectedDecisionId(null);
+          setMapMode("progress");
           setIsResetConfirmOpen(false);
         }}
         onCancel={() => setIsResetConfirmOpen(false)}

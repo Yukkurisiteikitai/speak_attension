@@ -9,6 +9,11 @@ export type TimedTranscriptWord = {
   confidence?: number;
 };
 
+// topicEngine`to
+//にもあるし、使われ方としてはなんだろうなこれ統合的な利用方法がされているっていうかんじかこれ？
+// Now understand points.
+// 1. use topicEngineStore/ utils.transscriptReplay.ts /components.TranscriptReplayPanel.tsx
+// 2. I feel use time. it's speak add node.
 export type TimedTranscriptSegment = {
   id: string;
   startMs: number;
@@ -21,6 +26,8 @@ export type TimedTranscriptSegment = {
   raw?: unknown;
 };
 
+// usePoint types.topic.ts/ hooks.topicEngineStore.ts / utils.transcriptImporter.ts / utils.transcriptReplay.ts
+// This json data / base data?
 export type TranscriptSegmentMetadata = {
   speaker?: string;
   startMs?: number;
@@ -31,6 +38,7 @@ export type TranscriptSegmentMetadata = {
   raw?: unknown;
 };
 
+// use script; types.topic.ts / hooks.topicEngineStore.ts / utils.transcriptReplay.ts / utils.transcriptImporter.ts / components.ConversationNodeEditor.tsx / 
 export type ConversationNodeRole = "topic" | "issue" | "cause" | "action" | "alternative" | "statement";
 
 export type ConversationTreeNode = {
@@ -68,6 +76,7 @@ export type ConversationGraphEdge = Edge<{ relation: "conversation" }>;
 // entry point for a "why?" traversal.
 export type MeetingNodeType =
   | "utterance"
+  | "problem"
   | "question"
   | "evidence"
   | "proposal"
@@ -93,7 +102,7 @@ export type ActionData = {
   owner?: string;
   deadline?: string;
   urgency?: "low" | "medium" | "high" | "critical";
-  status?: "proposed" | "decided" | "in_progress" | "done";
+  status?: "proposed" | "decided" | "in_progress" | "done" | "cancelled";
 };
 
 export type MeetingDecisionNode = {
@@ -104,6 +113,8 @@ export type MeetingDecisionNode = {
   provenance: Provenance;
   createdAt: number;
   action?: ActionData;
+  speaker?: string;
+  actionChange?: { actionId: string; before: ActionData; after: ActionData };
 };
 
 export type MeetingDecisionRelation =
@@ -160,6 +171,22 @@ export type TopicGapType =
   | "unresolved";
 
 export type TopicGapSeverity = "high" | "medium" | "low";
+
+// Ephemeral, rule-derived guidance for moving a meeting forward. This is not
+// persisted: it is rebuilt from the live topic and decision graphs.
+export type MissingContributionKind = TopicGapType | "unresolved_question";
+
+export type MissingContribution = {
+  id: string;
+  topicId: string;
+  relatedActionId: string | null;
+  kind: MissingContributionKind;
+  priority: TopicGapSeverity;
+  question: string;
+  exampleUtterance: string;
+  rationale: string;
+  evidenceSegmentIds: string[];
+};
 
 export type TopicNode = {
   id: string;

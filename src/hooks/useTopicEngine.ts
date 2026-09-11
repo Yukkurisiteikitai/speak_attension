@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { createTopicEngineStore } from "./topicEngineStore";
 import type { LlmSettings } from "../utils/llmClient";
+import { buildMissingContributions } from "../utils/missingContribution";
 
 const SEGMENT_INTERVAL_MS = 5000;
 
@@ -29,6 +30,12 @@ export function useTopicEngine({ onLog, llmSettings }: UseTopicEngineOptions = {
   }, [llmSettings, store]);
 
   useEffect(() => {
+    const timer = window.setTimeout(() => { void store.reviewProgress(); }, 1200);
+    const interval = window.setInterval(() => { void store.reviewProgress(); }, 3000);
+    return () => { window.clearTimeout(timer); window.clearInterval(interval); store.cancelProgressReview(); };
+  }, [llmSettings, store]);
+
+  useEffect(() => {
     const timer = window.setInterval(() => {
       store.flushBuffer();
     }, SEGMENT_INTERVAL_MS);
@@ -42,7 +49,23 @@ export function useTopicEngine({ onLog, llmSettings }: UseTopicEngineOptions = {
 
   const currentTopicGaps = useMemo(() => store.getCurrentTopicGaps(), [snapshot.engineState, store]);
 
+  const missingContributions = useMemo(() => buildMissingContributions({
+    gaps: snapshot.engineState.meetingGraph.gaps,
+    topics: snapshot.engineState.meetingGraph.nodes.filter((node) => node.id !== snapshot.engineState.meetingGraph.rootTopicId),
+    decisionGraph: snapshot.engineState.decisionGraph,
+    segments: snapshot.segmentArchive,
+    currentTopicId: snapshot.engineState.currentTopicId,
+  }), [snapshot.engineState.currentTopicId, snapshot.engineState.decisionGraph, snapshot.engineState.meetingGraph, snapshot.segmentArchive]);
+
   return {
+    armedDiscussionPrompt: snapshot.armedDiscussionPrompt,
+    armDiscussionPrompt: store.armDiscussionPrompt,
+    discussionPrompts: snapshot.discussionPrompts,
+    progressReviewStatus: snapshot.progressReviewStatus,
+    progressReviewError: snapshot.progressReviewError,
+    answerDiscussionPrompt: store.answerDiscussionPrompt,
+    setDiscussionPromptDeferred: store.setDiscussionPromptDeferred,
+    updateAction: store.updateAction,
     addLog: store.addLog,
     addTranscriptText: store.addTranscriptText,
     bufferText: snapshot.bufferText,
@@ -58,6 +81,7 @@ export function useTopicEngine({ onLog, llmSettings }: UseTopicEngineOptions = {
     importantMentions: snapshot.engineState.importantMentions,
     logs: snapshot.logs,
     meetingGraph: snapshot.engineState.meetingGraph,
+    missingContributions,
     meetingStartedAt: snapshot.engineState.meetingStartedAt,
     meetingSummary: snapshot.meetingSummary,
     meetingSummaryError: snapshot.meetingSummaryError,

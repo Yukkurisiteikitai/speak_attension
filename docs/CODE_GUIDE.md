@@ -1,10 +1,10 @@
 # Code Guide
 
-このリポジトリは、アイデア出しを主モード、会議ダッシュボードを副モードとして持つローカル Web アプリです。現在の制約は [AGENTS.md](../AGENTS.md)、実装の現在地は [STATE.md](STATE.md) を確認してください。
+このリポジトリは、会議の進行・思考のまとまり・次の検討をマップでつなぐローカル Web アプリです。起動時は会議モードで、補助のアイデア出しも利用できます。現在の制約は [AGENTS.md](../AGENTS.md)、実装の現在地は [STATE.md](STATE.md) を確認してください。
 
 ## Read This First
 
-| アイデア出しモード（主） | 会議モード（副） |
+| アイデア出しモード（補助） | 会議モード（主） |
 | --- | --- |
 | `src/App.tsx` | `src/App.tsx` |
 | `src/hooks/ideaSessionStore.ts` | `src/hooks/useTopicEngine.ts` |
@@ -57,7 +57,17 @@ speech / manual text / replay
 
 ### `src/App.tsx`
 
-アプリシェルとモード切替。既定でアイデア出しモードを表示し、会議モードの各パネルも組み立てる。
+アプリシェルとモード切替。既定で会議モードの「流れ・次の検討」を表示し、会議モードの各パネルも組み立てる。
+
+### 会議の流れ・次の検討
+
+`src/utils/meetingProgress.ts` は、既存の会話ツリー・決定グラフ・発言アーカイブから思考のつながりを作り、不足点・提案・未確認項目から質問と条件付き予定を導く純粋関数群。明示的な回答を元の問いにつなぎ、その先の検討を作る。`meetingProgressLayout.ts` は全文を残した短縮プレビューの階層配置を行う。
+
+`src/hooks/topicEngineStore.ts` が発言／アクション更新直後の再評価と質問の回答・保留、非同期レビューを管理する。`useTopicEngine.ts` が3秒周期で未レビューの版を確認する。`meetingProgressReview.ts` は入力の組み立てとJSON・出典・条件分岐の検証だけを行い、通信はストアから `requestChat` を呼ぶ。20秒のAbortSignalを渡し、版・設定・リセットをまたぐ応答を捨てる。
+
+`src/components/MeetingProgressMap.tsx` は統合マップ、過去の発言時点の表示、質問選択・回答・次の分岐、Markdown/JSON出力を担当する。UI上の選択と会議状態は分けて保持する。過去表示は発言の接頭列であり、過去のAI提案や手動配置の完全なスナップショットではない。
+
+検証は `meetingProgress.test.ts`、`meetingProgressLayout.test.ts`、`meetingProgressReview.test.ts`、`src/hooks/meetingProgressStore.test.ts`。対応する方針は [ADR 0015](adr/0015-live-meeting-progress-and-conditional-planning.md)。
 
 ### `src/utils/ideaSession.ts`
 
@@ -135,7 +145,7 @@ Diagnostic side panel. It shows current topic, gaps, coverage, latest analysis, 
 
 ライブ意味階層のReact Flow表示と、0/1高評価、選択ノードの役割・親修正UI。従来の`MeetingGraph`は表示元ではなく、右レールの分析と会議整理のため並行して保持する。
 
-会議画面の右レールは `App.tsx` で「進行」「分析」に分け、手入力・リプレイ・発話ログは初期状態で閉じた入力ドックにまとめる。非表示パネルもマウントを維持するため、入力途中の内容やレポート状態はタブ切替で失われない。
+会議画面の右レールは `App.tsx` で「進行」「分析」に分け、手入力・リプレイ・発話ログは初期状態で開いた入力ドックにまとめる。非表示パネルもマウントを維持するため、入力途中の内容やレポート状態はタブ切替で失われない。
 
 ### `src/lib/download.ts`
 
@@ -143,9 +153,13 @@ Diagnostic side panel. It shows current topic, gaps, coverage, latest analysis, 
 
 ### `src/utils/llmClient.ts`
 
-ローカル LLM との通信共通部。`ideaGrouping` と `llmGapReview` から利用する。接続確認は `src/utils/llmConnection.ts` の `checkLlmConnection` を両モードの設定 UI から共用する。
+LM Studio との OpenAI 互換通信共通部。`ideaGrouping` と `llmGapReview` から利用する。接続確認は `src/utils/llmConnection.ts` の `checkLlmConnection` を両モードの設定 UI から共用する。通信の成功・失敗は、本文を除いて `src/lib/runtimeLog.ts` 経由でローカルログへ記録する。
 
 `src/hooks/useLlmConnectionCheck.ts` は接続確認中・成功・失敗の表示状態と、未設定モデルの自動入力を両モードで共通管理する。
+
+### `server/index.ts` / `src/lib/runtimeLog.ts`
+
+ローカルサーバーはブラウザーからの構造化ログを `/api/logs` で受け、`logs/runtime-YYYY-MM-DD.jsonl` へ追記する。`/api/discord/report` は `.env` の `DISCORD_WEBHOOK_URL` だけを使ってレポートを送る。URLやLLM入力本文はログへ保存しない。
 
 ### `src/utils/llmGapReview.ts` / `src/utils/llmTopicTitle.ts` / `src/utils/llmMeetingSynthesis.ts`
 
@@ -183,3 +197,7 @@ Diagnostic side panel. It shows current topic, gaps, coverage, latest analysis, 
 npm run check
 npm run build
 ```
+
+### 現在状態から出典への探索
+
+`src/components/MeetingStateMap.tsx` は会議中央の現在状態一覧、段階的な根拠探索、全文表示、ダウンロードを担当する。`src/utils/meetingDecisionLayout.ts` は選択ノードと直接の参照先の配置を行い、`meetingDecisionLayout.test.ts` が長短ラベルのプレビュー寸法と衝突を確認する。`src/utils/meetingState.ts` は未決定の選択、共通日本語ラベル、出典を含むスナップショットとMarkdown生成を共用する。`meetingState.test.ts` と `meetingDecisionGraph.test.ts` が現在状態・手動更新履歴・出典参照を検証する。会議状態は引き続き `topicEngineStore` と純粋な決定エンジンが所有し、ローカルサーバーへ状態APIは追加しない。

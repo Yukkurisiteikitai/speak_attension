@@ -27,10 +27,11 @@ function createReport(findings: MeetingReportFinding[]): MeetingReport {
     topicCount: 2,
     decidedTopicCount: 1,
     findings,
+    nextContributions: [],
   };
 }
 
-const SETTINGS = { baseUrl: "http://127.0.0.1:1234/v1", model: "test-model" };
+const SETTINGS = { provider: "lmstudio" as const, baseUrl: "http://127.0.0.1:1234/v1", model: "test-model" };
 
 describe("extractJsonObject", () => {
   it("parses plain JSON", () => {

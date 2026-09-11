@@ -1,3 +1,4 @@
+import { updateMeetingAction, type ActionUpdate } from "../utils/meetingDecisionGraph";
 import { createId } from "../utils/topicProjection";
 import {
   appendConversationSegment,
@@ -18,10 +19,19 @@ import {
 import { refineTopicTitlesWithLlm, type TopicTitleCandidate } from "../utils/llmTopicTitle";
 import { refineMeetingSummaryWithLlm } from "../utils/llmMeetingSynthesis";
 import { type LlmSettings } from "../utils/llmClient";
+import { requestChat } from "../utils/llmClient";
+import { buildMissingContributions } from "../utils/missingContribution";
+import { buildDiscussionPrompts, recordDiscussionAnswer, type DiscussionPrompt } from "../utils/meetingProgress";
+import { applyProgressReview, buildProgressReviewMessages } from "../utils/meetingProgressReview";
 import { buildRuleBasedMeetingSummary, renameMeetingSummaryNode } from "../utils/meetingSynthesis";
 import type { AnalyzedSegment, ConversationNodeRole, ConversationTreeState, MeetingSummary, MeetingSummaryStatus, SessionLogEntry, TimedTranscriptSegment, TranscriptSegmentMetadata, TranscriptInputSource } from "../types/topic";
 
 type TopicEngineStoreSnapshot = {
+  armedDiscussionPrompt: { id: string; needsResearch: boolean } | null;
+  discussionPrompts: DiscussionPrompt[];
+  progressRevision: number;
+  progressReviewStatus: "rules" | "refining" | "ai" | "error";
+  progressReviewError: string | null;
   engineState: TopicEngineState;
   conversationTree: ConversationTreeState;
   bufferText: string;
@@ -39,6 +49,11 @@ type TopicEngineStoreOptions = {
 };
 
 type TopicEngineStore = {
+  armDiscussionPrompt: (id: string | null, needsResearch?: boolean) => void;
+  reviewProgress: () => Promise<void>;
+  cancelProgressReview: () => void;
+  answerDiscussionPrompt: (id: string, text: string, needsResearch?: boolean) => void;
+  setDiscussionPromptDeferred: (id: string, deferred: boolean) => void;
   addLog: (entry: Omit<SessionLogEntry, "id" | "at"> & { at?: number }) => void;
   addTranscriptText: (text: string) => void;
   flushBuffer: () => void;
@@ -55,6 +70,7 @@ type TopicEngineStore = {
   submitTranscript: (text: string, source: Exclude<TranscriptInputSource, "speech">) => void;
   toggleConversationNodeRating: (nodeId: string) => void;
   updateConversationNode: (nodeId: string, patch: { role?: ConversationNodeRole; parentId?: string | null }) => void;
+  updateAction: (nodeId: string, patch: ActionUpdate) => void;
   subscribe: (listener: () => void) => () => void;
 };
 
@@ -88,6 +104,11 @@ function attachSegmentMetadata(
 export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): TopicEngineStore {
   let onLog = options.onLog;
   let snapshot: TopicEngineStoreSnapshot = {
+    armedDiscussionPrompt: null,
+    discussionPrompts: [],
+    progressRevision: 0,
+    progressReviewStatus: "rules",
+    progressReviewError: null,
     engineState: createInitialTopicEngineState(),
     conversationTree: createInitialConversationTreeState(),
     bufferText: "",
@@ -105,6 +126,25 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
   let isRefiningTitle = false;
   let sessionEpoch = 0;
   let summaryEpoch = 0;
+  let progressRequest = 0;
+  let progressController: AbortController | null = null;
+  let lastReviewedRevision = -1;
+
+  function refreshProgress() {
+    const state = snapshot.engineState;
+    const contributions = buildMissingContributions({ gaps: state.meetingGraph.gaps,
+      topics: state.meetingGraph.nodes.filter((node) => node.id !== state.meetingGraph.rootTopicId),
+      decisionGraph: state.decisionGraph, segments: snapshot.segmentArchive, currentTopicId: state.currentTopicId });
+    snapshot = { ...snapshot, discussionPrompts: buildDiscussionPrompts(state.decisionGraph, snapshot.segmentArchive, contributions, snapshot.discussionPrompts),
+      progressRevision: snapshot.progressRevision + 1, progressReviewStatus: "rules", progressReviewError: null };
+  }
+
+  function cancelProgressReview() {
+    progressRequest += 1;
+    progressController?.abort();
+    progressController = null;
+    lastReviewedRevision = -1;
+  }
 
   function emit() {
     listeners.forEach((listener) => listener());
@@ -141,7 +181,7 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
       },
       at: now,
     });
-    writeSnapshot({
+    snapshot = {
       ...snapshot,
       engineState: transition.state,
       conversationTree: appendConversationSegment(snapshot.conversationTree, transition.segment),
@@ -149,7 +189,9 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
       // meeting here so the post-meeting report can quote every evidence segment.
       segmentArchive: [...snapshot.segmentArchive, transition.segment],
       meetingSummaryStale: snapshot.meetingSummary ? true : snapshot.meetingSummaryStale,
-    });
+    };
+    refreshProgress();
+    emit();
 
     if (transition.newlyClosedTopicIds.length > 0) {
       titleRefineQueue.push(...transition.newlyClosedTopicIds);
@@ -159,9 +201,16 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
   }
 
   function processSegment(text: string, source: TranscriptInputSource, metadata?: TranscriptSegmentMetadata) {
+    const armed = snapshot.armedDiscussionPrompt;
+    const prompt = armed && snapshot.discussionPrompts.find((item) => item.id === armed.id && ["open", "deferred"].includes(item.status));
     const now = Date.now();
-    const transition = attachSegmentMetadata(processTopicSegment(snapshot.engineState, text, source, now), metadata);
+    const transition = attachSegmentMetadata(processTopicSegment(snapshot.engineState, text, source, now, metadata), metadata);
     applyTransition(transition, now);
+    if (armed) {
+      writeSnapshot({ ...snapshot, armedDiscussionPrompt: null,
+        discussionPrompts: prompt ? recordDiscussionAnswer(snapshot.discussionPrompts, prompt, transition.segment.id, armed.needsResearch) : snapshot.discussionPrompts,
+        progressRevision: snapshot.progressRevision + 1 });
+    }
   }
 
   async function processTitleRefineQueue() {
@@ -212,6 +261,48 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
   }
 
   return {
+    armDiscussionPrompt(id, needsResearch = false) {
+      const valid = id && snapshot.discussionPrompts.some((prompt) => prompt.id === id && ["open", "deferred"].includes(prompt.status));
+      writeSnapshot({ ...snapshot, armedDiscussionPrompt: valid ? { id, needsResearch } : null });
+    },
+    cancelProgressReview,
+    async reviewProgress() {
+      if (progressController || lastReviewedRevision === snapshot.progressRevision || !currentLlmSettings?.model || !snapshot.discussionPrompts.some((prompt) => prompt.status === "open")) return;
+      cancelProgressReview();
+      const request = progressRequest;
+      const revision = snapshot.progressRevision;
+      lastReviewedRevision = revision;
+      const controller = new AbortController();
+      progressController = controller;
+      const timeout = setTimeout(() => controller.abort(), 20_000);
+      const prompts = snapshot.discussionPrompts;
+      writeSnapshot({ ...snapshot, progressReviewStatus: "refining", progressReviewError: null });
+      try {
+        const raw = await requestChat(currentLlmSettings, buildProgressReviewMessages(prompts, snapshot.segmentArchive), { maxTokens: 1200, signal: controller.signal });
+        if (request !== progressRequest || revision !== snapshot.progressRevision) return;
+        writeSnapshot({ ...snapshot, discussionPrompts: applyProgressReview(raw, prompts), progressReviewStatus: "ai" });
+      } catch (error) {
+        if (request !== progressRequest || revision !== snapshot.progressRevision) return;
+        writeSnapshot({ ...snapshot, progressReviewStatus: "error", progressReviewError: controller.signal.aborted ? "AIの応答待ちが20秒を超えたため、ルール提案を継続します。" : error instanceof Error ? error.message : String(error) });
+      } finally {
+        clearTimeout(timeout);
+        if (request === progressRequest) progressController = null;
+      }
+    },
+    answerDiscussionPrompt(id, text, needsResearch = false) {
+      const prompt = snapshot.discussionPrompts.find((item) => item.id === id);
+      const answer = cleanText(text);
+      if (!prompt || !answer || !["open", "deferred"].includes(prompt.status)) return;
+      snapshot = { ...snapshot, armedDiscussionPrompt: null };
+      processSegment(answer, "manual");
+      const answerSegmentId = snapshot.segmentArchive[snapshot.segmentArchive.length - 1].id;
+      // An answer is linked by the user's explicit choice, never by AI inference.
+      snapshot = { ...snapshot, discussionPrompts: recordDiscussionAnswer(snapshot.discussionPrompts, prompt, answerSegmentId, needsResearch), progressRevision: snapshot.progressRevision + 1 };
+      emit();
+    },
+    setDiscussionPromptDeferred(id, deferred) {
+      writeSnapshot({ ...snapshot, discussionPrompts: snapshot.discussionPrompts.map((prompt) => prompt.id === id ? { ...prompt, status: deferred ? "deferred" : "open" } : prompt), progressRevision: snapshot.progressRevision + 1 });
+    },
     addLog,
     addTranscriptText(text) {
       const nextText = cleanText(text);
@@ -293,10 +384,16 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
       });
     },
     reset() {
+      cancelProgressReview();
       titleRefineQueue = [];
       sessionEpoch += 1;
       summaryEpoch += 1;
       writeSnapshot({
+        armedDiscussionPrompt: null,
+        discussionPrompts: [],
+        progressRevision: snapshot.progressRevision + 1,
+        progressReviewStatus: "rules",
+        progressReviewError: null,
         engineState: createInitialTopicEngineState(),
         conversationTree: createInitialConversationTreeState(),
         bufferText: "",
@@ -324,7 +421,10 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
       });
     },
     setLlmSettings(settings) {
+      const changed = JSON.stringify(settings) !== JSON.stringify(currentLlmSettings);
+      if (changed) cancelProgressReview();
       currentLlmSettings = settings;
+      if (changed) { refreshProgress(); emit(); }
     },
     setManualFocus(topicId) {
       const now = Date.now();
@@ -370,6 +470,15 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
       const nextTree = updateConversationNode(snapshot.conversationTree, nodeId, patch);
       if (nextTree === snapshot.conversationTree) return;
       writeSnapshot({ ...snapshot, conversationTree: nextTree });
+    },
+    updateAction(nodeId, patch) {
+      const decisionGraph = updateMeetingAction(snapshot.engineState.decisionGraph, nodeId, patch, {
+        id: createId("action-update"), createdAt: Date.now(),
+      });
+      if (decisionGraph === snapshot.engineState.decisionGraph) return;
+      snapshot = { ...snapshot, engineState: { ...snapshot.engineState, decisionGraph }, meetingSummaryStale: true };
+      refreshProgress();
+      emit();
     },
     subscribe(listener) {
       listeners.add(listener);

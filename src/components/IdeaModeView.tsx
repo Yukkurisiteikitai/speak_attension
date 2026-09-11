@@ -32,6 +32,7 @@ import {
 } from "../utils/ideaSession";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { buildIdeaFlowElements, decisionLabel, ideaNodeTypes } from "./ideaFlow";
+import { IdeaRationalePanel } from "./IdeaRationalePanel";
 import { MapViewportControls } from "./MapViewportControls";
 
 const SESSION_LENGTH_MS = 20 * 60 * 1000;
@@ -64,6 +65,7 @@ export function IdeaModeView({ store }: { store?: IdeaSessionStore }) {
   });
   const [markdown, setMarkdown] = useState<string | null>(null);
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
+  const [focusedKeywordId, setFocusedKeywordId] = useState<string | null>(null);
 
   const { session } = idea;
   const phase = session.phase;
@@ -188,7 +190,11 @@ export function IdeaModeView({ store }: { store?: IdeaSessionStore }) {
               nodesDraggable={false}
               nodesConnectable={false}
               proOptions={{ hideAttribution: true }}
-              onNodeClick={(_, node) => { if (phase === "select" && node.data.kind === "keyword") idea.cycleDecision(node.id); }}
+              onNodeClick={(_, node) => {
+                if (node.data.kind !== "keyword") return;
+                setFocusedKeywordId(node.id);
+                if (phase === "select") idea.cycleDecision(node.id);
+              }}
             >
               <MapViewportControls fitKey={phase} padding={0.16} />
               <Background gap={24} size={1} color="#e7ece8" />
@@ -200,6 +206,12 @@ export function IdeaModeView({ store }: { store?: IdeaSessionStore }) {
         </main>
 
         <aside className="idea-right-rail">
+          <IdeaRationalePanel
+            session={session}
+            focusedKeywordId={focusedKeywordId}
+            onFocusKeyword={setFocusedKeywordId}
+          />
+
           <section className="idea-card idea-memo-card">
             <h2>メモ / 議事メモ</h2>
             <textarea rows={5} value={memo} onChange={(event) => setMemo(event.target.value)} placeholder="気づいたことや、次に話したいことをメモ…" />
@@ -215,9 +227,10 @@ export function IdeaModeView({ store }: { store?: IdeaSessionStore }) {
 
           <section className="idea-card idea-ai-card">
             <h2>AI サポート <small>（オプション）</small></h2>
-            <label className="idea-ai-toggle"><input type="checkbox" checked={useLlm} onChange={(event) => setUseLlm(event.target.checked)} /><Bot size={18} />ローカルAIでグループ化</label>
+            <label className="idea-ai-toggle"><input type="checkbox" checked={useLlm} onChange={(event) => setUseLlm(event.target.checked)} /><Bot size={18} />AIでグループ化</label>
             {useLlm ? (
               <div className="idea-llm-settings">
+                <label>LM Studio 接続先</label>
                 <input type="text" value={llmSettings.baseUrl} onChange={(event) => updateLlmSettings({ baseUrl: event.target.value })} aria-label="LM Studio 接続先" />
                 <input type="text" value={llmSettings.model} onChange={(event) => updateLlmSettings({ model: event.target.value })} placeholder="モデル ID" aria-label="LM Studio モデル ID" />
                 <button type="button" onClick={() => void checkLlmConnection()}><Sparkles size={15} />接続確認</button>
@@ -275,7 +288,7 @@ export function IdeaModeView({ store }: { store?: IdeaSessionStore }) {
         title="セッションをリセットしますか?"
         description="収集したキーワードと発言はすべて削除され、元に戻せません。"
         confirmLabel="リセットする"
-        onConfirm={() => { speech.stop(); idea.reset(); setMarkdown(null); setIsResetConfirmOpen(false); }}
+        onConfirm={() => { speech.stop(); idea.reset(); setFocusedKeywordId(null); setMarkdown(null); setIsResetConfirmOpen(false); }}
         onCancel={() => setIsResetConfirmOpen(false)}
       />
     </section>

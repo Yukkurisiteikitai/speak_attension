@@ -10,6 +10,7 @@ import type {
   TopicGraphNode,
   TopicNode,
   TranscriptInputSource,
+  TranscriptSegmentMetadata,
 } from "../types/topic";
 import { appendMeetingDecisionSegment, createInitialMeetingDecisionGraph } from "./meetingDecisionGraph";
 import { detectUtteranceIntent } from "./intentRules";
@@ -157,6 +158,7 @@ export function processTopicSegment(
   text: string,
   source: TranscriptInputSource,
   now = Date.now(),
+  metadata?: TranscriptSegmentMetadata,
 ): TopicEngineTransition {
   const segmentId = createId("seg");
   const segmentIndex = state.segmentCount + 1;
@@ -238,6 +240,7 @@ export function processTopicSegment(
   const focusRelation = relationFromIntent(intent, selectedTopicId, nextCurrentTopicId);
   const createdGapIds = nextGraph.gaps.filter((gap) => gap.createdAt === now).map((gap) => gap.id);
   const segment: AnalyzedSegment = {
+    metadata,
     id: segmentId,
     text,
     createdAt: now,

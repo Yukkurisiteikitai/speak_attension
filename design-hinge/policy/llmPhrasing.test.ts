@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildPhrasingPrompt, parsePhrasingResponse, refinePhrasingWithLlm, type PhrasingCandidate } from "./llmPhrasing";
 import type { LlmSettings } from "../../src/utils/llmClient";
 
-const settings: LlmSettings = { baseUrl: "http://127.0.0.1:1234/v1", model: "test-model" };
+const settings: LlmSettings = { provider: "lmstudio", baseUrl: "http://127.0.0.1:1234/v1", model: "test-model" };
 
 describe("llmPhrasing", () => {
   describe("buildPhrasingPrompt", () => {

@@ -2,8 +2,8 @@ import { useMemo, useState } from "react";
 import { Download, FileText, Sparkles, ThumbsDown, ThumbsUp } from "lucide-react";
 import { useLlmConnectionCheck } from "../hooks/useLlmConnectionCheck";
 import { downloadFile } from "../lib/download";
-import type { AnalyzedSegment, ConversationTreeState, ImportantMention, MeetingGraph } from "../types/topic";
-import { type LlmSettings } from "../utils/llmClient";
+import type { AnalyzedSegment, ConversationTreeState, ImportantMention, MeetingDecisionGraph, MeetingGraph } from "../types/topic";
+import type { LlmSettings } from "../utils/llmClient";
 import { reviewReportWithLlm } from "../utils/llmGapReview";
 import { buildMeetingReport, renderMeetingReportMarkdown, type MeetingReport, type MeetingReportFinding } from "../utils/meetingReport";
 import { buildEvaluationDataset, summarizeFeedback, type FindingVerdict, type ReportFeedbackMap } from "../utils/reportFeedback";
@@ -11,6 +11,7 @@ import { buildEvaluationDataset, summarizeFeedback, type FindingVerdict, type Re
 type MeetingReportPanelProps = {
   conversationTree: ConversationTreeState;
   meetingGraph: MeetingGraph;
+  decisionGraph: MeetingDecisionGraph;
   importantMentions: ImportantMention[];
   segmentArchive: AnalyzedSegment[];
   llmSettings: LlmSettings;
@@ -89,8 +90,8 @@ function FindingCard({
 
 // Post-meeting deliverable: turn the engine state into a reviewable missing-items
 // report, collect helpful/noise verdicts as evaluation data, and optionally get a
-// second opinion from a local LLM (LM Studio's OpenAI-compatible server).
-export function MeetingReportPanel({ conversationTree, meetingGraph, importantMentions, segmentArchive, llmSettings, onUpdateLlmSettings }: MeetingReportPanelProps) {
+// second opinion from the configured OpenAI-compatible provider.
+export function MeetingReportPanel({ conversationTree, meetingGraph, decisionGraph, importantMentions, segmentArchive, llmSettings, onUpdateLlmSettings }: MeetingReportPanelProps) {
   const [report, setReport] = useState<MeetingReport | null>(null);
   const [feedback, setFeedback] = useState<ReportFeedbackMap>({});
   const {
@@ -103,11 +104,12 @@ export function MeetingReportPanel({ conversationTree, meetingGraph, importantMe
     pendingMessage: "接続確認中...",
   });
   const [isReviewing, setIsReviewing] = useState(false);
+  const [discordStatus, setDiscordStatus] = useState<string | null>(null);
 
   const summary = useMemo(() => (report ? summarizeFeedback(report.findings, feedback) : null), [feedback, report]);
 
   const generateReport = () => {
-    const nextReport = buildMeetingReport({ meetingGraph, importantMentions, segments: segmentArchive });
+    const nextReport = buildMeetingReport({ meetingGraph, decisionGraph, importantMentions, segments: segmentArchive });
     setReport(nextReport);
     setFeedback(loadFeedback(nextReport));
     setLlmStatus(null);
@@ -157,6 +159,23 @@ export function MeetingReportPanel({ conversationTree, meetingGraph, importantMe
     );
   };
 
+  const sendToDiscord = async () => {
+    if (!report) return;
+    setDiscordStatus("Discordへ送信中…");
+    try {
+      const response = await fetch("/api/discord/report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: renderMeetingReportMarkdown(report) }),
+      });
+      const payload = (await response.json()) as { error?: { message?: string } };
+      if (!response.ok) throw new Error(payload.error?.message ?? `HTTP ${response.status}`);
+      setDiscordStatus("Discordへ送信しました。");
+    } catch (error) {
+      setDiscordStatus(`Discord送信失敗: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  };
+
   return (
     <section className="panel meeting-report-panel" aria-label="Meeting Report">
       <div className="section-head">
@@ -177,7 +196,11 @@ export function MeetingReportPanel({ conversationTree, meetingGraph, importantMe
           <Download size={17} />
           <span>評価データ</span>
         </button>
+        <button type="button" onClick={() => void sendToDiscord()} disabled={!report}>
+          <span>Discordへ送信</span>
+        </button>
       </div>
+      {discordStatus ? <p className="llm-status">{discordStatus}</p> : null}
 
       {summary ? (
         <div className="segment-buffer report-summary">
@@ -204,7 +227,7 @@ export function MeetingReportPanel({ conversationTree, meetingGraph, importantMe
         <input
           id="llmModel"
           type="text"
-          placeholder="接続確認で自動選択"
+          placeholder="LM Studio のモデル ID"
           value={llmSettings.model}
           onChange={(event) => onUpdateLlmSettings({ model: event.currentTarget.value })}
         />

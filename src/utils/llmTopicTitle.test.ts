@@ -122,7 +122,7 @@ describe("llmTopicTitle", () => {
 
   describe("refineTopicTitlesWithLlm", () => {
     it("returns empty array when candidates are empty", async () => {
-      const settings: LlmSettings = { baseUrl: "http://localhost:8000", model: "test" };
+      const settings: LlmSettings = { provider: "lmstudio", baseUrl: "http://localhost:8000", model: "test" };
       const mockChat = async () => '{"titles":[]}';
 
       const result = await refineTopicTitlesWithLlm(settings, [], mockChat);
@@ -130,7 +130,7 @@ describe("llmTopicTitle", () => {
     });
 
     it("calls chat with correct messages", async () => {
-      const settings: LlmSettings = { baseUrl: "http://localhost:8000", model: "test" };
+      const settings: LlmSettings = { provider: "lmstudio", baseUrl: "http://localhost:8000", model: "test" };
       let capturedMessages: any[] = [];
       const mockChat = async (_settings: any, messages: any[]) => {
         capturedMessages = messages;
@@ -152,7 +152,7 @@ describe("llmTopicTitle", () => {
     });
 
     it("throws when chat fails", async () => {
-      const settings: LlmSettings = { baseUrl: "http://localhost:8000", model: "test" };
+      const settings: LlmSettings = { provider: "lmstudio", baseUrl: "http://localhost:8000", model: "test" };
       const mockChat = async () => {
         throw new Error("Chat failed");
       };
@@ -165,7 +165,7 @@ describe("llmTopicTitle", () => {
     });
 
     it("throws when parse fails", async () => {
-      const settings: LlmSettings = { baseUrl: "http://localhost:8000", model: "test" };
+      const settings: LlmSettings = { provider: "lmstudio", baseUrl: "http://localhost:8000", model: "test" };
       const mockChat = async () => "invalid json";
 
       const candidates: TopicTitleCandidate[] = [
