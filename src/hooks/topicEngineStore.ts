@@ -1,3 +1,4 @@
+import { initialMeetingReview, planMeetingReview, type MeetingReview } from "../utils/meetingReview";
 import { updateMeetingAction, type ActionUpdate } from "../utils/meetingDecisionGraph";
 import { createId } from "../utils/topicProjection";
 import {
@@ -27,6 +28,7 @@ import { buildRuleBasedMeetingSummary, renameMeetingSummaryNode } from "../utils
 import type { AnalyzedSegment, ConversationNodeRole, ConversationTreeState, MeetingSummary, MeetingSummaryStatus, SessionLogEntry, TimedTranscriptSegment, TranscriptSegmentMetadata, TranscriptInputSource } from "../types/topic";
 
 type TopicEngineStoreSnapshot = {
+  meetingReview: MeetingReview;
   armedDiscussionPrompt: { id: string; needsResearch: boolean } | null;
   discussionPrompts: DiscussionPrompt[];
   progressRevision: number;
@@ -49,6 +51,7 @@ type TopicEngineStoreOptions = {
 };
 
 type TopicEngineStore = {
+  setMeetingReview: (review: MeetingReview) => void;
   armDiscussionPrompt: (id: string | null, needsResearch?: boolean) => void;
   reviewProgress: () => Promise<void>;
   cancelProgressReview: () => void;
@@ -104,6 +107,7 @@ function attachSegmentMetadata(
 export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): TopicEngineStore {
   let onLog = options.onLog;
   let snapshot: TopicEngineStoreSnapshot = {
+    meetingReview: initialMeetingReview(),
     armedDiscussionPrompt: null,
     discussionPrompts: [],
     progressRevision: 0,
@@ -132,6 +136,7 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
 
   function refreshProgress() {
     const state = snapshot.engineState;
+    snapshot = { ...snapshot, meetingReview: { ...snapshot.meetingReview, confirmations: ["", "", ""], phase: snapshot.meetingReview.phase === "complete" ? "final" : snapshot.meetingReview.phase } };
     const contributions = buildMissingContributions({ gaps: state.meetingGraph.gaps,
       topics: state.meetingGraph.nodes.filter((node) => node.id !== state.meetingGraph.rootTopicId),
       decisionGraph: state.decisionGraph, segments: snapshot.segmentArchive, currentTopicId: state.currentTopicId });
@@ -261,13 +266,17 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
   }
 
   return {
+    setMeetingReview(review) {
+      cancelProgressReview();
+      writeSnapshot({ ...snapshot, meetingReview: review, armedDiscussionPrompt: null, progressReviewStatus: "rules", progressReviewError: null });
+    },
     armDiscussionPrompt(id, needsResearch = false) {
       const valid = id && snapshot.discussionPrompts.some((prompt) => prompt.id === id && ["open", "deferred"].includes(prompt.status));
       writeSnapshot({ ...snapshot, armedDiscussionPrompt: valid ? { id, needsResearch } : null });
     },
     cancelProgressReview,
     async reviewProgress() {
-      if (progressController || lastReviewedRevision === snapshot.progressRevision || !currentLlmSettings?.model || !snapshot.discussionPrompts.some((prompt) => prompt.status === "open")) return;
+      if (snapshot.meetingReview.phase !== "review" || (snapshot.meetingReview.deadline ?? 0) - Date.now() <= 120_000 || progressController || lastReviewedRevision === snapshot.progressRevision || !currentLlmSettings?.model || !snapshot.discussionPrompts.some((prompt) => prompt.status === "open")) return;
       cancelProgressReview();
       const request = progressRequest;
       const revision = snapshot.progressRevision;
@@ -276,9 +285,11 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
       progressController = controller;
       const timeout = setTimeout(() => controller.abort(), 20_000);
       const prompts = snapshot.discussionPrompts;
+      const selected = planMeetingReview(prompts, ((snapshot.meetingReview.deadline ?? 0) - Date.now()) / 1000).selected;
+      if (!selected.length) { clearTimeout(timeout); progressController = null; return; }
       writeSnapshot({ ...snapshot, progressReviewStatus: "refining", progressReviewError: null });
       try {
-        const raw = await requestChat(currentLlmSettings, buildProgressReviewMessages(prompts, snapshot.segmentArchive), { maxTokens: 1200, signal: controller.signal });
+        const raw = await requestChat(currentLlmSettings, buildProgressReviewMessages(selected, snapshot.segmentArchive), { maxTokens: 1200, signal: controller.signal });
         if (request !== progressRequest || revision !== snapshot.progressRevision) return;
         writeSnapshot({ ...snapshot, discussionPrompts: applyProgressReview(raw, prompts), progressReviewStatus: "ai" });
       } catch (error) {
@@ -389,6 +400,7 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
       sessionEpoch += 1;
       summaryEpoch += 1;
       writeSnapshot({
+        meetingReview: initialMeetingReview(),
         armedDiscussionPrompt: null,
         discussionPrompts: [],
         progressRevision: snapshot.progressRevision + 1,

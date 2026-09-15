@@ -201,3 +201,7 @@ npm run build
 ### 現在状態から出典への探索
 
 `src/components/MeetingStateMap.tsx` は会議中央の現在状態一覧、段階的な根拠探索、全文表示、ダウンロードを担当する。`src/utils/meetingDecisionLayout.ts` は選択ノードと直接の参照先の配置を行い、`meetingDecisionLayout.test.ts` が長短ラベルのプレビュー寸法と衝突を確認する。`src/utils/meetingState.ts` は未決定の選択、共通日本語ラベル、出典を含むスナップショットとMarkdown生成を共用する。`meetingState.test.ts` と `meetingDecisionGraph.test.ts` が現在状態・手動更新履歴・出典参照を検証する。会議状態は引き続き `topicEngineStore` と純粋な決定エンジンが所有し、ローカルサーバーへ状態APIは追加しない。
+
+### 明示的な確認・改善
+
+`src/utils/meetingReview.ts` が残り時間と質問種別から時間内の質問・持ち越しを選別する。`topicEngineStore` が議論／確認・改善／最終確認／確認終了と確認結果を保持し、議論中のAI質問レビューを抑止する。`MeetingReviewPanel.tsx` は残り時間の設定、振り返り、最終確認の記録を担当し、`MeetingProgressMap.tsx` は確認中だけ質問を提示する。`meetingReview.test.ts` と `meetingProgressStore.test.ts` で時間配分、明示的開始、古いAI応答の破棄、最終確認の再実施を検証する。

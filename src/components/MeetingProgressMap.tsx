@@ -1,3 +1,5 @@
+import { finalReviewQuestions, planMeetingReview, type MeetingReview } from "../utils/meetingReview";
+import { MeetingReviewPanel } from "./MeetingReviewPanel";
 import { useEffect, useMemo, useState } from "react";
 import { Background, ReactFlow, useReactFlow } from "@xyflow/react";
 import type { AnalyzedSegment, ConversationTreeState, MeetingDecisionGraph } from "../types/topic";
@@ -7,6 +9,8 @@ import { downloadFile } from "../lib/download";
 import { MapViewportControls } from "./MapViewportControls";
 
 type Props = {
+  meetingReview: MeetingReview;
+  onReviewChange: (review: MeetingReview) => void;
   tree: ConversationTreeState;
   graph: MeetingDecisionGraph;
   segments: AnalyzedSegment[];
@@ -35,7 +39,16 @@ function FocusProgressNode({ selectedId }: { selectedId: string | null }) {
   return null;
 }
 
-export function MeetingProgressMap({ tree, graph, segments, prompts, reviewStatus, reviewError, onAnswer, onDefer, onExplore, onSubmit, armedPromptId, onArmPrompt }: Props) {
+export function MeetingProgressMap({ meetingReview, onReviewChange, tree, graph, segments, prompts, reviewStatus, reviewError, onAnswer, onDefer, onExplore, onSubmit, armedPromptId, onArmPrompt }: Props) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const remaining = Math.max(0, Math.ceil(((meetingReview.deadline ?? now) - now) / 1000));
+  const plan = planMeetingReview(prompts, remaining);
+  const asking = meetingReview.phase === "review" && remaining > 120;
+  useEffect(() => { if (!asking && armedPromptId) onArmPrompt(null); }, [asking, armedPromptId, onArmPrompt]);
   const [cursor, setCursor] = useState<number | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showSequence, setShowSequence] = useState(false);
@@ -48,9 +61,10 @@ export function MeetingProgressMap({ tree, graph, segments, prompts, reviewStatu
   const isLive = cursor === null;
   const visibleSegments = useMemo(() => segments.slice(0, count), [segments, count]);
   const fullProgress = useMemo(() => buildMeetingProgress(tree, graph, segments, prompts), [tree, graph, segments, prompts]);
-  const available = prompts.filter((prompt) => showHistory || prompt.status === "open" || prompt.status === "deferred");
-  const selectedPrompt = prompts.find((prompt) => prompt.id === selectedId || selectedId?.startsWith(`${prompt.id}-branch-`));
-  const visiblePrompts = available.slice(0, 4);
+  const available = asking ? (showHistory ? prompts : plan.selected) : [];
+  const selectedPrompt = asking ? available.find((prompt) => prompt.id === selectedId || selectedId?.startsWith(`${prompt.id}-branch-`)) ?? plan.selected[0] : undefined;
+  useEffect(() => { setAnswer(""); setNeedsResearch(false); }, [selectedPrompt?.id]);
+  const visiblePrompts = asking ? plan.selected.slice(0, 4) : [];
   if (selectedPrompt && !visiblePrompts.some((prompt) => prompt.id === selectedPrompt.id)) visiblePrompts.push(selectedPrompt);
   const visiblePromptKey = visiblePrompts.map((prompt) => prompt.id).join("|");
   const progress = useMemo(() => {
@@ -67,12 +81,13 @@ export function MeetingProgressMap({ tree, graph, segments, prompts, reviewStatu
   const selectedSegment = visibleSegments.find((segment) => segment.id === selectedNode?.segmentId);
   const select = (id: string) => { setSelectedId(id); setAutoFit(false); setAnswer(""); setNeedsResearch(false); };
   const exportProgress = (format: "json" | "md") => downloadFile(`meeting-progress.${format}`,
-    format === "json" ? JSON.stringify({ format: "meeting-progress", version: 1, progress: fullProgress, segments, decisionGraph: graph }, null, 2) : renderMeetingProgressMarkdown(fullProgress, segments),
+    format === "json" ? JSON.stringify({ format: "meeting-progress", version: 1, meetingReview, progress: fullProgress, segments, decisionGraph: graph }, null, 2) : renderMeetingProgressMarkdown(fullProgress, segments) + "\n## 最終確認\n" + finalReviewQuestions.map((question, index) => `- ${question}\n  ${meetingReview.confirmations[index] || "未確認"}`).join("\n"),
     format === "json" ? "application/json" : "text/markdown");
 
   return <section className="panel meeting-progress-map" aria-label="会議の流れと次の検討">
     <div className="section-head"><h2>会議の流れと次の検討</h2><span aria-live="polite">{isLive ? "ライブ更新" : `${count}発言目まで`}</span></div>
-    <p>課題・理由・提案から決定へのつながりを表示します。黄色の点線は、これから確認する問いと条件付きの予定です。</p>
+    <p>課題・理由・提案から決定へのつながりを表示します。「確認・改善」を始めると、残り時間に合わせて問いと条件付きの予定を表示します。</p>
+    <MeetingReviewPanel review={meetingReview} onChange={(review) => { setNow(Date.now()); setCursor(null); setSelectedId(null); setShowHistory(false); onReviewChange(review); }} remaining={remaining} prompts={prompts} carryover={plan.carryover} graph={graph} segments={segments} onExplore={onExplore} />
     <form className="progress-quick-input" onSubmit={(event) => { event.preventDefault(); if (!utterance.trim()) return; onSubmit(utterance); setUtterance(""); setCursor(null); }}>
       <label htmlFor="progress-utterance">会議の発言を追加</label>
       <div className="manual-input-row"><textarea id="progress-utterance" rows={2} value={utterance} onChange={(event) => setUtterance(event.target.value)} placeholder="例：今日は連絡方法について決めます" /><button type="submit" disabled={!utterance.trim()}>発言を追加</button></div>
@@ -90,7 +105,7 @@ export function MeetingProgressMap({ tree, graph, segments, prompts, reviewStatu
       <button disabled={isLive} onClick={() => { setCursor(null); setSelectedId(null); }}>現在の会議に戻る</button>
     </div>
     {!isLive ? <p>過去の発言時点を表示中です。現在の質問・予定は「現在の会議に戻る」で確認できます。</p> : null}
-    {!segments.length ? <p className="progress-empty">下の手入力、または音声入力で会議を始めてください。発言に応じてマップと次の問いが増えます。</p> : null}
+    {!segments.length ? <p className="progress-empty">下の手入力、または音声入力で会議を始めてください。発言に応じて会議のマップが増えます。</p> : null}
     <div className="progress-flow"><ReactFlow nodes={projection.nodes.map((node) => ({ ...node, selected: node.id === selectedId }))} edges={projection.edges}
       nodesDraggable={false} nodesConnectable={false} minZoom={0.06} maxZoom={1.5} onNodeClick={(_, node) => select(node.id)} proOptions={{ hideAttribution: true }}>
       <Background gap={24} /><MapViewportControls fitKey={isLive ? autoFit ? `live-${segments.length}-${visiblePromptKey}` : "manual-view" : `history-${count}`} /><FocusProgressNode selectedId={selectedId} />
@@ -100,26 +115,26 @@ export function MeetingProgressMap({ tree, graph, segments, prompts, reviewStatu
       <button onClick={() => onExplore(`utterance-${selectedSegment.id}`)}>決定・根拠の詳細を開く</button>
     </article> : null}
     {selectedNode?.kind === "実行結果・更新" ? <article className="state-source"><h3>操作担当者による更新</h3><p>{selectedNode.label}</p><button onClick={() => onExplore(selectedNode.id)}>変更前後と根拠を開く</button></article> : null}
-    {isLive ? <div className="progress-guidance">
+    {isLive && asking ? <div className="progress-guidance">
       <div className="section-head"><h3>マップに連動する問い・検討予定</h3><span aria-live="polite">{reviewStatus === "refining" ? "AIが文脈を確認中" : reviewStatus === "ai" ? "AI提案で更新" : "ルール提案で進行中"}</span></div>
       {reviewError ? <p role="status">{reviewError} ルール提案を利用できます。</p> : null}
       <label><input type="checkbox" checked={showHistory} onChange={(event) => setShowHistory(event.target.checked)} />回答済み・更新済みも表示</label>
       <div className="progress-prompt-list">{available.map((prompt) => <button key={prompt.id} className="state-choice" aria-pressed={selectedPrompt?.id === prompt.id} onClick={() => select(prompt.id)}>
         <small>{statusLabels[prompt.status]} ／ {prompt.source === "ai" ? "AI提案" : "ルール提案"}</small><strong>{prompt.question}</strong>
       </button>)}</div>
-      {!available.length ? <p>現在の確認項目はありません。発言が追加されると再評価します。</p> : <p className="empty-text">優先する4件をマップに表示しています。ほかの問いも選択すると、その枝を表示できます。</p>}
+      {!available.length ? <p>時間内に扱う質問はありません。振り返り・最終確認へ進めます。</p> : <p className="empty-text">時間内に扱う質問を優先順で表示しています。回答・保留の後は次の質問へ進みます。</p>}
       {selectedPrompt ? <article className="progress-question-detail" key={selectedPrompt.id}>
         <h3>{selectedPrompt.question}</h3><p>{selectedPrompt.rationale}</p>
         <ul>{selectedPrompt.branches.map((branch, index) => <li key={index}><strong>{branch.condition}</strong>：{branch.next}</li>)}</ul>
         <details><summary>この問いの根拠発言</summary>{segments.filter((segment) => selectedPrompt.evidenceSegmentIds.includes(segment.id)).map((segment) => <p key={segment.id}>{segment.text}</p>)}</details>
         {selectedPrompt.answerSegmentId ? <p>記録した回答：{segments.find((segment) => segment.id === selectedPrompt.answerSegmentId)?.text}</p> : null}
-        {selectedPrompt.status === "open" || selectedPrompt.status === "deferred" ? <form onSubmit={(event) => { event.preventDefault(); if (!answer.trim()) return; onAnswer(selectedPrompt.id, answer, needsResearch); setAnswer(""); }}>
+        {selectedPrompt.status === "open" || selectedPrompt.status === "deferred" ? <form onSubmit={(event) => { event.preventDefault(); if (!answer.trim()) return; onAnswer(selectedPrompt.id, answer, needsResearch); setAnswer(""); setSelectedId(null); }}>
           <label htmlFor="progress-answer">この問いへの回答・分かったこと</label>
           <textarea id="progress-answer" rows={3} value={answer} onChange={(event) => setAnswer(event.target.value)} placeholder="確認した事実や、まだ分からないことを記録" />
           <label><input type="checkbox" checked={needsResearch} onChange={(event) => setNeedsResearch(event.target.checked)} />まだ分からないため、追加確認の分岐へ進む</label>
           <div className="progress-toolbar"><button type="submit" disabled={!answer.trim()}>回答をマップにつなぐ</button>
             <button type="button" onClick={() => onArmPrompt(selectedPrompt.id, needsResearch)}>次の発言を回答として接続</button>
-            <button type="button" onClick={() => onDefer(selectedPrompt.id, selectedPrompt.status !== "deferred")}>{selectedPrompt.status === "deferred" ? "今の検討に戻す" : "後で検討する"}</button></div>
+            <button type="button" onClick={() => { onDefer(selectedPrompt.id, selectedPrompt.status !== "deferred"); setSelectedId(null); }}>{selectedPrompt.status === "deferred" ? "今の検討に戻す" : "後で検討する"}</button></div>
           <p className="empty-text">回答は発言として記録されます。担当・期限の確定は「今すること」の対象アクションで更新できます。</p>
         </form> : <button onClick={() => onDefer(selectedPrompt.id, false)}>もう一度検討する</button>}
         {prompts.filter((prompt) => prompt.parentPromptId === selectedPrompt.id).map((prompt) => <button className="state-choice" key={prompt.id} onClick={() => select(prompt.id)}>回答から続く検討：{prompt.question}</button>)}

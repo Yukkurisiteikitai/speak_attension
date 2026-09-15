@@ -58,6 +58,8 @@ export function useTopicEngine({ onLog, llmSettings }: UseTopicEngineOptions = {
   }), [snapshot.engineState.currentTopicId, snapshot.engineState.decisionGraph, snapshot.engineState.meetingGraph, snapshot.segmentArchive]);
 
   return {
+    meetingReview: snapshot.meetingReview,
+    setMeetingReview: store.setMeetingReview,
     armedDiscussionPrompt: snapshot.armedDiscussionPrompt,
     armDiscussionPrompt: store.armDiscussionPrompt,
     discussionPrompts: snapshot.discussionPrompts,

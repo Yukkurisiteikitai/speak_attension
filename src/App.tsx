@@ -7,7 +7,6 @@ import { DesignHingePanel } from "./components/DesignHingePanel";
 import { IdeaModeView } from "./components/IdeaModeView";
 import { ManualReplayPanel } from "./components/ManualReplayPanel";
 import { MeetingReportPanel } from "./components/MeetingReportPanel";
-import { MissingContributionPanel } from "./components/MissingContributionPanel";
 import { MeetingSummaryGraph } from "./components/MeetingSummaryGraph";
 import { MeetingStateMap } from "./components/MeetingStateMap";
 import { MeetingProgressMap } from "./components/MeetingProgressMap";
@@ -174,6 +173,7 @@ function MeetingMode({
           </div>
           {mapMode === "progress" ? (
             <MeetingProgressMap tree={topicEngine.conversationTree} graph={topicEngine.decisionGraph} segments={topicEngine.segmentArchive}
+              meetingReview={topicEngine.meetingReview} onReviewChange={topicEngine.setMeetingReview}
               prompts={topicEngine.discussionPrompts} reviewStatus={topicEngine.progressReviewStatus} reviewError={topicEngine.progressReviewError}
               armedPromptId={topicEngine.armedDiscussionPrompt?.id ?? null} onArmPrompt={topicEngine.armDiscussionPrompt}
               onAnswer={(id, text, needsResearch) => { topicEngine.answerDiscussionPrompt(id, text, needsResearch); designHinge.ingestUtterance(text, "manual"); }}
@@ -248,7 +248,7 @@ function MeetingMode({
             hidden={railTab !== "progress"}
           >
             <ActionView graph={topicEngine.decisionGraph} onUpdate={topicEngine.updateAction} onExplore={(id) => { setSelectedDecisionId(id); setMapMode("state"); }} />
-            {mapMode !== "progress" ? <MissingContributionPanel contributions={topicEngine.missingContributions} segments={topicEngine.segmentArchive} /> : null}
+            {mapMode !== "progress" ? <button onClick={() => setMapMode("progress")}>確認・改善の進行を開く</button> : null}
             <ConversationNodeEditor
               conversationTree={topicEngine.conversationTree}
               selectedNodeId={selectedConversationNodeId}
