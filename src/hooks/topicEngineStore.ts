@@ -22,10 +22,11 @@ import { refineMeetingSummaryWithLlm } from "../utils/llmMeetingSynthesis";
 import { type LlmSettings } from "../utils/llmClient";
 import { requestChat } from "../utils/llmClient";
 import { buildMissingContributions } from "../utils/missingContribution";
+import { analyzeDecisionMaterials, updateDecisionMaterialStatus } from "../utils/decisionSupport";
 import { buildDiscussionPrompts, recordDiscussionAnswer, type DiscussionPrompt } from "../utils/meetingProgress";
 import { applyProgressReview, buildProgressReviewMessages } from "../utils/meetingProgressReview";
 import { buildRuleBasedMeetingSummary, renameMeetingSummaryNode } from "../utils/meetingSynthesis";
-import type { AnalyzedSegment, ConversationNodeRole, ConversationTreeState, MeetingSummary, MeetingSummaryStatus, SessionLogEntry, TimedTranscriptSegment, TranscriptSegmentMetadata, TranscriptInputSource } from "../types/topic";
+import type { AnalyzedSegment, ConversationNodeRole, ConversationTreeState, DecisionMaterialStatus, DecisionSupportAnalysis, MeetingSummary, MeetingSummaryStatus, SessionLogEntry, TimedTranscriptSegment, TranscriptSegmentMetadata, TranscriptInputSource } from "../types/topic";
 
 type TopicEngineStoreSnapshot = {
   meetingReview: MeetingReview;
@@ -44,6 +45,7 @@ type TopicEngineStoreSnapshot = {
   meetingSummaryError: string | null;
   meetingSummaryStale: boolean;
   meetingSummaryStartedAt: number | null;
+  decisionSupport: DecisionSupportAnalysis;
 };
 
 type TopicEngineStoreOptions = {
@@ -74,6 +76,8 @@ type TopicEngineStore = {
   toggleConversationNodeRating: (nodeId: string) => void;
   updateConversationNode: (nodeId: string, patch: { role?: ConversationNodeRole; parentId?: string | null }) => void;
   updateAction: (nodeId: string, patch: ActionUpdate) => void;
+  analyzeDecisionSupport: () => void;
+  updateDecisionMaterialStatus: (id: string, status: DecisionMaterialStatus) => void;
   subscribe: (listener: () => void) => () => void;
 };
 
@@ -123,6 +127,7 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
     meetingSummaryError: null,
     meetingSummaryStale: false,
     meetingSummaryStartedAt: null,
+    decisionSupport: { status: "idle", materials: [], analyzedAt: null },
   };
   const listeners = new Set<() => void>();
   let currentLlmSettings: LlmSettings | null = null;
@@ -416,6 +421,7 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
         meetingSummaryError: null,
         meetingSummaryStale: false,
         meetingSummaryStartedAt: null,
+        decisionSupport: { status: "idle", materials: [], analyzedAt: null },
       });
     },
     setFocusLocked(locked) {
@@ -491,6 +497,13 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
       snapshot = { ...snapshot, engineState: { ...snapshot.engineState, decisionGraph }, meetingSummaryStale: true };
       refreshProgress();
       emit();
+    },
+    analyzeDecisionSupport() {
+      const materials = analyzeDecisionMaterials(snapshot.segmentArchive, snapshot.decisionSupport.materials);
+      writeSnapshot({ ...snapshot, decisionSupport: { status: materials.length ? "ready" : "insufficient_evidence", materials, analyzedAt: Date.now() } });
+    },
+    updateDecisionMaterialStatus(id, status) {
+      writeSnapshot({ ...snapshot, decisionSupport: { ...snapshot.decisionSupport, materials: updateDecisionMaterialStatus(snapshot.decisionSupport.materials, id, status) } });
     },
     subscribe(listener) {
       listeners.add(listener);

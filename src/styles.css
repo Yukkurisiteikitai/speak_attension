@@ -178,6 +178,7 @@ input:focus {
   max-height: 820px;
   position: sticky;
   top: 18px;
+  z-index: 2;
 }
 
 .meeting-rail {
@@ -1456,7 +1457,9 @@ input:focus {
   .meeting-header + .dashboard-grid > .graph-column {
     height: 680px;
     max-height: none;
-    position: static;
+    position: sticky;
+    top: 18px;
+    z-index: 2;
   }
 }
 

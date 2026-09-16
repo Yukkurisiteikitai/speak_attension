@@ -188,6 +188,33 @@ export type MissingContribution = {
   evidenceSegmentIds: string[];
 };
 
+// A decision material is deliberately not a meeting decision.  It records a
+// check that could change a choice, together with the evidence and the
+// conditional inference that made the check relevant.
+export type DecisionMaterialStatus = "open" | "checked" | "decided" | "deferred" | "accepted" | "irrelevant" | "recheck";
+export type DecisionMaterialKind = "comparison" | "meeting_fact" | "value_choice";
+export type DecisionMaterial = {
+  id: string;
+  kind: DecisionMaterialKind;
+  title: string;
+  question: string;
+  status: DecisionMaterialStatus;
+  confirmed: string[];
+  inferred: string[];
+  unknown: string[];
+  sourceEvidenceSegmentIds: string[];
+  conditionalHypothesis: { if: string; and: string; then: string; therefore: string };
+  rationale: string;
+  notNeededReason: string;
+  premiseFingerprint: string;
+};
+
+export type DecisionSupportAnalysis = {
+  status: "idle" | "ready" | "insufficient_evidence";
+  materials: DecisionMaterial[];
+  analyzedAt: number | null;
+};
+
 export type TopicNode = {
   id: string;
   title: string;

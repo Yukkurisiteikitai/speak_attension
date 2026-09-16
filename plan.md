@@ -1,494 +1,654 @@
-You are modifying an existing application called `live-topic-graph`.
+# attention_mindmap 意思決定支援機能 改修依頼
 
-First inspect the repository, understand the current architecture, data model, React Flow graph, WebSocket flow, speech input pipeline, phase management, and tests. Do not rewrite the application from scratch.
+既存の attention_mindmap プロジェクトを調査し、
+現在の会議支援機能を壊さずに、
+「会議で話していない項目を探す」だけではなく、
 
-The current app is a meeting / brainstorming application with roughly this flow:
+「参加者が、知っていれば違う判断をした可能性のある情報を、
+検討しないまま意思決定してしまうことを防ぐ」
 
-- アイデア出し
-- グループ化
-- 採用・却下
+ための機能へ拡張してください。
 
-It already has:
-- React/Vite/TypeScript frontend
-- React Flow based idea map
-- server-side WebSocket processing
-- speech / text input
-- idea grouping
-- facilitator controls
-- meeting phases
-- meeting timer
-- tests
+時間より品質を優先してください。
+まず既存実装を理解し、必要な差分だけを実装してください。
 
-The next product direction is NOT simply "better meeting minutes".
+---
 
-The goal is to turn the app into a `Meeting State / Decision Graph` system.
+# 1. 既存プロダクトの前提
 
-# Product definition
+このプロジェクトにはすでに以下があります。
 
-At any point during or after a meeting, a user should be able to answer within a few seconds:
+- React / TypeScript / Vite
+- React Flow
+- WebSocket
+- Web Speech API
+- 音声／手入力
+- キーワード整理
+- リアルタイム意味マップ
+- 「話題 → 課題 → 原因 → アクション／別案」の構造化
+- 会議後の決定・担当・期限・未解決事項整理
+- 根拠発言の保持
+- LM Studioによる任意LLM補助
+- LLM停止時のルールベースフォールバック
 
-1. 今、何をすべきか？
-2. なぜそれをすべきか？
-3. なぜ「今」なのか？
-4. その判断は何を根拠にしているか？
-5. 誰がその判断をしたか？
-6. 元の発言は何だったか？
-7. 何がまだ未決定なのか？
+既存機能を別アプリへ作り直さないでください。
 
-The graph must therefore support BOTH directions:
+最初に以下を確認してください。
 
-Forward:
-Utterance
-→ Evidence / Reason
-→ Proposal
-→ Decision
-→ Action
-→ Outcome
+- README
+- package.json
+- src 以下の構成
+- 会議モード関連コンポーネント
+- マップ生成ロジック
+- LLM接続部分
+- 会話状態管理
+- テスト
+- docs/TECHNICAL_REPORT.md
+- docs/HANDOVER.md
 
-Reverse:
-Action
-→ Decision
-→ Reason
-→ Evidence
-→ Original Utterance
+その上で、
+今回の機能をどこへ追加するのが最も自然か判断してください。
 
-The reverse direction is particularly important.
+---
 
-In urgent situations, the primary UI should initially show:
+# 2. 今回解決したい問題
 
-WHAT
-何をするか
+防ぎたいものは、
 
-WHY
-なぜするか
+「議題を一つ話し忘れた」
 
-WHY NOW
-なぜ今する必要があるか
+ことそのものではありません。
 
-OWNER
-誰が担当するか
+防ぎたいのは、
 
-DEADLINE
-いつまでか
+「その情報・条件・選択肢を知っていれば、
+現在とは異なる意思決定をした可能性があるのに、
+存在に気づかないまま決定してしまうこと」
 
-and then allow the user to drill backward into the reasoning and original meeting evidence.
+です。
 
-# Core principle
+例えば、
 
-Do NOT treat an Action as merely a leaf node at the end of the graph.
+「金曜日に公開する」
 
-Action is also an ENTRY POINT into the graph.
+という案が出たとき、
 
-A user should be able to open an action and repeatedly ask:
+単に
 
-「なぜ？」
+「障害対応について話していません」
 
-Example:
+と指摘するのではなく、
 
-Action
-「本番環境をv1.42へロールバック」
+「金曜日に公開した後に障害が起きた場合、
+誰も停止判断できないなら、
+公開日または公開範囲の判断が変わる可能性があります。
+対応者はすでに決まっていますか？」
 
-↓ why?
+という形で提示することを目指します。
 
-Decision
-「現在のv1.43を停止する」
+---
 
-↓ why?
+# 3. 重要な変更点
 
-Reason
-「継続運用によるデータ破損リスクが復旧コストを上回る」
+従来：
 
-↓ evidence?
+会話
+→ 話題を抽出
+→ 未議論の項目を探す
+→ 指摘
 
-Evidence
-- DB write corruption 3件
-- v1.43 deploy直後からerror rate上昇
+今回：
 
-↓ source?
+会話
+→ 現在の目的・状況を理解
+→ あり得る進み方を複数仮置き
+→ その先で起こり得る展開を考える
+→ 判断を変え得る前提を逆算
+→ 今確認する価値があるものだけ提示
 
-Utterance
-14:22 山田
-「DBのwriteで3件壊れています」
+重要：
 
-The source transcript / utterance must remain traceable.
+まだ具体的な決定候補が出ていなくても動作してください。
 
-# Data model
+例：
 
-First inspect the current data model and adapt it rather than replacing everything unnecessarily.
+「サービスが必要とされるか確かめたい」
+「公開したいけど不具合が怖い」
 
-Introduce or evolve the graph toward typed nodes.
+という会話だけでも、
 
-At minimum support concepts equivalent to:
+- 全面公開
+- 少人数で試す
+- 修正してから公開
 
-- utterance
-- question
-- fact / evidence
-- proposal
-- argument / reason
-- concern / risk
-- decision
-- action
-- outcome
+などを「AIが比較用に仮置きした案」として考え、
 
-A possible TypeScript shape is:
+それぞれを選ぶために何を知る必要があるかを抽出します。
 
-type MeetingNodeType =
-  | 'utterance'
-    | 'question'
-      | 'evidence'
-        | 'proposal'
-          | 'reason'
-            | 'concern'
-              | 'risk'
-                | 'decision'
-                  | 'action'
-                    | 'outcome';
+ただし、
+AIが仮置きした案を
+「参加者が提案した案」
+として扱ってはいけません。
 
-                    Every derived node should support provenance.
+---
 
-                    For example:
+# 4. 内部的に区別する情報
 
-                    interface Provenance {
-                      utteranceIds: string[];
-                        createdBy: 'human' | 'ai';
-                          confidence?: number;
-                          }
+会話から抽出した情報を最低でも以下に分離してください。
 
-                          Actions need more structured information:
+## confirmed
 
-                          interface ActionData {
-                            what: string;
-                              why?: string;
-                                whyNow?: string;
-                                  owner?: string;
-                                    deadline?: string;
-                                      urgency?: 'low' | 'medium' | 'high' | 'critical';
-                                        status?: 'proposed' | 'decided' | 'in_progress' | 'done';
-                                        }
+実際の発言から確認できる情報。
 
-                                        Do not blindly use these exact interfaces if the existing architecture suggests a cleaner compatible implementation.
+例：
+- 「金曜日に出したい」
+- 「不具合が怖い」
+- 「予算は5万円」
 
-                                        # Human decision vs AI inference
+## inferred
 
-                                        This distinction is mandatory.
+AIまたはルールによる推定。
 
-                                        Never visually or semantically treat an AI suggestion as if the meeting decided it.
+例：
+- 少人数公開も候補になり得る
+- 障害対応体制が判断材料になる可能性がある
 
-                                        Support states equivalent to:
+## unknown
 
-                                        - Decided
-                                          explicitly decided by participants
+この会話からは分からない情報。
 
-                                          - Proposed
-                                            proposed by a participant
+例：
+- 障害発生時の担当者
+- 実際の利用者数
+- ロールバック可能か
 
-                                            - AI Suggested
-                                              inferred/recommended by AI
+「言及されていない」
+ことを
+「存在しない／決まっていない」
+と断定してはいけません。
 
-                                              - Unconfirmed
-                                                AI believes it may exist, but evidence is insufficient
+---
 
-                                                The UI must make these distinguishable.
+# 5. 判断材料を3種類に分ける
 
-                                                If confidence is low, preserve uncertainty instead of inventing certainty.
+## A. 判断方法・比較軸
 
-                                                # Urgency
+AIが比較材料として提示できるもの。
 
-                                                Urgency should not just be a red color on an action.
+例：
+- 全面公開と限定公開という選択肢
+- 可逆な判断と不可逆な判断の違い
+- 小さく試して情報を得るという方法
 
-                                                The system needs to represent WHY an action is urgent.
+## B. 会議固有の事実
 
-                                                Conceptually:
+ユーザーに確認しないと分からないもの。
 
-                                                Evidence
-                                                ↓
-                                                Risk
-                                                ↓
-                                                Urgency / why now
-                                                ↓
-                                                Decision
-                                                ↓
-                                                Action
+例：
+- 実際の予算
+- 不具合内容
+- 担当者
+- 期限
+- 現在存在する運用体制
 
-                                                Example:
+AIが捏造しないこと。
 
-                                                Evidence:
-                                                「1分ごとに破損レコードが増えている」
+## C. 価値判断
 
-                                                Risk:
-                                                「継続するとデータ損失が拡大する」
+人間側で決める必要があるもの。
 
-                                                Why now:
-                                                「待つほど被害量が増える」
+例：
+- 速度を優先するか
+- 品質を優先するか
+- コストを取るか安全性を取るか
 
-                                                Action:
-                                                「直ちに書き込みを停止する」
+AIは比較を支援するだけで、
+勝手に優先順位を決定しないでください。
 
-                                                An action can therefore be critical because of a traceable causal chain.
+---
 
-                                                # Meeting state
+# 6. 判断材料生成
 
-                                                The application should gradually evolve toward maintaining a live state like:
+候補となる問いについて、
 
-                                                MeetingState
-                                                ├─ goal
-                                                ├─ activeTopics
-                                                ├─ questions
-                                                │  ├─ open
-                                                │  └─ resolved
-                                                ├─ proposals
-                                                ├─ criteria
-                                                ├─ evidence
-                                                ├─ concerns / risks
-                                                ├─ decisions
-                                                ├─ actions
-                                                ├─ unknowns
-                                                └─ outcomes
+最低でも以下を内部的に評価してください。
 
-                                                Do NOT attempt to build an enormous autonomous AI system in one pass.
+1. 現在の会議目的と関係があるか
+2. 答えによって選択が変わる可能性があるか
+3. 実行条件が変わる可能性があるか
+4. 今知る必要があるか
+5. 後から変更できるか
+6. すでに会話中で扱われていないか
+7. 単なる一般論ではないか
 
-                                                Implement the minimum architecture necessary to make this model extensible.
+以下だけを理由に警告してはいけません。
 
-                                                # UI
+- 一般的に重要だから
+- 起こる可能性がゼロではないから
+- 会話に出ていないから
 
-                                                Preserve the current visual identity and existing functionality as much as practical.
+---
 
-                                                Add a concept similar to a `NOW` / `Action View`.
+# 7. 未来シミュレーションの扱い
 
-                                                This should surface currently important actions.
+未来を予測した事実として扱わないでください。
 
-                                                For an urgent action, a card could conceptually show:
+必ず、
 
-                                                NOW
+「条件付きの仮説」
 
-                                                本番環境をv1.42へロールバック
+として管理します。
 
-                                                理由:
-                                                DB破損につながる異常が確認されている
+例：
 
-                                                今やる理由:
-                                                破損レコードが継続的に増加している
+IF
+公開直後に障害が発生する
 
-                                                担当:
-                                                佐野
+AND
+停止判断をできる人がいない
 
-                                                期限:
-                                                即時
+THEN
+公開継続／停止の判断が遅れる可能性がある
 
-                                                [なぜ？]
-                                                [根拠を見る]
-                                                [議論を見る]
+THEREFORE
+担当者の有無によって公開条件が変わる可能性がある
 
-                                                Do not treat this exact layout as mandatory.
-                                                Adapt it to the existing UI.
+この因果が現在の判断に繋がらない場合は、
+主画面へ提示しないでください。
 
-                                                When clicking "なぜ？", the application should traverse the graph backward.
+---
 
-                                                Action
-                                                → Decision
-                                                → Reason
-                                                → Evidence
-                                                → Utterance
+# 8. 無限にリスクを出さない
 
-                                                The user should be able to continue drilling down rather than receiving a giant generated explanation.
+未来を考えると、
 
-                                                Think "progressive disclosure".
+- サーバー障害
+- 災害
+- API停止
+- 担当者欠席
+- 市場変化
 
-                                                # Graph behavior
+などを無限に生成できます。
 
-                                                The graph should make relations explicit rather than relying only on spatial grouping.
+そのため、
 
-                                                Edges should have semantic meaning where practical.
+「起こり得る」
 
-                                                Examples:
+だけでは提示しません。
 
-                                                - supports
-                                                - opposes
-                                                - answers
-                                                - motivates
-                                                - decided_from
-                                                - results_in
-                                                - assigned_to
-                                                - derived_from
+最低でも、
 
-                                                Avoid adding complexity purely for ontology purity.
+現在の目的
+→ 現在の行動候補
+→ 条件
+→ 起こり得る変化
+→ 現在の判断への影響
 
-                                                The primary objective is traceability.
+という因果を説明できるものだけを候補にしてください。
 
-                                                # Important architectural requirement
+検討範囲は基本的に、
 
-                                                Do not make the LLM generate a fresh summary of the whole meeting every time.
+- 次の実行
+- 後戻りしにくい決定
+- 次に確認可能になるタイミング
 
-                                                Think in terms of incremental Meeting State updates.
+までとします。
 
-                                                New utterance:
+---
 
-                                                「それだと工事が遅くない？」
+# 9. 「今決めなくていい」を正式に扱う
 
-                                                should conceptually become something such as:
+この機能は、
+全部を決めさせるためのものではありません。
 
-                                                Utterance
-                                                ↓
-                                                Concern
-                                                「工事時期が遅い可能性」
+判断材料を以下のような状態へ分類できるようにしてください。
 
-                                                which updates the relevant discussion state.
+- 今決める
+- まず確認する
+- 小さく試す
+- 後で判断する
+- 条件付きで保留
+- リスクを理解した上で進む
+- 既に対応済み
+- この会議では対象外
 
-                                                The desired mental model is:
+「不明」
+であること自体を失敗扱いしないでください。
 
-                                                NOT:
-                                                conversation → repeatedly regenerate summary
+重要なのは、
 
-                                                BUT:
-                                                conversation event → update structured meeting state
+不明なものをどう扱って進むか
 
-                                                Reuse the existing real-time architecture where appropriate.
+が共有されていることです。
 
-                                                # Current phase system
+---
 
-                                                Do not immediately delete:
+# 10. UI
 
-                                                1. アイデア出し
-                                                2. グループ化
-                                                3. 採用・却下
+既存の会議マップへ大量の情報を追加して
+画面を壊さないでください。
 
-                                                Keep current behavior working.
+通常表示では、
 
-                                                However, design the new model so the application is not permanently constrained to a strictly linear meeting process.
+「今確認する価値が高いもの」
 
-                                                Real meetings can move:
+だけを短く表示してください。
 
-                                                問題定義
-                                                → 探索
-                                                → 比較
-                                                → 判断
-                                                → 再検討
-                                                → 比較
-                                                → 判断
+例：
 
-                                                The state model should support this later.
+[確認]
+公開方法を決める前に、
+不具合がデータ損失につながるか確認した方がよさそうです。
 
-                                                # Implementation strategy
+理由：
+データ損失が発生するなら、
+全面公開ではなく限定公開を選ぶ可能性があります。
 
-                                                Work incrementally.
+詳細表示では、
 
-                                                First:
+- 元発言
+- 現在の目的
+- AIが仮置きした選択肢
+- 条件付きシミュレーション
+- なぜ判断に影響するのか
+- この指摘が不要かもしれない理由
 
-                                                1. Inspect repository architecture.
-                                                2. Identify the existing graph/node model.
-                                                3. Identify where ideas are created and updated.
-                                                4. Identify WebSocket message schemas.
-                                                5. Identify persistence/state ownership.
-                                                6. Identify existing tests.
+まで見られるようにしてください。
 
-                                                Then propose the smallest coherent architecture change.
+既存のReact Flowの意味マップへ統合するか、
+別のサイドパネルにするかは、
+現在の実装を調査した上で判断してください。
 
-                                                After that, implement it.
+---
 
-                                                Prioritize this first vertical slice:
+# 11. 解析タイミング
 
-                                                speech/text input
-                                                → meeting event
-                                                → typed node(s)
-                                                → Decision / Action relation
-                                                → provenance
-                                                → Action View
-                                                → reverse traversal to source utterance
+最初は、
 
-                                                It is acceptable for the first implementation to use manually created / deterministic example decision relations if the current AI pipeline cannot reliably extract them yet.
+「手動解析」
 
-                                                The structural model and interaction should be correct before trying to solve perfect automatic extraction.
+を確実に完成させてください。
 
-                                                # Acceptance scenario
+その後必要なら、
 
-                                                Create a test/demo meeting like this:
+- 話題変化
+- 新しい案の提示
+- 合意発生
+- 前提変更
+- 会議目的変更
 
-                                                14:20
-                                                「新バージョンにしてからエラー率が35%になっています」
+などをトリガーにできます。
 
-                                                14:21
-                                                「新バージョンが原因かもしれない」
+ただし、
 
-                                                14:22
-                                                「DBのwriteで3件壊れています」
+キーワードが変化した
+=
+話題が変わった
 
-                                                14:23
-                                                「このまま動かすと壊れたデータが増える」
+とは扱わないでください。
 
-                                                14:24
-                                                「一度v1.42に戻そう」
+意味的な話題変化と単語変化は別物です。
 
-                                                14:25
-                                                「それでいこう。今すぐロールバック」
+---
 
-                                                The resulting state should allow the user to see roughly:
+# 12. LM Studio / ルールベース
 
-                                                ACTION
-                                                v1.42へロールバック
+現在の
+「LM Studioが使えなくてもアプリ自体は動く」
+という性質を壊さないでください。
 
-                                                WHY
-                                                データ破損を止める
+今回の高度な意思決定支援は
+LLM依存になっても構いませんが、
 
-                                                WHY NOW
-                                                稼働を続けるほど破損が増える
+LLM停止によって
 
-                                                STATUS
-                                                Decided
+- 会話記録
+- マップ
+- 会議後整理
+- 既存機能
 
-                                                and navigate backward to:
+まで利用不能にならないようにしてください。
 
-                                                Decision
-                                                ↓
-                                                Reason / Risk
-                                                ↓
-                                                Evidence
-                                                ↓
-                                                14:20 / 14:22 / 14:23 utterances
+意思決定支援機能が使えない場合は、
 
-                                                # Acceptance criteria
+「解析不能」
 
-                                                The implementation is successful when:
+と正しく表示してください。
 
-                                                - Existing core brainstorming flow still works.
-                                                - Actions can exist as structured graph entities.
-                                                - An Action can reference the Decision that caused it.
-                                                - A Decision can reference supporting reasons/evidence.
-                                                - Evidence can reference original utterances.
-                                                - Reverse traversal works in the UI.
-                                                - AI suggestions are visibly distinct from human decisions.
-                                                - Urgency has an explainable `why now`, not only a severity value.
-                                                - Missing evidence remains visibly missing/unconfirmed.
-                                                - TypeScript checks pass.
-                                                - Existing tests pass.
-                                                - Add tests for the new graph relationships and reverse traversal.
-                                                - Avoid unnecessary large refactors.
+ルールベース処理で
+「安全です」
+「漏れはありません」
+などの虚偽の代替結果を生成しないでください。
 
-                                                # UX test
+---
 
-                                                A person who joined the meeting late should be able to open the application and answer:
+# 13. 推論バックエンド
 
-                                                「今、何をすればいい？」
+今回の実装では、
+既存のLM Studio接続を優先してください。
 
-                                                within about 5 seconds.
+推論部分とUI・状態管理を分離し、
+将来的に
 
-                                                They should then be able to answer:
+- LM Studio
+- OpenAI互換API
+- OpenRouter等
 
-                                                「なんで？」
+へ差し替え可能な構造にしてください。
 
-                                                within another few seconds.
+ただし、
+今回クラウドAI対応のためだけに
+既存設計を大幅変更しないでください。
 
-                                                And if they distrust the summary, they should be able to trace the answer all the way back to the original utterances.
+API費用管理は将来機能として分離可能にしてください。
 
-                                                That is the central product experience.
+---
 
-                                                # Before editing
+# 14. 状態保持
 
-                                                Inspect the repository first and give me:
+同じ指摘を何度も表示しないようにしてください。
 
-                                                A. Current architecture relevant to this feature
-                                                B. What should be reused
-                                                C. What is structurally missing
-                                                D. Proposed minimal implementation plan
-                                                E. Files likely to change
+各判断材料について、
 
-                                                Then proceed with implementation unless you discover a major architectural contradiction that would make the proposed approach unsafe.
+- open
+- checked
+- decided
+- deferred
+- accepted
+- irrelevant
+
+などの状態を持たせてください。
+
+一度処理した論点は、
+同じ前提のまま再表示しません。
+
+ただし、
+
+関連する前提が変化した場合は、
+
+「以前の判断がまだ有効か」
+
+を再確認候補にしてください。
+
+単なる文章追加や言い換えだけで
+再表示しないでください。
+
+---
+
+# 15. 根拠
+
+可能な限り、
+判断材料を生成する根拠となった発言を保持してください。
+
+ただし、
+
+引用が実在する
+=
+AIの推論が正しい
+
+ではありません。
+
+以下を分離してください。
+
+- sourceEvidence
+- inference
+- uncertainty
+
+存在しない発言を引用した場合は
+その解析結果を採用しないでください。
+
+---
+
+# 16. テストケース
+
+最低でも以下を用意してください。
+
+## Case 1
+決定候補がまだ存在しない。
+
+→ 判断材料を提示できる。
+
+## Case 2
+ある情報について話されていないだけ。
+
+→ 「未決定」と断定せず確認する。
+
+## Case 3
+重要そうだが現在の選択に影響しない情報。
+
+→ 主画面に出さない。
+
+## Case 4
+今決めなくても後から容易に変更可能。
+
+→ 「後で判断」にできる。
+
+## Case 5
+情報が足りない。
+
+→ 勝手に結論を出さず、
+確認・実験・小規模試行を提案する。
+
+## Case 6
+ブレインストーミング会議。
+
+→ 無理に決定・担当・期限を要求しない。
+
+## Case 7
+既に処理した論点。
+
+→ 同じ条件なら再通知しない。
+
+## Case 8
+重要な前提が変化。
+
+→ 前回の判断を再確認する。
+
+## Case 9
+LLM停止。
+
+→ 既存の会議機能は正常利用できる。
+
+## Case 10
+モデルが存在しない引用を返す。
+
+→ 結果をrejectまたはinvalid扱いする。
+
+---
+
+# 17. 評価
+
+「未来を当てたか」
+だけでは評価しないでください。
+
+評価したいものは、
+
+その時点で利用可能だった情報を基準として、
+
+「参加者が判断する前に、
+知っていれば選択を変える可能性のある材料を
+適切なタイミングで提示できたか」
+
+です。
+
+また、
+
+- 不要な警告
+- 既決事項の蒸し返し
+- 一般論の提示
+- 今決める必要のない細部
+
+も測定してください。
+
+「不要な提示3回/時以下」
+は暫定的な評価目標として利用できますが、
+通知を3件で止める仕様にはしないでください。
+
+検出率90%などは、
+正解データがまだ存在しないため
+完成条件として固定しないでください。
+
+---
+
+# 18. 今回の実装範囲
+
+まず以下を完成させてください。
+
+1. 既存コード調査
+2. 意思決定支援用データモデル
+3. 会話 → 判断材料候補の解析
+4. 根拠との対応
+5. 候補のフィルタリング
+6. UI表示
+7. 対応状態の記録
+8. 再提示抑制
+9. 前提変更時の再確認
+10. テスト
+
+最初から、
+
+- クラウド公開
+- アカウント
+- DB
+- 広告
+- 課金
+- 大規模バックエンド
+
+まで実装しないでください。
+
+今回まず検証したいのは、
+
+「この意思決定支援ロジックそのものに価値があるか」
+
+です。
+
+---
+
+# 19. 完了報告
+
+最後に必ず以下を報告してください。
+
+## 実装済み
+実際にコードとして動くもの。
+
+## 検証済み
+実際に実行したテストと結果。
+
+## 未検証
+コードはあるが品質を確認していないもの。
+
+## 未実装
+今回意図的に残したもの。
+
+## 設計上残る疑問
+追加情報が判明した場合に、
+設計判断が変わるもの。
+
+READMEに書いてあることを
+実際のコードを確認せず事実として扱わないでください。
+
+テストしていないことを
+「動作確認済み」と報告しないでください。
+
+既存機能を壊していないことも
+可能な範囲で回帰テストしてください。

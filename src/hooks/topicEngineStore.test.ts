@@ -125,4 +125,17 @@ describe("topicEngineStore", () => {
     store.submitTranscript("担当は田中さんです", "manual");
     expect(store.getSnapshot().meetingSummaryStale).toBe(true);
   });
+
+  it("only creates decision materials on an explicit manual analysis and preserves processed status", () => {
+    const store = createTopicEngineStore();
+    store.submitTranscript("金曜日に公開したいです", "manual");
+    store.submitTranscript("不具合が怖いです", "manual");
+    expect(store.getSnapshot().decisionSupport.status).toBe("idle");
+    store.analyzeDecisionSupport();
+    const material = store.getSnapshot().decisionSupport.materials[0];
+    expect(material?.sourceEvidenceSegmentIds).toHaveLength(2);
+    store.updateDecisionMaterialStatus(material!.id, "checked");
+    store.analyzeDecisionSupport();
+    expect(store.getSnapshot().decisionSupport.materials[0]?.status).toBe("checked");
+  });
 });

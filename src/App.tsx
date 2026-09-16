@@ -10,6 +10,7 @@ import { MeetingReportPanel } from "./components/MeetingReportPanel";
 import { MeetingSummaryGraph } from "./components/MeetingSummaryGraph";
 import { MeetingStateMap } from "./components/MeetingStateMap";
 import { MeetingProgressMap } from "./components/MeetingProgressMap";
+import { DecisionSupportPanel } from "./components/DecisionSupportPanel";
 import { TopicGraph } from "./components/TopicGraph";
 import { TopicInspector } from "./components/TopicInspector";
 import { TranscriptPanel } from "./components/TranscriptPanel";
@@ -164,7 +165,7 @@ function MeetingMode({
       </header>
 
       <section className="dashboard-grid">
-        <div className={`graph-column ${mapMode === "state" || mapMode === "progress" ? "is-state-map" : ""}`}>
+        <div className={`graph-column ${mapMode === "state" ? "is-state-map" : ""}`}>
           <div className="workspace-tabs" aria-label="会議マップの表示">
             <button aria-pressed={mapMode === "progress"} onClick={() => setMapMode("progress")}>流れ・次の検討</button>
             <button aria-pressed={mapMode === "state"} onClick={() => setMapMode("state")}>現在状態・根拠</button>
@@ -248,6 +249,7 @@ function MeetingMode({
             hidden={railTab !== "progress"}
           >
             <ActionView graph={topicEngine.decisionGraph} onUpdate={topicEngine.updateAction} onExplore={(id) => { setSelectedDecisionId(id); setMapMode("state"); }} />
+            <DecisionSupportPanel analysis={topicEngine.decisionSupport} segments={topicEngine.segmentArchive} onAnalyze={topicEngine.analyzeDecisionSupport} onStatus={topicEngine.updateDecisionMaterialStatus} />
             {mapMode !== "progress" ? <button onClick={() => setMapMode("progress")}>確認・改善の進行を開く</button> : null}
             <ConversationNodeEditor
               conversationTree={topicEngine.conversationTree}
