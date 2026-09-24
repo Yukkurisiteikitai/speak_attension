@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_CHAT_MAX_TOKENS, requestChat, type LlmSettings } from "./llmClient";
+import {
+  DEFAULT_CHAT_MAX_TOKENS,
+  isLmStudioBaseUrl,
+  requestChat,
+  restoreLocalLlmSettings,
+  type LlmSettings,
+} from "./llmClient";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -10,7 +16,7 @@ describe("requestChat", () => {
       json: async () => ({ choices: [{ message: { content: "{}" } }] }),
     });
     vi.stubGlobal("fetch", fetchMock);
-    const settings: LlmSettings = { baseUrl: "http://127.0.0.1:1234/v1", model: "local-model" };
+    const settings: LlmSettings = { provider: "lmstudio", baseUrl: "http://127.0.0.1:1234/v1", model: "local-model" };
 
     await requestChat(settings, [{ role: "user", content: "test" }]);
 
@@ -23,8 +29,33 @@ describe("requestChat", () => {
       ok: true,
       json: async () => ({ choices: [{ message: {}, finish_reason: "length" }] }),
     }));
-    const settings: LlmSettings = { baseUrl: "http://127.0.0.1:1234/v1", model: "local-model" };
+    const settings: LlmSettings = { provider: "lmstudio", baseUrl: "http://127.0.0.1:1234/v1", model: "local-model" };
 
     await expect(requestChat(settings, [{ role: "user", content: "test" }])).rejects.toThrow("出力上限");
+  });
+
+  it("rejects a remote endpoint before sending a request", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const settings: LlmSettings = { provider: "lmstudio", baseUrl: "https://openrouter.ai/api/v1", model: "remote-model" };
+
+    await expect(requestChat(settings, [{ role: "user", content: "test" }])).rejects.toThrow("LM Studio");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("local LLM settings", () => {
+  it("accepts only the local LM Studio endpoint", () => {
+    expect(isLmStudioBaseUrl("http://127.0.0.1:1234/v1")).toBe(true);
+    expect(isLmStudioBaseUrl("http://localhost:1234/v1/")).toBe(true);
+    expect(isLmStudioBaseUrl("https://openrouter.ai/api/v1")).toBe(false);
+  });
+
+  it("restores legacy remote settings to the local default", () => {
+    expect(restoreLocalLlmSettings({ baseUrl: "https://openrouter.ai/api/v1", model: "remote-model" })).toEqual({
+      provider: "lmstudio",
+      baseUrl: "http://127.0.0.1:1234/v1",
+      model: "",
+    });
   });
 });

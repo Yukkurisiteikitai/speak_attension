@@ -7,7 +7,7 @@ import type {
 import { isFillerUtterance } from "./topicExtraction";
 
 const TOPIC_PATTERN = /(?:今日は|今回|次に|では)?\s*(.{2,48}?)について(?:決めます|決める|話します|話す|検討します|検討する|相談します|相談する|確認します|確認する|議論します|議論する)/;
-const TOPIC_SWITCH_PATTERN = /^(?:次に|別件|話を変えると|切り替えて)/;
+const TOPIC_SWITCH_PATTERN = /^(?:次に|次の議題|次の話題|別件|話は変わ|話を変えると|切り替えて)/;
 const TOPIC_OPENING_PATTERN = /^今日は.{2,48}?(?:を決めたい|を決めます|を振り返ります|のレビューです|について)/;
 const TOPIC_END_PATTERN = /^(?:(?:今日は)?(?:ここまで|以上)(?:です)?|以上で終わります)$/;
 const ISSUE_PATTERN = /問題|課題|遅(?:い|さ)|困(?:る|って)|難しい|ボトルネック/;

@@ -5,6 +5,7 @@ import { importTimedTranscriptJson } from "../utils/transcriptImporter";
 import { collectReplaySegments, formatReplayTime, type ReplaySpeed } from "../utils/transcriptReplay";
 
 type TranscriptReplayPanelProps = {
+  active?: boolean;
   onSubmit: (segment: TimedTranscriptSegment) => void;
 };
 
@@ -19,7 +20,7 @@ function lastTranscriptTime(segments: TimedTranscriptSegment[]): number {
   return segments.reduce((max, segment) => Math.max(max, segment.endMs ?? segment.startMs), 0);
 }
 
-export function TranscriptReplayPanel({ onSubmit }: TranscriptReplayPanelProps) {
+export function TranscriptReplayPanel({ onSubmit, active = true }: TranscriptReplayPanelProps) {
   const [segments, setSegments] = useState<TimedTranscriptSegment[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -29,6 +30,8 @@ export function TranscriptReplayPanel({ onSubmit }: TranscriptReplayPanelProps) 
   const [currentSegment, setCurrentSegment] = useState<TimedTranscriptSegment | null>(null);
   const lastTickAtRef = useRef<number | null>(null);
   const nextIndexRef = useRef(0);
+
+  useEffect(() => { if (!active) setIsPlaying(false); }, [active]);
 
   const durationMs = useMemo(() => lastTranscriptTime(segments), [segments]);
 
@@ -60,7 +63,7 @@ export function TranscriptReplayPanel({ onSubmit }: TranscriptReplayPanelProps) 
   };
 
   useEffect(() => {
-    if (!isPlaying || segments.length === 0) return;
+    if (!active || !isPlaying || segments.length === 0) return;
 
     if (speed === "instant") {
       const result = collectReplaySegments(segments, Number.POSITIVE_INFINITY, nextIndexRef.current);
@@ -101,7 +104,7 @@ export function TranscriptReplayPanel({ onSubmit }: TranscriptReplayPanelProps) 
     }, TICK_MS);
 
     return () => window.clearInterval(timer);
-  }, [currentSegment, durationMs, isPlaying, onSubmit, segments, speed]);
+  }, [active, currentSegment, durationMs, isPlaying, onSubmit, segments, speed]);
 
   useEffect(() => {
     if (!isPlaying) {

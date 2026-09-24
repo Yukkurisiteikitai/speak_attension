@@ -2,6 +2,14 @@ import { describe, expect, it } from "vitest";
 import { applyTopicTitleRefinements, createInitialTopicEngineState, processTopicSegment } from "./topicEngine";
 
 describe("topicEngine replay scenario", () => {
+  it("keeps supplied speaker metadata and verbatim source in the decision graph", () => {
+    const text = "資料が不足しているので、田中さんが明日までに資料を作成します。";
+    const { state, segment } = processTopicSegment(createInitialTopicEngineState(0), text, "replay", 1000, { speaker: "佐藤" });
+    expect(segment.metadata?.speaker).toBe("佐藤");
+    expect(state.decisionGraph.nodes.find((node) => node.type === "utterance")).toMatchObject({ label: text, speaker: "佐藤" });
+    expect(state.decisionGraph.nodes.find((node) => node.type === "action")?.action).toMatchObject({ owner: "田中", why: "資料が不足している" });
+  });
+
   it("builds a topic map and closes earlier topics after focus shift", () => {
     let state = createInitialTopicEngineState(0);
 

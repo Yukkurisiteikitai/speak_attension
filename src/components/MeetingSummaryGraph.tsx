@@ -257,7 +257,7 @@ export function MeetingSummaryGraph({ summary, status, error, stale, startedAt, 
     ),
     [collapsedIds, onRename, segmentById, selectedIdeaItemIds, summary],
   );
-  const sourceLabel = status === "refining" ? "規則で整理済み・LM Studioで整え中…" : status === "llm" ? "LM Studioで整理" : status === "error" ? "規則で整理（LM Studioは利用できませんでした）" : "規則で整理";
+  const sourceLabel = status === "refining" ? "規則で整理済み・AIで整え中…" : status === "llm" ? "AIで整理" : status === "error" ? "規則で整理（AIは利用できませんでした）" : "規則で整理";
   return (
     <section className="graph-panel meeting-summary-map" aria-label="会議終了時の整理マップ">
       <div className="graph-title">

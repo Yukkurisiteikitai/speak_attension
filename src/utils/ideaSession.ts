@@ -276,7 +276,7 @@ export function renderIdeaMarkdown(state: IdeaSessionState, generatedAt: number 
     `- 採用: ${decisionCounts.adopted}`,
     `- 保留: ${decisionCounts.hold}`,
     `- 却下: ${decisionCounts.rejected}`,
-    `- グルーピング: ${state.groupingSource === "llm" ? "ローカルLLM" : state.groupingSource === "rules" ? "ルールベース" : "未実施"}`,
+    `- グルーピング: ${state.groupingSource === "llm" ? "AI" : state.groupingSource === "rules" ? "ルールベース" : "未実施"}`,
     "",
     "## 採用アイデア",
   ];

@@ -1,11 +1,11 @@
-import { fetchModelIds, type LlmSettings } from "./llmClient";
+import { fetchModelIds, providerLabel, type LlmSettings } from "./llmClient";
 
 export type LlmConnectionCheckResult = {
   statusMessage: string;
   autofillModel: string | null;
 };
 
-// Shared connection probe for the LM Studio settings UI in both modes.
+// Shared connection probe for the configured OpenAI-compatible provider.
 // Returns a user-facing status message instead of throwing so callers can
 // render it directly; autofillModel is set when the settings have no model yet.
 export async function checkLlmConnection(
@@ -15,10 +15,10 @@ export async function checkLlmConnection(
   try {
     const modelIds = await fetchModels(settings);
     if (modelIds.length === 0) {
-      return { statusMessage: "接続はできましたが、ロード済みモデルがありません。", autofillModel: null };
+      return { statusMessage: "接続はできましたが、利用可能なモデルがありません。", autofillModel: null };
     }
     return {
-      statusMessage: `接続成功: ${modelIds.join(", ")}`,
+      statusMessage: `${providerLabel()} 接続成功: ${modelIds.join(", ")}`,
       autofillModel: settings.model ? null : modelIds[0],
     };
   } catch (error) {
