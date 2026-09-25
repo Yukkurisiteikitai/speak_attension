@@ -25,7 +25,6 @@ import { formatReplayTime } from "./utils/transcriptReplay";
 import type { AnalyzedSegment, MeetingSummary, SessionLogEntry } from "./types/topic";
 
 type AppMode = "idea" | "meeting";
-type MeetingRailTab = "progress" | "analysis" | "hinge";
 type MeetingInputTab = "manual" | "replay" | "transcript";
 
 const WS_URL = "ws://127.0.0.1:8787";
@@ -59,9 +58,9 @@ function useSessionSocket() {
 }
 
 function statusLabel(isSupported: boolean, isListening: boolean): string {
-  if (!isSupported) return "Web Speech API が利用できません";
-  if (isListening) return "音声認識中(日本語)";
-  return "待機中";
+  if (!isSupported) return "音声入力は非対応";
+  if (isListening) return "音声入力中";
+  return "音声入力 待機中";
 }
 
 export default function App() {
@@ -117,8 +116,7 @@ function MeetingMode({
   const stopSpeech = speech.stop;
   const flushMeeting = topicEngine.flushBuffer;
   useEffect(() => { if (!active) { stopSpeech(); flushMeeting(); } }, [active, stopSpeech, flushMeeting]);
-  const [railTab, setRailTab] = useState<MeetingRailTab>("progress");
-  const [inputDockOpen, setInputDockOpen] = useState(true);
+  const [inputDockOpen, setInputDockOpen] = useState(false);
   const [inputTab, setInputTab] = useState<MeetingInputTab>("manual");
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
   const [selectedConversationNodeId, setSelectedConversationNodeId] = useState<string | null>(null);
@@ -145,33 +143,39 @@ function MeetingMode({
     <>
       <header className="meeting-header">
         <div>
-          <p className="eyebrow">会議ダッシュボード</p>
+          <p className="eyebrow">MEETING WORKSPACE</p>
           <h1>{topicEngine.meetingGraph.title}</h1>
         </div>
         <div className="header-metrics">
           <div className="header-metric">
-            <span>経過時間</span>
-            <strong>{elapsedLabel}</strong>
+            <span className={`connection-dot ${speech.isListening ? "is-live" : ""}`} />
+            <strong>{speech.isListening ? "録音中" : "待機中"}</strong>
           </div>
-          <div className="header-metric">
-            <span>現在の議題</span>
-            <strong>{topicEngine.currentTopic?.title ?? "なし"}</strong>
-          </div>
-          <div className="header-metric">
-            <span>接続状態</span>
-            <strong>{connectionStatus}</strong>
-          </div>
+          <div className="header-metric"><span>経過</span><strong>{elapsedLabel}</strong></div>
         </div>
       </header>
 
       <section className="dashboard-grid">
+        <aside className="meeting-agenda-column">
+          <section className="meeting-agenda-card">
+            <p className="eyebrow">AGENDA</p><h2>会議の状況</h2>
+            <div className="agenda-current"><span>現在の議題</span><strong>{topicEngine.currentTopic?.title ?? "議題はまだありません"}</strong></div>
+            <div className="agenda-count"><span>記録した発言</span><strong>{topicEngine.segmentArchive.length}</strong><small>件</small></div>
+            <div className="agenda-guide"><span className="agenda-guide-step is-current">1</span><div><strong>発言を集める</strong><small>音声またはテキストで追加</small></div></div>
+            <div className="agenda-guide"><span className={`agenda-guide-step ${topicEngine.segmentArchive.length ? "is-current" : ""}`}>2</span><div><strong>考えを整理する</strong><small>話題・課題・理由・行動</small></div></div>
+            <div className="agenda-guide"><span className={`agenda-guide-step ${topicEngine.discussionPrompts.length ? "is-current" : ""}`}>3</span><div><strong>次の確認へ</strong><small>未解決の点を明らかにする</small></div></div>
+            <button type="button" className="quiet-button" onClick={() => setIsResetConfirmOpen(true)}>会議をリセット</button>
+          </section>
+        </aside>
         <div className={`graph-column ${mapMode === "state" ? "is-state-map" : ""}`}>
-          <div className="workspace-tabs" aria-label="会議マップの表示">
-            <button aria-pressed={mapMode === "progress"} onClick={() => setMapMode("progress")}>流れ・次の検討</button>
-            <button aria-pressed={mapMode === "state"} onClick={() => setMapMode("state")}>現在状態・根拠</button>
-            <button aria-pressed={mapMode === "live"} onClick={() => setMapMode("live")}>会話のマップ</button>
-            {topicEngine.meetingSummary ? <button aria-pressed={mapMode === "summary"} onClick={() => setMapMode("summary")}>整理マップ</button> : null}
-          </div>
+          <ControlPanel
+            error={speech.error} isListening={speech.isListening} isSupported={speech.isSupported}
+            onReset={() => setIsResetConfirmOpen(true)} onOrganize={organizeMeeting}
+            canOrganize={topicEngine.segmentArchive.length > 0}
+            isOrganizing={topicEngine.meetingSummaryStatus === "refining"}
+            onStart={speech.isSupported ? speech.start : () => setInputDockOpen(true)} onStop={() => { speech.stop(); topicEngine.flushBuffer(); }}
+            statusLabel={stableStatusLabel}
+          />
           {mapMode === "progress" ? (
             <MeetingProgressMap tree={topicEngine.conversationTree} graph={topicEngine.decisionGraph} segments={topicEngine.segmentArchive}
               meetingReview={topicEngine.meetingReview} onReviewChange={topicEngine.setMeetingReview}
@@ -179,7 +183,7 @@ function MeetingMode({
               armedPromptId={topicEngine.armedDiscussionPrompt?.id ?? null} onArmPrompt={topicEngine.armDiscussionPrompt}
               onAnswer={(id, text, needsResearch) => { topicEngine.answerDiscussionPrompt(id, text, needsResearch); designHinge.ingestUtterance(text, "manual"); }}
               onDefer={topicEngine.setDiscussionPromptDeferred} onExplore={(id) => { setSelectedDecisionId(id); setMapMode("state"); }}
-              onSubmit={(text) => { topicEngine.submitTranscript(text, "manual"); designHinge.ingestUtterance(text, "manual"); }} />
+              onSubmit={(text) => { topicEngine.submitTranscript(text, "manual"); designHinge.ingestUtterance(text, "manual"); }} onStart={speech.isSupported ? speech.start : () => setInputDockOpen(true)} />
           ) : mapMode === "state" ? (
             <MeetingStateMap graph={topicEngine.decisionGraph} meetingId={topicEngine.meetingGraph.meetingId} title={topicEngine.meetingGraph.title} selectedId={selectedDecisionId} onSelect={setSelectedDecisionId} />
           ) : mapMode === "summary" && topicEngine.meetingSummary ? (
@@ -203,75 +207,42 @@ function MeetingMode({
               selectedNodeId={selectedConversationNodeId}
               onRate={topicEngine.toggleConversationNodeRating}
               onSelect={setSelectedConversationNodeId}
+              onStart={speech.start}
             />
           )}
+          <details className="map-alternatives"><summary>別のマップ・詳細表示</summary><div className="map-alternative-buttons">
+            <button aria-pressed={mapMode === "progress"} onClick={() => setMapMode("progress")}>流れと次の検討</button>
+            <button aria-pressed={mapMode === "state"} onClick={() => setMapMode("state")}>現在状態と根拠</button>
+            <button aria-pressed={mapMode === "live"} onClick={() => setMapMode("live")}>会話マップ</button>
+            {topicEngine.meetingSummary ? <button aria-pressed={mapMode === "summary"} onClick={() => setMapMode("summary")}>整理マップ</button> : null}
+          </div></details>
         </div>
 
         <div className="rail-column meeting-rail">
-          <div className="workspace-tabs" role="tablist" aria-label="会議サイドパネル">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={railTab === "progress"}
-              aria-controls="meeting-progress-panel"
-              id="meeting-progress-tab"
-              onClick={() => setRailTab("progress")}
-            >
-              進行
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={railTab === "analysis"}
-              aria-controls="meeting-analysis-panel"
-              id="meeting-analysis-tab"
-              onClick={() => setRailTab("analysis")}
-            >
-              分析
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={railTab === "hinge"}
-              aria-controls="meeting-hinge-panel"
-              id="meeting-hinge-tab"
-              onClick={() => setRailTab("hinge")}
-            >
-              設計仮説
-            </button>
-          </div>
-
-          <div
-            className="meeting-tab-panel meeting-rail-stack"
-            role="tabpanel"
-            id="meeting-progress-panel"
-            aria-labelledby="meeting-progress-tab"
-            hidden={railTab !== "progress"}
-          >
-            <ActionView graph={topicEngine.decisionGraph} onUpdate={topicEngine.updateAction} onExplore={(id) => { setSelectedDecisionId(id); setMapMode("state"); }} />
-            <DecisionSupportPanel analysis={topicEngine.decisionSupport} segments={topicEngine.segmentArchive} onAnalyze={topicEngine.analyzeDecisionSupport} onStatus={topicEngine.updateDecisionMaterialStatus} />
-            {mapMode !== "progress" ? <button onClick={() => setMapMode("progress")}>確認・改善の進行を開く</button> : null}
-            <ConversationNodeEditor
+          <ActionView graph={topicEngine.decisionGraph} onUpdate={topicEngine.updateAction} onExplore={(id) => { setSelectedDecisionId(id); setMapMode("state"); }} />
+          <DecisionSupportPanel analysis={topicEngine.decisionSupport} segments={topicEngine.segmentArchive} onAnalyze={topicEngine.analyzeDecisionSupport} onStatus={topicEngine.updateDecisionMaterialStatus} />
+          <details className="secondary-tools"><summary>会話マップの調整</summary><ConversationNodeEditor
               conversationTree={topicEngine.conversationTree}
               selectedNodeId={selectedConversationNodeId}
               onUpdate={topicEngine.updateConversationNode}
-            />
-            <ControlPanel
-              error={speech.error}
-              isListening={speech.isListening}
-              isSupported={speech.isSupported}
-              onReset={() => setIsResetConfirmOpen(true)}
-              onOrganize={organizeMeeting}
-              canOrganize={topicEngine.segmentArchive.length > 0}
-              isOrganizing={topicEngine.meetingSummaryStatus === "refining"}
-              onStart={speech.start}
-              onStop={() => {
-                speech.stop();
-                topicEngine.flushBuffer();
-              }}
-              statusLabel={stableStatusLabel}
-            />
-            <TopicInspector
+          /></details>
+          <details className="secondary-tools"><summary>分析・レポート・設定</summary><MeetingReportPanel
+              conversationTree={topicEngine.conversationTree}
+              importantMentions={topicEngine.importantMentions}
+              llmSettings={llmSettings}
+              meetingGraph={topicEngine.meetingGraph}
+              decisionGraph={topicEngine.decisionGraph}
+              onUpdateLlmSettings={updateLlmSettings}
+              segmentArchive={topicEngine.segmentArchive}
+            /><DesignHingePanel
+              activeCard={designHinge.activeCard} graph={designHinge.graph}
+              pendingProposals={designHinge.pendingProposals} pendingCandidateQueue={designHinge.pendingCandidateQueue}
+              policyEnabled={designHinge.policyEnabled} acceptNodeProposal={designHinge.acceptNodeProposal}
+              acceptEdgeProposal={designHinge.acceptEdgeProposal} rejectEdgeProposal={designHinge.rejectEdgeProposal}
+              approveIntervention={designHinge.approveIntervention} dismissIntervention={designHinge.dismissIntervention}
+              createCounterfactual={designHinge.createCounterfactual} requestManualIntervention={designHinge.requestManualIntervention}
+              setPolicyEnabled={designHinge.setPolicyEnabled} exportSession={designHinge.exportSession}
+            /><TopicInspector
               connectionStatus={connectionStatus}
               currentTopicGaps={topicEngine.currentTopicGaps}
               currentTopicId={topicEngine.currentTopicId}
@@ -283,51 +254,7 @@ function MeetingMode({
               onFocusLockedChange={topicEngine.setFocusLocked}
               onManualFocusChange={topicEngine.setManualFocus}
               segments={topicEngine.segments}
-            />
-          </div>
-
-          <div
-            className="meeting-tab-panel"
-            role="tabpanel"
-            id="meeting-analysis-panel"
-            aria-labelledby="meeting-analysis-tab"
-            hidden={railTab !== "analysis"}
-          >
-            <MeetingReportPanel
-              conversationTree={topicEngine.conversationTree}
-              importantMentions={topicEngine.importantMentions}
-              llmSettings={llmSettings}
-              meetingGraph={topicEngine.meetingGraph}
-              decisionGraph={topicEngine.decisionGraph}
-              onUpdateLlmSettings={updateLlmSettings}
-              segmentArchive={topicEngine.segmentArchive}
-            />
-          </div>
-
-          <div
-            className="meeting-tab-panel"
-            role="tabpanel"
-            id="meeting-hinge-panel"
-            aria-labelledby="meeting-hinge-tab"
-            hidden={railTab !== "hinge"}
-          >
-            <DesignHingePanel
-              activeCard={designHinge.activeCard}
-              graph={designHinge.graph}
-              pendingProposals={designHinge.pendingProposals}
-              pendingCandidateQueue={designHinge.pendingCandidateQueue}
-              policyEnabled={designHinge.policyEnabled}
-              acceptNodeProposal={designHinge.acceptNodeProposal}
-              acceptEdgeProposal={designHinge.acceptEdgeProposal}
-              rejectEdgeProposal={designHinge.rejectEdgeProposal}
-              approveIntervention={designHinge.approveIntervention}
-              dismissIntervention={designHinge.dismissIntervention}
-              createCounterfactual={designHinge.createCounterfactual}
-              requestManualIntervention={designHinge.requestManualIntervention}
-              setPolicyEnabled={designHinge.setPolicyEnabled}
-              exportSession={designHinge.exportSession}
-            />
-          </div>
+          /></details>
         </div>
       </section>
 

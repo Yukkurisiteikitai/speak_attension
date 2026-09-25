@@ -10,6 +10,7 @@ type TopicGraphProps = {
   selectedNodeId: string | null;
   onRate: (nodeId: string) => void;
   onSelect: (nodeId: string | null) => void;
+  onStart?: () => void;
 };
 
 const roleLabels: Record<Exclude<ConversationGraphNodeData["role"], "root">, string> = {
@@ -56,7 +57,7 @@ function ConversationNode({ id, data }: NodeProps<ConversationGraphNode>) {
 
 const nodeTypes = { conversation: ConversationNode };
 
-export function TopicGraph({ conversationTree, selectedNodeId, onRate, onSelect }: TopicGraphProps) {
+export function TopicGraph({ conversationTree, selectedNodeId, onRate, onSelect, onStart }: TopicGraphProps) {
   const { nodes, edges } = useMemo(() => {
     const projection = projectConversationTreeToFlow(conversationTree, "会議");
     return {
@@ -76,7 +77,17 @@ export function TopicGraph({ conversationTree, selectedNodeId, onRate, onSelect 
           <span>話題から課題・原因・アクションをたどれます</span>
         </div>
       </div>
-      <ReactFlow
+      {conversationTree.nodes.length === 0 ? (
+        <div className="conversation-empty-state">
+          <span className="empty-state-mark" aria-hidden="true">◌</span>
+          <p className="eyebrow">会話のマップ</p>
+          <h3>話し始めると、会議の流れがここに見えてきます</h3>
+          <p>発言を「話題 → 課題 → 原因 → アクション」に整理し、決まったことや未解決の点をたどれます。</p>
+          <div className="empty-state-flow"><span>話題</span><i>→</i><span>課題</span><i>→</i><span>アクション</span></div>
+          {onStart ? <button className="primary-button" type="button" onClick={onStart}>会議を始める</button> : null}
+        </div>
+      ) : null}
+      {conversationTree.nodes.length > 0 ? <ReactFlow
         nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
@@ -90,7 +101,7 @@ export function TopicGraph({ conversationTree, selectedNodeId, onRate, onSelect 
       >
         <Background gap={24} color="#e2e7e3" />
         <MapViewportControls fitKey="conversation-live" />
-      </ReactFlow>
+      </ReactFlow> : null}
     </section>
   );
 }
