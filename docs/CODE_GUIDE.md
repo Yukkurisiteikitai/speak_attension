@@ -13,6 +13,7 @@
 | `src/utils/ideaGrouping.ts` | `src/utils/topicExtraction.ts` |
 | `src/utils/ideaLayout.ts` | `src/utils/topicSelection.ts` |
 | `src/components/IdeaModeView.tsx` | `src/utils/topicCoverage.ts` / `src/components/TopicInspector.tsx` |
+| | `src/utils/meetingStateDashboard.ts` / `src/components/MeetingStateDashboard.tsx`（既定表示） |
 
 ## Mental Model
 
@@ -198,9 +199,13 @@ npm run check
 npm run build
 ```
 
+### 会議の状況（中央ダッシュボード、既定表示）
+
+`src/utils/meetingStateDashboard.ts` の `buildMeetingStateDashboard` は、決定グラフと判断材料（`decisionSupport.ts`）を読み替えるだけの純粋関数で、新しい確定状態は作らない。確定した決定（`type: decision` かつ `state: decided` のみ）、構造上の不足（アクションの担当・期限欠落をルールで検出）、未確認・未解決（未回答の質問・未採用の提案・`state: unconfirmed`）、AIの確認候補（判断材料の `status: open/recheck`）、人間が確認した項目（`status: checked/decided/accepted`）、次にやること、NOW（今この瞬間に見るべき1件、ルールによる補助表示であり確定判断ではない）を分けて返す。`src/components/MeetingStateDashboard.tsx` はこの view model を表示するだけで分類は行わない。`meetingStateDashboard.test.ts` が各分類の境界（proposal が confirmedDecisions に混入しない、AI提案が確定・構造上の不足に昇格しない等）を検証する。方針は [ADR 0018](adr/0018-meeting-state-primary-surface-and-epistemic-boundaries.md)。
+
 ### 現在状態から出典への探索
 
-`src/components/MeetingStateMap.tsx` は会議中央の現在状態一覧、段階的な根拠探索、全文表示、ダウンロードを担当する。`src/utils/meetingDecisionLayout.ts` は選択ノードと直接の参照先の配置を行い、`meetingDecisionLayout.test.ts` が長短ラベルのプレビュー寸法と衝突を確認する。`src/utils/meetingState.ts` は未決定の選択、共通日本語ラベル、出典を含むスナップショットとMarkdown生成を共用する。`meetingState.test.ts` と `meetingDecisionGraph.test.ts` が現在状態・手動更新履歴・出典参照を検証する。会議状態は引き続き `topicEngineStore` と純粋な決定エンジンが所有し、ローカルサーバーへ状態APIは追加しない。
+`src/components/MeetingStateMap.tsx` は会議中央の現在状態一覧、段階的な根拠探索、全文表示、ダウンロードを担当する。ダッシュボードの各項目の「根拠を見る」からもこのマップへ遷移する。`src/utils/meetingDecisionLayout.ts` は選択ノードと直接の参照先の配置を行い、`meetingDecisionLayout.test.ts` が長短ラベルのプレビュー寸法と衝突を確認する。`src/utils/meetingState.ts` は未決定の選択、共通日本語ラベル、出典を含むスナップショットとMarkdown生成を共用する。`meetingState.test.ts` と `meetingDecisionGraph.test.ts` が現在状態・手動更新履歴・出典参照を検証する。会議状態は引き続き `topicEngineStore` と純粋な決定エンジンが所有し、ローカルサーバーへ状態APIは追加しない。
 
 ### 明示的な確認・改善
 

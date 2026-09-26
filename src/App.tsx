@@ -9,6 +9,7 @@ import { ManualReplayPanel } from "./components/ManualReplayPanel";
 import { MeetingReportPanel } from "./components/MeetingReportPanel";
 import { MeetingSummaryGraph } from "./components/MeetingSummaryGraph";
 import { MeetingStateMap } from "./components/MeetingStateMap";
+import { MeetingStateDashboard } from "./components/MeetingStateDashboard";
 import { MeetingProgressMap } from "./components/MeetingProgressMap";
 import { DecisionSupportPanel } from "./components/DecisionSupportPanel";
 import { TopicGraph } from "./components/TopicGraph";
@@ -21,11 +22,13 @@ import { useSpeechRecognition } from "./hooks/useSpeechRecognition";
 import { useLlmSettings } from "./hooks/useLlmSettings";
 import { useTopicEngine } from "./hooks/useTopicEngine";
 import { createIdeaSessionFromMeetingSelection } from "./utils/ideaSession";
+import { buildMeetingStateDashboard } from "./utils/meetingStateDashboard";
 import { formatReplayTime } from "./utils/transcriptReplay";
 import type { AnalyzedSegment, MeetingSummary, SessionLogEntry } from "./types/topic";
 
 type AppMode = "idea" | "meeting";
 type MeetingInputTab = "manual" | "replay" | "transcript";
+type MeetingMapMode = "dashboard" | "progress" | "state" | "live" | "summary";
 
 const WS_URL = "ws://127.0.0.1:8787";
 
@@ -111,8 +114,13 @@ function MeetingMode({
     },
   });
   const [now, setNow] = useState(() => Date.now());
-  const [mapMode, setMapMode] = useState<"progress" | "state" | "live" | "summary">("progress");
+  const [mapMode, setMapMode] = useState<MeetingMapMode>("dashboard");
   const [selectedDecisionId, setSelectedDecisionId] = useState<string | null>(null);
+  const dashboard = useMemo(
+    () => buildMeetingStateDashboard(topicEngine.decisionGraph, topicEngine.decisionSupport.materials, topicEngine.currentTopic?.title ?? null),
+    [topicEngine.decisionGraph, topicEngine.decisionSupport.materials, topicEngine.currentTopic],
+  );
+  const exploreFromDashboard = useCallback((id: string) => { setSelectedDecisionId(id); setMapMode("state"); }, []);
   const stopSpeech = speech.stop;
   const flushMeeting = topicEngine.flushBuffer;
   useEffect(() => { if (!active) { stopSpeech(); flushMeeting(); } }, [active, stopSpeech, flushMeeting]);
@@ -167,7 +175,7 @@ function MeetingMode({
             <button type="button" className="quiet-button" onClick={() => setIsResetConfirmOpen(true)}>会議をリセット</button>
           </section>
         </aside>
-        <div className={`graph-column ${mapMode === "state" ? "is-state-map" : ""}`}>
+        <div className={`graph-column ${mapMode === "state" || mapMode === "dashboard" ? "is-state-map" : ""}`}>
           <ControlPanel
             error={speech.error} isListening={speech.isListening} isSupported={speech.isSupported}
             onReset={() => setIsResetConfirmOpen(true)} onOrganize={organizeMeeting}
@@ -176,7 +184,22 @@ function MeetingMode({
             onStart={speech.isSupported ? speech.start : () => setInputDockOpen(true)} onStop={() => { speech.stop(); topicEngine.flushBuffer(); }}
             statusLabel={stableStatusLabel}
           />
-          {mapMode === "progress" ? (
+          {mapMode === "dashboard" ? (
+            <MeetingStateDashboard
+              currentTopicTitle={dashboard.currentTopicTitle}
+              confirmedDecisions={dashboard.confirmedDecisions}
+              reasonsByDecisionId={dashboard.reasonsByDecisionId}
+              structuralGaps={dashboard.structuralGaps}
+              unresolvedItems={dashboard.unresolvedItems}
+              aiSuggestedChecks={dashboard.aiSuggestedChecks}
+              humanConfirmedChecks={dashboard.humanConfirmedChecks}
+              nextActions={dashboard.nextActions}
+              now={dashboard.now}
+              onExplore={exploreFromDashboard}
+              onOpenDecisionSupport={topicEngine.analyzeDecisionSupport}
+              onStartReview={() => setMapMode("progress")}
+            />
+          ) : mapMode === "progress" ? (
             <MeetingProgressMap tree={topicEngine.conversationTree} graph={topicEngine.decisionGraph} segments={topicEngine.segmentArchive}
               meetingReview={topicEngine.meetingReview} onReviewChange={topicEngine.setMeetingReview}
               prompts={topicEngine.discussionPrompts} reviewStatus={topicEngine.progressReviewStatus} reviewError={topicEngine.progressReviewError}
@@ -211,6 +234,7 @@ function MeetingMode({
             />
           )}
           <details className="map-alternatives"><summary>別のマップ・詳細表示</summary><div className="map-alternative-buttons">
+            <button aria-pressed={mapMode === "dashboard"} onClick={() => setMapMode("dashboard")}>会議の状況</button>
             <button aria-pressed={mapMode === "progress"} onClick={() => setMapMode("progress")}>流れと次の検討</button>
             <button aria-pressed={mapMode === "state"} onClick={() => setMapMode("state")}>現在状態と根拠</button>
             <button aria-pressed={mapMode === "live"} onClick={() => setMapMode("live")}>会話マップ</button>
@@ -329,7 +353,7 @@ function MeetingMode({
           designHinge.reset();
           setSelectedConversationNodeId(null);
           setSelectedDecisionId(null);
-          setMapMode("progress");
+          setMapMode("dashboard");
           setIsResetConfirmOpen(false);
         }}
         onCancel={() => setIsResetConfirmOpen(false)}
