@@ -43,10 +43,13 @@ export function generateCharacterization(): CaseCharacterization[] {
 
       // Apply to decision graph and record node types
       const segment: AnalyzedSegment = {
+        id: `${testCase.id}-${utteranceCharacterizations.length}`,
         text,
-        speaker: utterance.speaker,
-        timestamp: 0,
-        analysis: {} as any,
+        createdAt: 0,
+        source: "manual",
+        matchedTopicIds: [],
+        metadata: { speaker: utterance.speaker },
+        analysis: {} as AnalyzedSegment["analysis"],
       };
 
       const before = graph;
@@ -74,8 +77,8 @@ export function generateCharacterization(): CaseCharacterization[] {
       confirmedDecisions: dashboard.confirmedDecisions.map((d) => d.label),
       nextActions: dashboard.nextActions.map((a) => ({
         what: a.label,
-        owner: a.owner ?? null,
-        deadline: a.deadline ?? null,
+        owner: a.action?.owner ?? null,
+        deadline: a.action?.deadline ?? null,
       })),
       structuralGapsCount: dashboard.structuralGaps.length,
       unresolvedItemsCount: dashboard.unresolvedItems.length,

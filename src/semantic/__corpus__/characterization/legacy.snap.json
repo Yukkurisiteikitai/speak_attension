@@ -286,7 +286,7 @@
     "nextActions": [
       {
         "what": "鈴木さんがプロトタイプを来週金曜日までに作成します",
-        "owner": null,
+        "owner": "鈴木",
         "deadline": null
       }
     ],
