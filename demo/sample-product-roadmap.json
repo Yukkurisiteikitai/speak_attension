@@ -1,0 +1,84 @@
+{
+  "meetingId": "meeting-roadmap-20260927",
+  "title": "プロダクトロードマップ検討会",
+  "createdAt": "2026-09-27T14:00:00Z",
+  "segments": [
+    {
+      "id": "seg-1",
+      "text": "今日は今四半期のロードマップを確定します",
+      "createdAt": 0,
+      "source": "manual",
+      "speaker": "プロダクトマネージャー"
+    },
+    {
+      "id": "seg-2",
+      "text": "レイテンシー削減が急務なんですけど、現在30%のユーザーが3秒以上待たされています",
+      "createdAt": 8000,
+      "source": "manual",
+      "speaker": "技術リード"
+    },
+    {
+      "id": "seg-3",
+      "text": "でも新バージョンでキャッシュ層を入れれば、大幅に改善される見込みです",
+      "createdAt": 15000,
+      "source": "manual",
+      "speaker": "インフラチーム"
+    },
+    {
+      "id": "seg-4",
+      "text": "一方で、UI刷新も要望が多くて、ユーザー満足度が落ちています",
+      "createdAt": 22000,
+      "source": "manual",
+      "speaker": "デザイン"
+    },
+    {
+      "id": "seg-5",
+      "text": "レイテンシー削減を優先で進めることにします。期限は10月末です",
+      "createdAt": 30000,
+      "source": "manual",
+      "speaker": "プロダクトマネージャー"
+    },
+    {
+      "id": "seg-6",
+      "text": "UI刷新は次の四半期に見送ります",
+      "createdAt": 35000,
+      "source": "manual",
+      "speaker": "プロダクトマネージャー"
+    },
+    {
+      "id": "seg-7",
+      "text": "データベース移行が必要になるんですが、ダウンタイムはどうするんですか？",
+      "createdAt": 42000,
+      "source": "manual",
+      "speaker": "運用チーム"
+    },
+    {
+      "id": "seg-8",
+      "text": "いい質問ですね。そこはまだ検討中です。青チームで検証します",
+      "createdAt": 50000,
+      "source": "manual",
+      "speaker": "インフラチーム"
+    },
+    {
+      "id": "seg-9",
+      "text": "データベース移行の検証は佐藤さんが11月15日までにやります",
+      "createdAt": 57000,
+      "source": "manual",
+      "speaker": "プロダクトマネージャー"
+    },
+    {
+      "id": "seg-10",
+      "text": "ユーザーへの通知はどうしましょう。事前通知の必要はありますか？",
+      "createdAt": 65000,
+      "source": "manual",
+      "speaker": "コミュニケーション"
+    },
+    {
+      "id": "seg-11",
+      "text": "30分以上のダウンタイムなら事前通知が必要ですね。でも、ゼロダウンタイムで実現できるか分かりません",
+      "createdAt": 72000,
+      "source": "manual",
+      "speaker": "インフラチーム"
+    }
+  ]
+}
