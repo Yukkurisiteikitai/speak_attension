@@ -1065,23 +1065,11 @@ input:focus {
 .conversation-view-toggle button[aria-selected="true"] { background: var(--green-soft); color: var(--green); }
 .conversation-timeline { display: flex; flex-direction: column; min-height: 0; }
 .timeline-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; display: grid; gap: 6px; }
-.timeline-row { border: 1px solid var(--line); border-left: 4px solid var(--strong-line); border-radius: 10px; display: flex; align-items: stretch; }
-.timeline-row.role-topic { border-left-color: #116147; }
-.timeline-row.role-issue { border-left-color: #b1423a; }
-.timeline-row.role-cause { border-left-color: #b76a1f; }
-.timeline-row.role-action { border-left-color: #4756a6; }
-.timeline-row.role-alternative { border-left-color: #2e7d84; }
+.timeline-row { border: 1px solid var(--line); border-radius: 10px; display: flex; align-items: stretch; }
 .timeline-row.is-selected { background: var(--surface-2); box-shadow: 0 0 0 2px var(--green) inset; }
 .timeline-row-button { flex: 1; display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 0; background: transparent; text-align: left; cursor: pointer; min-width: 0; }
 .timeline-row-button time { flex: none; font-size: 12px; color: var(--muted); }
 .timeline-speaker { flex: none; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); font-size: 11px; color: var(--muted); max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.timeline-role-chip { flex: none; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 800; color: #fff; }
-.timeline-role-chip.role-topic { background: #116147; }
-.timeline-role-chip.role-issue { background: #b1423a; }
-.timeline-role-chip.role-cause { background: #b76a1f; }
-.timeline-role-chip.role-action { background: #4756a6; }
-.timeline-role-chip.role-alternative { background: #2e7d84; }
-.timeline-role-chip.role-statement { background: var(--strong-line); color: var(--ink); }
 .timeline-text-content { flex: 1; min-width: 0; display: grid; gap: 2px; }
 .timeline-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
 .timeline-details { font-size: 11px; color: var(--muted); }
@@ -1090,6 +1078,29 @@ input:focus {
 .timeline-manually-adjusted { padding: 1px 6px; border-radius: 999px; background: var(--amber-soft); color: var(--amber); }
 .timeline-rating { display: inline-flex; color: var(--green); }
 .timeline-row .conversation-rating { flex: none; margin: 6px 10px; }
+
+/* --- 発言分類バッジ: semantic role (主) + discourse act/commitment (副)。
+   color単独に依存せず icon+label+color を併用する (ADR 0021)。 --- */
+.semantic-badge { flex: none; display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; border: 1px solid var(--line); background: var(--surface-2); color: var(--muted); white-space: nowrap; }
+.semantic-badge-role { font-weight: 800; }
+.semantic-badge-meta, .semantic-badge-detail { font-weight: 500; font-size: 10px; opacity: .82; }
+/* judgment-track roles (option/proposal/decision/action) read weak (amber) or
+   confirmed (green) by commitment; a proposal must never look as strong as a
+   decision. */
+.semantic-badge.is-tentative { background: var(--amber-soft); color: var(--amber); border-color: transparent; }
+.semantic-badge.is-confirmed { background: var(--green-soft); color: var(--green); border-color: transparent; }
+/* roles where "confirmed vs tentative" isn't the relevant axis stay neutral
+   regardless of commitment (declared after is-tentative/is-confirmed so they win). */
+.semantic-badge.role-topic, .semantic-badge.role-agenda_item, .semantic-badge.role-context,
+.semantic-badge.role-question, .semantic-badge.role-acknowledgement, .semantic-badge.role-other,
+.semantic-badge.role-reason, .semantic-badge.role-evidence {
+  background: var(--surface-2); color: var(--muted); border-color: var(--line);
+}
+.semantic-badge.role-problem { background: rgba(177, 66, 58, 0.1); color: #b1423a; border-color: transparent; }
+
+.timeline-correction-menu { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.timeline-correction-menu select { font-size: 11px; padding: 2px 6px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); }
+.timeline-correction-badge { font-size: 10px; padding: 1px 6px; border-radius: 999px; background: var(--surface-2); color: var(--muted); }
 
 .summary-toggle {
   margin-top: 8px;

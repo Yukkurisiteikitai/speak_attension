@@ -1,6 +1,10 @@
 import { ThumbsUp } from "lucide-react";
-import { useMemo } from "react";
-import type { AnalyzedSegment, ConversationNodeRole, ConversationTreeState } from "../types/topic";
+import { useMemo, useState } from "react";
+import type { AnalyzedSegment, ConversationTreeState } from "../types/topic";
+import { classifyUtterance, semanticRoleLabels, type SemanticRole, type UtteranceClassification } from "../utils/utteranceClassification";
+import { SemanticBadge } from "./SemanticBadge";
+import { TimelineCorrectionMenu, type SemanticRoleOption } from "./TimelineCorrectionMenu";
+import { downloadFile } from "../lib/download";
 
 type ConversationTimelineProps = {
   conversationTree: ConversationTreeState;
@@ -11,14 +15,10 @@ type ConversationTimelineProps = {
   onStart?: () => void;
 };
 
-const roleLabels: Record<ConversationNodeRole, string> = {
-  topic: "話題",
-  issue: "課題",
-  cause: "原因",
-  action: "アクション",
-  alternative: "別案",
-  statement: "発言",
-};
+const ROLE_OPTIONS: SemanticRoleOption[] = (Object.keys(semanticRoleLabels) as SemanticRole[]).map((value) => ({
+  value,
+  label: semanticRoleLabels[value],
+}));
 
 export function ConversationTimeline({
   conversationTree,
@@ -35,6 +35,41 @@ export function ConversationTimeline({
     [conversationTree.nodes]
   );
 
+  // Timeline-only classification (ADR 0021): never feeds the decision graph
+  // or Meeting State. A manual correction only overrides semanticRole for
+  // display/export -- it does not change how classifyUtterance itself works.
+  const classifications = useMemo(
+    () => new Map<string, UtteranceClassification>(sortedNodes.map((node) => [node.id, classifyUtterance(node.originalText)])),
+    [sortedNodes],
+  );
+  const [corrections, setCorrections] = useState<Map<string, SemanticRole>>(new Map());
+  const setCorrection = (nodeId: string, role: SemanticRole) => setCorrections((current) => {
+    const next = new Map(current);
+    next.set(nodeId, role);
+    return next;
+  });
+
+  const exportClassifications = () => {
+    const rows = sortedNodes.map((node) => {
+      const auto = classifications.get(node.id)!;
+      const corrected = corrections.get(node.id) ?? null;
+      return {
+        nodeId: node.id,
+        segmentId: node.segmentId,
+        text: node.originalText,
+        createdAt: node.createdAt,
+        autoClassification: auto,
+        correctedSemanticRole: corrected,
+        isCorrected: corrected !== null,
+      };
+    });
+    downloadFile(
+      "timeline-classification.json",
+      JSON.stringify({ format: "timeline-utterance-classification", version: 1, exportedAt: Date.now(), rows }, null, 2),
+      "application/json",
+    );
+  };
+
   return (
     <section className="conversation-timeline" aria-label="会議の発言タイムライン">
       <div className="graph-title">
@@ -42,6 +77,11 @@ export function ConversationTimeline({
           <h2>会話のタイムライン</h2>
           <span>発言を時系列で確認できます</span>
         </div>
+        {conversationTree.nodes.length > 0 ? (
+          <button type="button" className="quiet-button" onClick={exportClassifications}>
+            分類をエクスポート
+          </button>
+        ) : null}
       </div>
 
       {conversationTree.nodes.length === 0 ? (
@@ -75,11 +115,16 @@ export function ConversationTimeline({
             const segment = segmentById.get(node.segmentId);
             const speaker = segment?.metadata?.speaker ?? "発言者不明";
             const isSelected = node.id === selectedNodeId;
+            const autoClassification = classifications.get(node.id)!;
+            const correctedRole = corrections.get(node.id) ?? null;
+            const effectiveClassification: UtteranceClassification = correctedRole
+              ? { ...autoClassification, semanticRole: correctedRole }
+              : autoClassification;
 
             return (
               <li
                 key={node.id}
-                className={`timeline-row role-${node.role} ${isSelected ? "is-selected" : ""}`}
+                className={`timeline-row ${isSelected ? "is-selected" : ""}`}
               >
                 <button
                   type="button"
@@ -95,9 +140,7 @@ export function ConversationTimeline({
 
                   <span className="timeline-speaker">{speaker}</span>
 
-                  <span className={`timeline-role-chip role-${node.role}`}>
-                    {roleLabels[node.role]}
-                  </span>
+                  <SemanticBadge classification={effectiveClassification} />
 
                   <div className="timeline-text-content">
                     <div className="timeline-label">{node.label}</div>
@@ -120,6 +163,13 @@ export function ConversationTimeline({
                     </span>
                   ) : null}
                 </button>
+
+                <TimelineCorrectionMenu
+                  currentValue={effectiveClassification.semanticRole}
+                  isCorrected={correctedRole !== null}
+                  options={ROLE_OPTIONS}
+                  onChange={(value) => setCorrection(node.id, value as SemanticRole)}
+                />
 
                 <button
                   type="button"
