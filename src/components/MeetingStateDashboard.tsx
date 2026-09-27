@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { DecisionMaterial, MeetingDecisionNode } from "../types/topic";
 import type { NowSpotlight, StructuralGap } from "../utils/meetingStateDashboard";
-import { meetingTypeLabels } from "../utils/meetingState";
+import { actionStatusLabels, meetingStateLabels, meetingTypeLabels } from "../utils/meetingState";
 
 type Props = {
   currentTopicTitle: string | null;
@@ -9,13 +9,21 @@ type Props = {
   reasonsByDecisionId: Record<string, MeetingDecisionNode[]>;
   structuralGaps: StructuralGap[];
   unresolvedItems: MeetingDecisionNode[];
-  aiSuggestedChecks: DecisionMaterial[];
+  systemSuggestedChecks: DecisionMaterial[];
   humanConfirmedChecks: DecisionMaterial[];
   nextActions: MeetingDecisionNode[];
   now: NowSpotlight;
   onExplore: (nodeId: string) => void;
   onOpenDecisionSupport: () => void;
   onStartReview: () => void;
+  // Inline evidence: the currently selected node (from any onExplore click)
+  // and its direct parents, shown on this same screen instead of navigating
+  // to a separate map. Deeper, multi-hop exploration stays in the advanced
+  // trace map, opened explicitly via onOpenTraceMap.
+  selectedNode: MeetingDecisionNode | null;
+  selectedNodeParents: MeetingDecisionNode[];
+  onCloseSelection: () => void;
+  onOpenTraceMap: () => void;
 };
 
 function translateMissingFields(fields: string[]): string {
@@ -28,7 +36,7 @@ function translateMissingFields(fields: string[]): string {
 
 export function MeetingStateDashboard(props: Props) {
   const [expandedDecisionId, setExpandedDecisionId] = useState<string | null>(null);
-  const { now, onExplore } = props;
+  const { now, onExplore, selectedNode, selectedNodeParents, onCloseSelection, onOpenTraceMap } = props;
 
   return (
     <section className="panel meeting-state-dashboard" aria-label="会議の状況">
@@ -38,10 +46,13 @@ export function MeetingStateDashboard(props: Props) {
       </div>
       <p className="dashboard-topic">{props.currentTopicTitle ?? "議題はまだありません"}</p>
 
-      {/* 2. NOW spotlight */}
+      {/* 2. NOW spotlight: a rule-picked candidate, not a determined priority */}
+      <div className="section-head">
+        <h2>次に確認できること</h2>
+      </div>
       {now === null ? (
         <div className="now-spotlight is-empty">
-          <p>今すぐ確認すべき項目はありません。</p>
+          <p>現在、ルールが提示する確認候補はありません。</p>
         </div>
       ) : now.kind === "structural_gap" ? (
         <div className="now-spotlight is-structural-gap">
@@ -64,7 +75,7 @@ export function MeetingStateDashboard(props: Props) {
         </div>
       ) : (
         <div className="now-spotlight is-action">
-          <h3>次にやること</h3>
+          <h3>対応候補のアクション</h3>
           <p>
             <strong>{now.node.action?.what ?? now.node.label}</strong>
           </p>
@@ -72,8 +83,51 @@ export function MeetingStateDashboard(props: Props) {
         </div>
       )}
       <p className="now-spotlight-caption">
-        ルールによる提案です。会話の内容を優先してください。
+        {now ? `理由: ${now.reason}　` : ""}
+        ルールが選んだ一例です。重要度を確定するものではありません。会話の内容を優先してください。
       </p>
+
+      {/* Inline evidence: appears in place, right where the user clicked
+          "根拠を見る", instead of moving to a separate screen. */}
+      {selectedNode ? (
+        <div className="selected-evidence" aria-live="polite">
+          <div className="section-head">
+            <h3>
+              {meetingTypeLabels[selectedNode.type]} ／{" "}
+              <span className={`decision-state state-${selectedNode.state}`}>{meetingStateLabels[selectedNode.state]}</span>
+            </h3>
+            <button type="button" onClick={onCloseSelection}>閉じる</button>
+          </div>
+          <p className="selected-evidence-label">{selectedNode.label}</p>
+          {selectedNode.type === "utterance" || selectedNode.type === "decision" || selectedNode.type === "outcome" ? (
+            <p className="selected-evidence-meta">
+              {new Date(selectedNode.createdAt).toLocaleString("ja-JP")} ／ {selectedNode.speaker ?? "発言者不明"}
+            </p>
+          ) : null}
+          {selectedNode.actionChange ? (
+            <p>
+              操作担当者による更新: {actionStatusLabels[selectedNode.actionChange.before.status ?? "decided"]} →{" "}
+              {actionStatusLabels[selectedNode.actionChange.after.status ?? "decided"]}
+            </p>
+          ) : null}
+          {selectedNodeParents.length > 0 ? (
+            <ul className="selected-evidence-parents">
+              {selectedNodeParents.map((parent) => (
+                <li key={parent.id}>
+                  <button type="button" onClick={() => onExplore(parent.id)}>
+                    {meetingTypeLabels[parent.type]}へ: {parent.label}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : selectedNode.type !== "utterance" ? (
+            <p className="empty-text">根拠は未確認です。</p>
+          ) : null}
+          <button type="button" className="quiet-button" onClick={onOpenTraceMap}>
+            関係を詳しく見る（根拠マップ）
+          </button>
+        </div>
+      ) : null}
 
       {/* 3. Confirmed decisions */}
       <div className="section-head">
@@ -171,18 +225,19 @@ export function MeetingStateDashboard(props: Props) {
         )}
       </div>
 
-      {/* 4c. AI suggested checks */}
+      {/* 4c. System-suggested checks. decisionSupport.ts is rule/regex based,
+          not an LLM call, so this must never be labeled "AI". */}
       <div className="gap-section">
-        <h3>AIの確認候補</h3>
-        {props.aiSuggestedChecks.length === 0 && props.humanConfirmedChecks.length === 0 ? (
-          <p className="empty-text">AIによる確認候補はありません。</p>
+        <h3>追加で確認できること</h3>
+        {props.systemSuggestedChecks.length === 0 && props.humanConfirmedChecks.length === 0 ? (
+          <p className="empty-text">追加で確認できることはありません。</p>
         ) : (
           <>
-            <div className="gap-list is-ai-suggested">
-              {props.aiSuggestedChecks.length === 0 ? (
-                <p className="empty-text">AIによる確認候補はありません。</p>
+            <div className="gap-list is-system-suggested">
+              {props.systemSuggestedChecks.length === 0 ? (
+                <p className="empty-text">追加で確認できることはありません。</p>
               ) : (
-                props.aiSuggestedChecks.map((material) => (
+                props.systemSuggestedChecks.map((material) => (
                   <div className="gap-item" key={material.id}>
                     <p>
                       <strong>{material.title}</strong>
@@ -191,7 +246,7 @@ export function MeetingStateDashboard(props: Props) {
                   </div>
                 ))
               )}
-              {props.aiSuggestedChecks.length > 0 ? (
+              {props.systemSuggestedChecks.length > 0 ? (
                 <button type="button" onClick={props.onOpenDecisionSupport}>
                   確認しますか？（判断材料パネルを開く）
                 </button>
@@ -234,7 +289,7 @@ export function MeetingStateDashboard(props: Props) {
               </li>
             ))}
           </ul>
-          <p className="next-actions-note">詳細な更新は右側の「NOW / 今すること」で行えます。</p>
+          <p className="next-actions-note">詳細な更新は右側の「アクション一覧」で行えます。</p>
         </>
       )}
 

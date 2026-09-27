@@ -5,6 +5,7 @@ import {
   createInitialMeetingDecisionGraph,
   selectCurrentActions,
   selectDecisionParents,
+  updateMeetingAction,
 } from "./meetingDecisionGraph";
 import { buildMeetingStateDashboard } from "./meetingStateDashboard";
 
@@ -90,7 +91,7 @@ describe("buildMeetingStateDashboard", () => {
     expect(dashboard.nextActions[0].action?.deadline).toBe("明日まで");
   });
 
-  it("case 5: DecisionMaterial with status 'open' appears in aiSuggestedChecks only", () => {
+  it("case 5: DecisionMaterial with status 'open' appears in systemSuggestedChecks only", () => {
     const graph = createInitialMeetingDecisionGraph();
     const materials: DecisionMaterial[] = [
       {
@@ -111,7 +112,7 @@ describe("buildMeetingStateDashboard", () => {
     ];
     const dashboard = buildMeetingStateDashboard(graph, materials, null);
 
-    expect(dashboard.aiSuggestedChecks).toHaveLength(1);
+    expect(dashboard.systemSuggestedChecks).toHaveLength(1);
     expect(dashboard.humanConfirmedChecks).toHaveLength(0);
     expect(dashboard.confirmedDecisions).toEqual([]);
     expect(dashboard.structuralGaps).toEqual([]);
@@ -139,7 +140,7 @@ describe("buildMeetingStateDashboard", () => {
     const dashboard = buildMeetingStateDashboard(graph, materials, null);
 
     expect(dashboard.humanConfirmedChecks).toHaveLength(1);
-    expect(dashboard.aiSuggestedChecks).toHaveLength(0);
+    expect(dashboard.systemSuggestedChecks).toHaveLength(0);
   });
 
   it("case 7: traceability - reasonsByDecisionId reaches deeper evidence via selectDecisionParents composition", () => {
@@ -220,6 +221,16 @@ describe("buildMeetingStateDashboard", () => {
     expect(action.action?.status).toBe("decided");
   });
 
+  it("a 'proposed' action missing owner/deadline is NOT a structural gap (not yet adopted)", () => {
+    const graph = appendMeetingDecisionSegment(createInitialMeetingDecisionGraph(), segment("act", "対応します", 1000));
+    const action = selectCurrentActions(graph)[0];
+    expect(action.action?.owner).toBeUndefined();
+    expect(action.action?.deadline).toBeUndefined();
+    const reconsidered = updateMeetingAction(graph, action.id, { status: "proposed", note: "再検討します" }, { id: "reopen", createdAt: 2000 });
+    const dashboard = buildMeetingStateDashboard(reconsidered, [], null);
+    expect(dashboard.structuralGaps).toEqual([]);
+  });
+
   it("action can appear in both structuralGaps AND nextActions - they are independent", () => {
     // Action with owner but no deadline - should be in both structuralGaps and nextActions
     const graph = appendMeetingDecisionSegment(createInitialMeetingDecisionGraph(), segment("act", "田中さんが対応します", 1000));
@@ -248,6 +259,7 @@ describe("buildMeetingStateDashboard", () => {
     const dashboard = buildMeetingStateDashboard(graph, [], null);
 
     expect(dashboard.now?.kind).toBe("structural_gap");
+    expect(dashboard.now?.reason).toBeTruthy();
   });
 
   it("now spotlight: unresolved question priority over action when no gaps", () => {
@@ -260,6 +272,7 @@ describe("buildMeetingStateDashboard", () => {
     expect(dashboard.now).not.toBeNull();
     if (dashboard.now?.kind === "unresolved") {
       expect(dashboard.now.node.type).toBe("question");
+      expect(dashboard.now.reason).toBeTruthy();
     } else {
       expect.fail("Expected unresolved spotlight");
     }
@@ -272,8 +285,18 @@ describe("buildMeetingStateDashboard", () => {
     expect(dashboard.now).not.toBeNull();
     if (dashboard.now?.kind === "action") {
       expect(dashboard.now.node.type).toBe("action");
+      expect(dashboard.now.reason).toBeTruthy();
     } else {
       expect.fail("Expected action spotlight");
+    }
+  });
+
+  it("reason text never claims certainty words like 重要/必須/今すぐ", () => {
+    const graph = appendMeetingDecisionSegment(createInitialMeetingDecisionGraph(), segment("act", "田中さんが対応します", 1000));
+    const dashboard = buildMeetingStateDashboard(graph, [], null);
+    expect(dashboard.now?.reason).toBeDefined();
+    for (const forbidden of ["重要", "必須", "今すぐ"]) {
+      expect(dashboard.now?.reason).not.toContain(forbidden);
     }
   });
 
@@ -358,9 +381,9 @@ describe("buildMeetingStateDashboard", () => {
     ];
     const dashboard = buildMeetingStateDashboard(graph, materials, null);
 
-    // open → aiSuggestedChecks
-    expect(dashboard.aiSuggestedChecks).toHaveLength(1);
-    expect(dashboard.aiSuggestedChecks[0].id).toBe("m1");
+    // open → systemSuggestedChecks
+    expect(dashboard.systemSuggestedChecks).toHaveLength(1);
+    expect(dashboard.systemSuggestedChecks[0].id).toBe("m1");
 
     // checked + decided → humanConfirmedChecks
     expect(dashboard.humanConfirmedChecks).toHaveLength(2);
@@ -368,11 +391,11 @@ describe("buildMeetingStateDashboard", () => {
     expect(dashboard.humanConfirmedChecks.map((m) => m.id)).toContain("m3");
 
     // deferred appears in neither
-    expect(dashboard.aiSuggestedChecks.map((m) => m.id)).not.toContain("m4");
+    expect(dashboard.systemSuggestedChecks.map((m) => m.id)).not.toContain("m4");
     expect(dashboard.humanConfirmedChecks.map((m) => m.id)).not.toContain("m4");
   });
 
-  it("material with status 'recheck' appears in aiSuggestedChecks", () => {
+  it("material with status 'recheck' appears in systemSuggestedChecks", () => {
     const graph = createInitialMeetingDecisionGraph();
     const materials: DecisionMaterial[] = [
       {
@@ -393,8 +416,8 @@ describe("buildMeetingStateDashboard", () => {
     ];
     const dashboard = buildMeetingStateDashboard(graph, materials, null);
 
-    expect(dashboard.aiSuggestedChecks).toHaveLength(1);
-    expect(dashboard.aiSuggestedChecks[0].status).toBe("recheck");
+    expect(dashboard.systemSuggestedChecks).toHaveLength(1);
+    expect(dashboard.systemSuggestedChecks[0].status).toBe("recheck");
   });
 
   it("material with status 'accepted' appears in humanConfirmedChecks", () => {

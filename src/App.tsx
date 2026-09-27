@@ -12,7 +12,7 @@ import { MeetingStateMap } from "./components/MeetingStateMap";
 import { MeetingStateDashboard } from "./components/MeetingStateDashboard";
 import { MeetingProgressMap } from "./components/MeetingProgressMap";
 import { DecisionSupportPanel } from "./components/DecisionSupportPanel";
-import { TopicGraph } from "./components/TopicGraph";
+import { ConversationView } from "./components/ConversationView";
 import { TopicInspector } from "./components/TopicInspector";
 import { TranscriptPanel } from "./components/TranscriptPanel";
 import { TranscriptReplayPanel } from "./components/TranscriptReplayPanel";
@@ -22,6 +22,7 @@ import { useSpeechRecognition } from "./hooks/useSpeechRecognition";
 import { useLlmSettings } from "./hooks/useLlmSettings";
 import { useTopicEngine } from "./hooks/useTopicEngine";
 import { createIdeaSessionFromMeetingSelection } from "./utils/ideaSession";
+import { selectDecisionParents } from "./utils/meetingDecisionGraph";
 import { buildMeetingStateDashboard } from "./utils/meetingStateDashboard";
 import { formatReplayTime } from "./utils/transcriptReplay";
 import type { AnalyzedSegment, MeetingSummary, SessionLogEntry } from "./types/topic";
@@ -120,7 +121,19 @@ function MeetingMode({
     () => buildMeetingStateDashboard(topicEngine.decisionGraph, topicEngine.decisionSupport.materials, topicEngine.currentTopic?.title ?? null),
     [topicEngine.decisionGraph, topicEngine.decisionSupport.materials, topicEngine.currentTopic],
   );
-  const exploreFromDashboard = useCallback((id: string) => { setSelectedDecisionId(id); setMapMode("state"); }, []);
+  // Selecting a node keeps the user on the dashboard: evidence renders inline
+  // (state+evidence unified, see ADR 0019). Only an explicit "関係を詳しく見る"
+  // click opens the separate advanced trace map (mapMode "state").
+  const exploreFromDashboard = useCallback((id: string) => setSelectedDecisionId(id), []);
+  const openTraceMap = useCallback(() => setMapMode("state"), []);
+  const selectedDashboardNode = useMemo(
+    () => topicEngine.decisionGraph.nodes.find((node) => node.id === selectedDecisionId) ?? null,
+    [topicEngine.decisionGraph, selectedDecisionId],
+  );
+  const selectedDashboardNodeParents = useMemo(
+    () => (selectedDecisionId ? selectDecisionParents(topicEngine.decisionGraph, selectedDecisionId).filter((node) => node.id !== selectedDecisionId) : []),
+    [topicEngine.decisionGraph, selectedDecisionId],
+  );
   const stopSpeech = speech.stop;
   const flushMeeting = topicEngine.flushBuffer;
   useEffect(() => { if (!active) { stopSpeech(); flushMeeting(); } }, [active, stopSpeech, flushMeeting]);
@@ -191,11 +204,15 @@ function MeetingMode({
               reasonsByDecisionId={dashboard.reasonsByDecisionId}
               structuralGaps={dashboard.structuralGaps}
               unresolvedItems={dashboard.unresolvedItems}
-              aiSuggestedChecks={dashboard.aiSuggestedChecks}
+              systemSuggestedChecks={dashboard.systemSuggestedChecks}
               humanConfirmedChecks={dashboard.humanConfirmedChecks}
               nextActions={dashboard.nextActions}
               now={dashboard.now}
               onExplore={exploreFromDashboard}
+              selectedNode={selectedDashboardNode}
+              selectedNodeParents={selectedDashboardNodeParents}
+              onCloseSelection={() => setSelectedDecisionId(null)}
+              onOpenTraceMap={openTraceMap}
               onOpenDecisionSupport={topicEngine.analyzeDecisionSupport}
               onStartReview={() => setMapMode("progress")}
             />
@@ -225,8 +242,9 @@ function MeetingMode({
               summary={topicEngine.meetingSummary}
             />
           ) : (
-            <TopicGraph
+            <ConversationView
               conversationTree={topicEngine.conversationTree}
+              segments={topicEngine.segmentArchive}
               selectedNodeId={selectedConversationNodeId}
               onRate={topicEngine.toggleConversationNodeRating}
               onSelect={setSelectedConversationNodeId}
@@ -236,7 +254,7 @@ function MeetingMode({
           <details className="map-alternatives"><summary>別のマップ・詳細表示</summary><div className="map-alternative-buttons">
             <button aria-pressed={mapMode === "dashboard"} onClick={() => setMapMode("dashboard")}>会議の状況</button>
             <button aria-pressed={mapMode === "progress"} onClick={() => setMapMode("progress")}>流れと次の検討</button>
-            <button aria-pressed={mapMode === "state"} onClick={() => setMapMode("state")}>現在状態と根拠</button>
+            <button aria-pressed={mapMode === "state"} onClick={() => setMapMode("state")}>関係を詳しく見る（根拠マップ）</button>
             <button aria-pressed={mapMode === "live"} onClick={() => setMapMode("live")}>会話マップ</button>
             {topicEngine.meetingSummary ? <button aria-pressed={mapMode === "summary"} onClick={() => setMapMode("summary")}>整理マップ</button> : null}
           </div></details>

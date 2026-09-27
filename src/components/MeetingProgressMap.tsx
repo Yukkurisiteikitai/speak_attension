@@ -1,12 +1,13 @@
 import { finalReviewQuestions, planMeetingReview, type MeetingReview } from "../utils/meetingReview";
 import { MeetingReviewPanel } from "./MeetingReviewPanel";
 import { useEffect, useMemo, useState } from "react";
-import { Background, ReactFlow, useReactFlow } from "@xyflow/react";
+import { Background, Handle, Position, ReactFlow, useReactFlow, type NodeProps } from "@xyflow/react";
 import type { AnalyzedSegment, ConversationTreeState, MeetingDecisionGraph } from "../types/topic";
 import { buildMeetingProgress, renderMeetingProgressMarkdown, type DiscussionPrompt } from "../utils/meetingProgress";
-import { projectMeetingProgress } from "../utils/meetingProgressLayout";
+import { projectMeetingProgress, PROGRESS_CATEGORY_META, type ProgressNodeCategory } from "../utils/meetingProgressLayout";
 import { downloadFile } from "../lib/download";
 import { MapViewportControls } from "./MapViewportControls";
+import { MessageSquare, HelpCircle, FileText, Lightbulb, AlertTriangle, CheckCircle2, ListChecks, Clock, AlertCircle } from "lucide-react";
 
 type Props = {
   meetingReview: MeetingReview;
@@ -39,6 +40,27 @@ function FocusProgressNode({ selectedId }: { selectedId: string | null }) {
   }, [selectedId, getNode, setCenter]);
   return null;
 }
+
+const PROGRESS_ICONS = { MessageSquare, HelpCircle, FileText, Lightbulb, AlertTriangle, CheckCircle2, ListChecks, Clock, AlertCircle };
+
+function ProgressNodeView(props: NodeProps) {
+  const data = props.data as { label: string; category: ProgressNodeCategory; kind: string; planned: boolean };
+  const meta = PROGRESS_CATEGORY_META[data.category];
+  const Icon = PROGRESS_ICONS[meta.icon];
+  return (
+    <div className={`progress-node category-${data.category}`} style={{ borderLeftColor: meta.colorHex }}>
+      <Handle type="target" position={Position.Left} />
+      <div className="progress-node-chip" style={{ color: meta.colorHex }}>
+        <Icon size={13} aria-hidden="true" />
+        <span>{meta.label}</span>
+      </div>
+      <div className="progress-node-body">{data.label}</div>
+      <Handle type="source" position={Position.Right} />
+    </div>
+  );
+}
+
+const progressNodeTypes = { progress: ProgressNodeView };
 
 export function MeetingProgressMap({ meetingReview, onReviewChange, tree, graph, segments, prompts, reviewStatus, reviewError, onAnswer, onDefer, onExplore, onSubmit, armedPromptId, onArmPrompt, onStart }: Props) {
   const [now, setNow] = useState(Date.now());
@@ -89,6 +111,13 @@ export function MeetingProgressMap({ meetingReview, onReviewChange, tree, graph,
     <div className="section-head"><h2>会議の流れと次の検討</h2><span aria-live="polite">{isLive ? "ライブ更新" : `${count}発言目まで`}</span></div>
     {segments.length > 0 ? <>
     <p>課題・理由・提案から決定へのつながりを表示します。「確認・改善」を始めると、残り時間に合わせて問いと条件付きの予定を表示します。</p>
+    <ul className="progress-legend">
+      {(["topic","issue","reason","proposal","risk","decision","action","planned","unconfirmed"] as const).map((cat) => {
+        const meta = PROGRESS_CATEGORY_META[cat];
+        const Icon = PROGRESS_ICONS[meta.icon];
+        return <li key={cat} style={{ color: meta.colorHex }}><Icon size={12} aria-hidden="true" /><span>{meta.label}</span></li>;
+      })}
+    </ul>
     <MeetingReviewPanel review={meetingReview} onChange={(review) => { setNow(Date.now()); setCursor(null); setSelectedId(null); setShowHistory(false); onReviewChange(review); }} remaining={remaining} prompts={prompts} carryover={plan.carryover} graph={graph} segments={segments} onExplore={onExplore} />
     <form className="progress-quick-input" onSubmit={(event) => { event.preventDefault(); if (!utterance.trim()) return; onSubmit(utterance); setUtterance(""); setCursor(null); }}>
       <label htmlFor="progress-utterance">会議の発言を追加</label>
@@ -108,7 +137,7 @@ export function MeetingProgressMap({ meetingReview, onReviewChange, tree, graph,
     </div>
     {!isLive ? <p>過去の発言時点を表示中です。現在の質問・予定は「現在の会議に戻る」で確認できます。</p> : null}
     <div className="progress-flow"><ReactFlow nodes={projection.nodes.map((node) => ({ ...node, selected: node.id === selectedId }))} edges={projection.edges}
-      nodesDraggable={false} nodesConnectable={false} minZoom={0.06} maxZoom={1.5} onNodeClick={(_, node) => select(node.id)} proOptions={{ hideAttribution: true }}>
+      nodeTypes={progressNodeTypes} nodesDraggable={false} nodesConnectable={false} minZoom={0.06} maxZoom={1.5} onNodeClick={(_, node) => select(node.id)} proOptions={{ hideAttribution: true }}>
       <Background gap={24} /><MapViewportControls fitKey={isLive ? autoFit ? `live-${segments.length}-${visiblePromptKey}` : "manual-view" : `history-${count}`} /><FocusProgressNode selectedId={selectedId} />
     </ReactFlow></div>
     {selectedSegment ? <article className="state-source"><h3>{selectedNode?.sequence}. {selectedNode?.kind}</h3><p>{selectedSegment.text}</p>

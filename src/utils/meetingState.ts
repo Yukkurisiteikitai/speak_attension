@@ -5,8 +5,10 @@ export const meetingTypeLabels: Record<MeetingDecisionNode["type"], string> = {
   utterance: "元の発言", problem: "課題", question: "質問", evidence: "根拠", proposal: "提案",
   reason: "理由", concern: "懸念", risk: "リスク", decision: "決定", action: "アクション", outcome: "結果・更新記録",
 };
+// "system" not "AI": nothing in this codebase currently classifies a node as
+// AI-generated, so the label must not claim an AI provenance it can't back up.
 export const meetingStateLabels = {
-  human_stated: "参加者の発言", decided: "決定済み", proposed: "提案", ai_suggested: "AI提案", unconfirmed: "未確認",
+  human_stated: "参加者の発言", decided: "決定済み", proposed: "提案", ai_suggested: "システム提案", unconfirmed: "未確認",
 };
 export const actionStatusLabels = { proposed: "提案中", decided: "決定済み", in_progress: "実行中", done: "完了", cancelled: "撤回" };
 export const actionUrgencyLabels = { low: "低", medium: "中", high: "高", critical: "最優先" };

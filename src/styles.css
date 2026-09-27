@@ -425,11 +425,35 @@ input:focus {
   color: var(--green);
 }
 
-.decision-state.state-unconfirmed,
-.decision-state.state-ai_suggested {
+/* human_stated is a stated fact, not itself a decision: keep it neutral, not green. */
+.decision-state.state-human_stated {
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+/* proposed is a candidate, distinct from both a stated fact and a decision. */
+.decision-state.state-proposed {
+  background: rgba(71, 86, 166, 0.12);
+  color: #3a4690;
+}
+
+.decision-state.state-unconfirmed {
   background: var(--amber-soft);
   color: var(--amber);
 }
+
+/* ai_suggested must look weaker than a human-raised unconfirmed item, never as strong as a decision. */
+.decision-state.state-ai_suggested {
+  background: transparent;
+  border: 1px dashed var(--amber);
+  color: var(--amber);
+}
+
+.state-choice.state-decided { border-left: 4px solid var(--green); }
+.state-choice.state-human_stated { border-left: 4px solid var(--strong-line); }
+.state-choice.state-proposed { border-left: 4px solid #4756a6; }
+.state-choice.state-unconfirmed { border-left: 4px solid var(--amber); }
+.state-choice.state-ai_suggested { border-left: 4px dashed var(--amber); }
 
 .action-card-footer button {
   border: 0;
@@ -782,11 +806,20 @@ input:focus {
   font-weight: 800;
 }
 
-.conversation-node.role-topic { border-color: rgba(17, 97, 71, 0.58); }
-.conversation-node.role-issue { border-color: rgba(177, 66, 58, 0.52); }
-.conversation-node.role-cause { border-color: rgba(183, 106, 31, 0.52); }
-.conversation-node.role-action { border-color: rgba(71, 86, 166, 0.52); }
-.conversation-node.role-alternative { border-color: rgba(46, 125, 132, 0.52); }
+.conversation-node.role-topic { border-color: rgba(17, 97, 71, 0.58); background: rgba(17, 97, 71, 0.07); }
+.conversation-node.role-issue { border-color: rgba(177, 66, 58, 0.52); background: rgba(177, 66, 58, 0.07); }
+.conversation-node.role-cause { border-color: rgba(183, 106, 31, 0.52); background: rgba(183, 106, 31, 0.07); }
+.conversation-node.role-action { border-color: rgba(71, 86, 166, 0.52); background: rgba(71, 86, 166, 0.07); }
+.conversation-node.role-alternative { border-color: rgba(46, 125, 132, 0.52); background: rgba(46, 125, 132, 0.07); }
+.conversation-node.role-topic .conversation-node-head > span { background: rgba(17, 97, 71, 0.16); color: #116147; }
+.conversation-node.role-issue .conversation-node-head > span { background: rgba(177, 66, 58, 0.16); color: #b1423a; }
+.conversation-node.role-cause .conversation-node-head > span { background: rgba(183, 106, 31, 0.16); color: #b76a1f; }
+.conversation-node.role-action .conversation-node-head > span { background: rgba(71, 86, 166, 0.16); color: #4756a6; }
+.conversation-node.role-alternative .conversation-node-head > span { background: rgba(46, 125, 132, 0.16); color: #2e7d84; }
+
+.conversation-map-legend { display: flex; flex-wrap: wrap; gap: 10px; margin: 0 0 10px; padding: 0; list-style: none; font-size: 12px; color: var(--muted); }
+.conversation-map-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.conversation-map-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; }
 
 .conversation-rating {
   display: inline-flex;
@@ -900,8 +933,7 @@ input:focus {
   gap: 8px;
 }
 
-.summary-actions button,
-.summary-node button {
+.summary-actions button {
   border: 1px solid var(--line);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.85);
@@ -925,11 +957,7 @@ input:focus {
 
 .summary-stale,
 .summary-error {
-  position: absolute;
-  z-index: 4;
-  top: 70px;
-  left: 18px;
-  margin: 0;
+  margin: 8px 0;
   border-radius: 10px;
   padding: 7px 10px;
   background: rgba(255, 249, 230, 0.94);
@@ -938,16 +966,12 @@ input:focus {
 }
 
 .summary-error {
-  top: 104px;
   color: var(--red);
 }
 
 .organization-progress {
-  position: absolute;
-  z-index: 4;
-  top: 70px;
-  right: 18px;
-  width: min(320px, calc(100% - 36px));
+  width: min(320px, 100%);
+  margin: 8px 0;
   border: 1px solid rgba(26, 154, 209, 0.28);
   border-radius: 12px;
   background: rgba(245, 252, 255, 0.96);
@@ -996,68 +1020,76 @@ input:focus {
   line-height: 1.35;
 }
 
-.summary-node {
-  width: 230px;
-  border: 1px solid var(--strong-line);
-  border-radius: 14px;
-  background: rgba(255, 252, 246, 0.96);
-  padding: 10px;
-  box-shadow: 0 8px 20px rgba(36, 46, 39, 0.08);
-}
+/* --- 会議の整理一覧: table replaces the old node-graph rendering (見出しは維持、根拠・編集・Idea送りは維持) --- */
+.summary-topics-container { display: grid; gap: 18px; margin-top: 12px; }
+.summary-topic-card { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; background: var(--surface); }
+.summary-topic-title { margin: 0 0 10px; font-size: 16px; }
+.summary-empty { padding: 16px; color: var(--muted); }
 
-.summary-root {
-  width: 240px;
-  border-color: rgba(17, 97, 71, 0.34);
-  background: linear-gradient(135deg, #1a9ad1, #5bb8ef);
-  color: #fff;
-}
+.editable-title { display: inline-flex; align-items: center; gap: 8px; }
+.editable-title input { min-width: 160px; border-radius: 8px; padding: 4px 6px; font-size: inherit; }
+.editable-title button { border: 1px solid var(--line); border-radius: 999px; background: var(--surface); font-size: 11px; padding: 2px 8px; cursor: pointer; }
 
-.summary-category {
-  width: 180px;
-  background: rgba(17, 97, 71, 0.1);
-  color: var(--green);
-}
+.summary-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.summary-table th { text-align: left; padding: 6px 8px; border-bottom: 2px solid var(--strong-line); color: var(--muted); font-size: 12px; }
+.summary-table td { padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; overflow-wrap: anywhere; }
+.summary-item-row.is-idea-selected { background: var(--green-soft); }
+.summary-cell-status, .summary-cell-owner, .summary-cell-deadline { color: var(--muted); white-space: nowrap; }
 
-.summary-item {
-  width: 270px;
-  border-color: rgba(17, 97, 71, 0.26);
-}
+.summary-category-tag { display: inline-block; border-radius: 999px; padding: 2px 9px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.summary-category-tag.category-issue { background: rgba(177, 66, 58, 0.12); color: #b1423a; }
+.summary-category-tag.category-cause { background: rgba(183, 106, 31, 0.12); color: #b76a1f; }
+.summary-category-tag.category-proposal { background: rgba(71, 86, 166, 0.12); color: #4756a6; }
+.summary-category-tag.category-concern { background: rgba(46, 125, 132, 0.12); color: #2e7d84; }
+.summary-category-tag.category-decision { background: var(--green-soft); color: var(--green); }
+.summary-category-tag.category-action { background: rgba(17, 97, 71, 0.12); color: #0f4d3c; }
+.summary-category-tag.category-unresolved { background: var(--amber-soft); color: var(--amber); }
 
-.summary-item.is-idea-selected {
-  border-color: var(--green);
-  box-shadow: 0 0 0 3px rgba(17, 97, 71, 0.14), 0 8px 20px rgba(36, 46, 39, 0.08);
-}
+.summary-evidence-column { display: grid; gap: 6px; }
+.summary-evidence-expanded { display: grid; gap: 6px; }
+.summary-evidence-quote { padding: 6px 8px; border-left: 3px solid var(--line); background: var(--surface-2); font-size: 12px; white-space: pre-wrap; }
+.summary-cell-checkbox { text-align: center; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
 
-.summary-evidence {
-  width: 330px;
-  background: rgba(255, 255, 255, 0.74);
-  color: #4a554d;
-  font-size: 12px;
-  line-height: 1.45;
-}
+/* --- 流れ・次の検討: semantic color for progress nodes (icon + chip + left border, never a full strong fill) --- */
+.progress-node { display: flex; flex-direction: column; gap: 8px; width: 100%; height: 100%; box-sizing: border-box; background: var(--surface); border: 1px solid var(--line); border-left: 4px solid; border-radius: 10px; padding: 10px 12px; overflow: hidden; }
+.progress-node-chip { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.03em; }
+.progress-node-body { flex: 1; font-size: 13px; line-height: 1.4; color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; overflow: hidden; }
+.progress-legend { display: flex; flex-wrap: wrap; gap: 8px 14px; margin: 8px 0 12px; padding: 0; list-style: none; font-size: 11px; }
+.progress-legend li { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; }
 
-.summary-node-head {
-  display: flex;
-  align-items: start;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.summary-node-head strong {
-  font-size: 13px;
-  line-height: 1.4;
-}
-
-.summary-root .summary-node-head strong {
-  font-size: 17px;
-}
-
-.summary-node-head input {
-  min-width: 0;
-  border-radius: 8px;
-  padding: 4px 6px;
-  font-size: 13px;
-}
+/* --- 会話マップ/タイムライン: Timeline is primary, Graph stays as an explicit secondary toggle --- */
+.conversation-view { display: grid; gap: 10px; min-height: 0; height: 100%; grid-template-rows: auto 1fr; }
+.conversation-view-toggle { display: inline-flex; gap: 4px; border: 1px solid var(--line); border-radius: 999px; padding: 3px; width: fit-content; }
+.conversation-view-toggle button { border: 0; border-radius: 999px; background: transparent; padding: 5px 12px; font-size: 12px; font-weight: 700; color: var(--muted); cursor: pointer; }
+.conversation-view-toggle button[aria-selected="true"] { background: var(--green-soft); color: var(--green); }
+.conversation-timeline { display: flex; flex-direction: column; min-height: 0; }
+.timeline-list { list-style: none; margin: 0; padding: 0; overflow-y: auto; display: grid; gap: 6px; }
+.timeline-row { border: 1px solid var(--line); border-left: 4px solid var(--strong-line); border-radius: 10px; display: flex; align-items: stretch; }
+.timeline-row.role-topic { border-left-color: #116147; }
+.timeline-row.role-issue { border-left-color: #b1423a; }
+.timeline-row.role-cause { border-left-color: #b76a1f; }
+.timeline-row.role-action { border-left-color: #4756a6; }
+.timeline-row.role-alternative { border-left-color: #2e7d84; }
+.timeline-row.is-selected { background: var(--surface-2); box-shadow: 0 0 0 2px var(--green) inset; }
+.timeline-row-button { flex: 1; display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 0; background: transparent; text-align: left; cursor: pointer; min-width: 0; }
+.timeline-row-button time { flex: none; font-size: 12px; color: var(--muted); }
+.timeline-speaker { flex: none; padding: 2px 8px; border-radius: 999px; background: var(--surface-2); font-size: 11px; color: var(--muted); max-width: 96px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.timeline-role-chip { flex: none; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 800; color: #fff; }
+.timeline-role-chip.role-topic { background: #116147; }
+.timeline-role-chip.role-issue { background: #b1423a; }
+.timeline-role-chip.role-cause { background: #b76a1f; }
+.timeline-role-chip.role-action { background: #4756a6; }
+.timeline-role-chip.role-alternative { background: #2e7d84; }
+.timeline-role-chip.role-statement { background: var(--strong-line); color: var(--ink); }
+.timeline-text-content { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.timeline-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.timeline-details { font-size: 11px; color: var(--muted); }
+.timeline-details p { margin: 4px 0 0; padding: 6px 8px; background: var(--surface-2); border-radius: 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.timeline-status { flex: none; display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
+.timeline-manually-adjusted { padding: 1px 6px; border-radius: 999px; background: var(--amber-soft); color: var(--amber); }
+.timeline-rating { display: inline-flex; color: var(--green); }
+.timeline-row .conversation-rating { flex: none; margin: 6px 10px; }
 
 .summary-toggle {
   margin-top: 8px;
@@ -2623,8 +2655,10 @@ input:focus {
 /* Current meeting state stays readable on a shared screen and a narrow device. */
 .app-shell > [hidden] { display: none !important; }
 .meeting-state-map { min-width: 0; }
+.state-legend { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 0 0 12px; padding: 0; }
+.state-legend .state-choice { display: inline-block; width: auto; margin: 0; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; pointer-events: none; }
 .state-overview { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-.state-choice { display: block; width: 100%; text-align: left; white-space: normal; overflow-wrap: anywhere; margin: 8px 0; padding: 12px; }
+.state-choice { display: block; width: 100%; text-align: left; white-space: normal; overflow-wrap: anywhere; margin: 8px 0; padding: 12px; border-radius: 10px; }
 .state-choice span { display: block; margin-top: 6px; font-size: 12px; }
 .state-node-index { max-height: 320px; overflow-y: auto; }
 .state-navigation { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
@@ -2660,8 +2694,8 @@ input:focus {
 .gap-item p { margin: 0 0 4px; }
 .gap-list.is-structural .gap-item { border-left: 4px solid var(--amber); background: var(--amber-soft); }
 .gap-list.is-unresolved .gap-item { border-left: 4px solid var(--strong-line); background: var(--surface-2); }
-.gap-list.is-ai-suggested .gap-item { border: 1px dashed var(--line); background: transparent; color: var(--muted); }
-.gap-list.is-ai-suggested .material-question { font-size: 13px; }
+.gap-list.is-system-suggested .gap-item { border: 1px dashed var(--line); background: transparent; color: var(--muted); }
+.gap-list.is-system-suggested .material-question { font-size: 13px; }
 .gap-list.is-human-confirmed { margin-top: 8px; }
 .gap-list.is-human-confirmed .gap-item { border-left: 4px solid var(--green); background: var(--green-soft); }
 .gap-list.is-human-confirmed h4 { margin: 0 0 6px; font-size: 12px; color: var(--muted); }
@@ -2669,6 +2703,13 @@ input:focus {
 .next-actions-list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 6px; }
 .next-actions-list li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
 .next-actions-list li span { overflow-wrap: anywhere; }
+
+/* Inline evidence: state + evidence stay on one screen (ADR 0019). */
+.selected-evidence { margin: 4px 0 18px; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--strong-line); background: var(--surface); }
+.selected-evidence .section-head { margin-bottom: 6px; }
+.selected-evidence-label { white-space: pre-wrap; overflow-wrap: anywhere; }
+.selected-evidence-meta { color: var(--muted); font-size: 12px; }
+.selected-evidence-parents { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 6px; }
 
 .progress-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin: 12px 0; }
 .progress-time-control { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 12px 0; }

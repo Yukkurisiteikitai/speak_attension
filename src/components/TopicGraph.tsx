@@ -22,6 +22,14 @@ const roleLabels: Record<Exclude<ConversationGraphNodeData["role"], "root">, str
   statement: "発言",
 };
 
+const roleColors: Record<Exclude<ConversationGraphNodeData["role"], "root" | "statement">, string> = {
+  topic: "#116147",
+  issue: "#b1423a",
+  cause: "#b76a1f",
+  action: "#4756a6",
+  alternative: "#2e7d84",
+};
+
 function roleLabel(role: ConversationGraphNodeData["role"]): string {
   return role === "root" ? "" : roleLabels[role];
 }
@@ -77,6 +85,13 @@ export function TopicGraph({ conversationTree, selectedNodeId, onRate, onSelect,
           <span>話題から課題・原因・アクションをたどれます</span>
         </div>
       </div>
+      {conversationTree.nodes.length > 0 ? (
+        <ul className="conversation-map-legend">
+          {(Object.keys(roleColors) as Array<keyof typeof roleColors>).map((role) => (
+            <li key={role}><span><i style={{ background: roleColors[role] }} aria-hidden="true" />{roleLabels[role]}</span></li>
+          ))}
+        </ul>
+      ) : null}
       {conversationTree.nodes.length === 0 ? (
         <div className="conversation-empty-state">
           <span className="empty-state-mark" aria-hidden="true">◌</span>
