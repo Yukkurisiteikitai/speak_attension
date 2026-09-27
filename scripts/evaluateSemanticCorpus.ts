@@ -1,10 +1,12 @@
 import fs from "fs";
 import path from "path";
+import { loadCorpus } from "../src/semantic/__corpus__/loadCorpus";
 import { generateCharacterization } from "../src/semantic/__corpus__/generateCharacterization";
 import { evaluateCorpus } from "../src/semantic/evaluateCorpus";
 
+const corpus = loadCorpus();
 const characterizations = generateCharacterization();
-const evaluation = evaluateCorpus(characterizations);
+const evaluation = evaluateCorpus(corpus, characterizations);
 
 // Print table format
 console.log("\n=== Semantic Corpus Evaluation ===\n");

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { loadCorpus, getCaseIds } from "./loadCorpus";
+import { getExpectedUnitCount } from "./corpusTypes";
 
 describe("loadCorpus", () => {
   it("loads all 20 cases", () => {
@@ -76,10 +77,20 @@ describe("loadCorpus", () => {
     }
   });
 
-  it("unitCount defaults to 1 when not specified", () => {
+  it("getExpectedUnitCount resolves omitted unitCount to 1", () => {
     const corpus = loadCorpus();
-    const casesWithoutUnitCount = corpus.filter((c) => !("unitCount" in c.expect));
+    const casesWithoutUnitCount = corpus.filter((c) => c.expect.unitCount === undefined);
     expect(casesWithoutUnitCount.length).toBeGreaterThan(0);
-    // Cases that don't specify unitCount should default to 1
+    for (const testCase of casesWithoutUnitCount) {
+      expect(getExpectedUnitCount(testCase)).toBe(1);
+    }
+  });
+
+  it("getExpectedUnitCount returns the explicit value when specified", () => {
+    const corpus = loadCorpus();
+    const multiUnitCase = corpus.find((c) => c.id === "06-proposal-with-reason");
+    expect(multiUnitCase).toBeDefined();
+    expect(multiUnitCase!.expect.unitCount).toBe(2);
+    expect(getExpectedUnitCount(multiUnitCase!)).toBe(2);
   });
 });

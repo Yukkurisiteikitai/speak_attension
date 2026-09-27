@@ -10,8 +10,9 @@
   ],
   "expect": {
     "canonical": {
-      "decisions": 1
+      "decisions": 1,
+      "actions": 0
     }
   },
-  "notes": "act: decide, commitment: decidedで明示マーカーを含む"
+  "notes": "act: decide, commitment: decidedで明示マーカーを含む。現状legacyはこの発話を決定とアクションへ二重昇格させる（ADR 0022記載の型誤りと同種）"
 }

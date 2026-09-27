@@ -33,3 +33,11 @@ export type CorpusTestCase = {
   expect: TestCaseExpectation;
   notes?: string;
 };
+
+// A case that omits `expect.unitCount` means "a single utterance maps to a
+// single semantic unit" (the corpus README's stated default), not "unit
+// count is unspecified" -- callers must resolve through this function
+// rather than reading `expect.unitCount` directly.
+export function getExpectedUnitCount(testCase: CorpusTestCase): number {
+  return testCase.expect.unitCount ?? 1;
+}
