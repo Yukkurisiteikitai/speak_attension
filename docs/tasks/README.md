@@ -8,6 +8,17 @@
 
 ## 進行中
 
+### 設計・分析
+
+[semantic-core-migration-design.md](semantic-core-migration-design.md) —
+実測した現状、semantic responsibility map、重複解釈一覧、target data model、
+promotion invariants、legacy→target mapping、migration dependency graph、
+Phase 0 corpus 設計、rollback strategy、risk analysis。
+
+### 実行指示書
+
+各指示書は設計文書に依存せず単独で実行できる。
+
 | 指示書 | 内容 | 前提 |
 |---|---|---|
 | [semantic-core-phase0.md](semantic-core-phase0.md) | Phase 0: golden corpus + characterization tests | [ADR 0022](../adr/0022-semantic-core-and-central-promotion-policy.md) |
