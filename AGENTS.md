@@ -9,6 +9,7 @@
 - [docs/STATE.md](docs/STATE.md): 現在の実装状態（現状の正）
 - [docs/CODE_GUIDE.md](docs/CODE_GUIDE.md): コードの読み方とデータフロー
 - [docs/adr/](docs/adr/): 設計判断の履歴（既存 ADR は変更しない）
+- [docs/tasks/](docs/tasks/): 進行中の移行作業の指示書（クラウド実行用・自己完結）
 
 ## Hard constraints
 
