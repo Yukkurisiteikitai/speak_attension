@@ -1,0 +1,17 @@
+{
+  "id": "09-decision-explicit",
+  "intent": "明示的な決定を捕捉する",
+  "coverage": "decision",
+  "utterances": [
+    {
+      "text": "対戦ゲーム形式を採用します",
+      "speaker": "ファシリテーター"
+    }
+  ],
+  "expect": {
+    "canonical": {
+      "decisions": 1
+    }
+  },
+  "notes": "act: decide, commitment: decidedで明示マーカーを含む"
+}

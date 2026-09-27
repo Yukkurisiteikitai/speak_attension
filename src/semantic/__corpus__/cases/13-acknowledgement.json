@@ -1,0 +1,15 @@
+{
+  "id": "13-acknowledgement",
+  "intent": "短い相づちは何も昇格させない",
+  "coverage": "acknowledgement",
+  "utterances": [
+    {
+      "text": "そうですね",
+      "speaker": "スピーカー"
+    }
+  ],
+  "expect": {
+    "canonical": {}
+  },
+  "notes": "role: acknowledgementは全カテゴリ0。検証対象外として記録"
+}

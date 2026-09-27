@@ -1,0 +1,21 @@
+{
+  "id": "07-support",
+  "intent": "提案への支持は決定ではない",
+  "coverage": "support",
+  "utterances": [
+    {
+      "text": "対戦ゲーム形式で進めましょう",
+      "speaker": "スピーカー1"
+    },
+    {
+      "text": "それでいきましょう",
+      "speaker": "スピーカー2"
+    }
+  ],
+  "expect": {
+    "canonical": {
+      "decisions": 0
+    }
+  },
+  "notes": "act: advocate, commitment: acceptedなので決定ではない。文脈は提案を含める"
+}

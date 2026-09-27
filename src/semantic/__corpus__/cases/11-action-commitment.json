@@ -1,0 +1,18 @@
+{
+  "id": "11-action-commitment",
+  "intent": "アクション確約（owner・deadline抽出、二重昇格禁止）",
+  "coverage": "action commitment",
+  "utterances": [
+    {
+      "text": "鈴木さんがプロトタイプを来週金曜日までに作成します",
+      "speaker": "ファシリテーター"
+    }
+  ],
+  "expect": {
+    "canonical": {
+      "actions": 1,
+      "decisions": 0
+    }
+  },
+  "notes": "act: commit, commitment: committedでowner・deadline抽出。不変条件I13により決定へ入らない"
+}
