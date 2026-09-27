@@ -24,6 +24,7 @@ import { useTopicEngine } from "./hooks/useTopicEngine";
 import { createIdeaSessionFromMeetingSelection } from "./utils/ideaSession";
 import { selectDecisionParents } from "./utils/meetingDecisionGraph";
 import { buildMeetingStateDashboard } from "./utils/meetingStateDashboard";
+import { buildCurrentDiscussionState } from "./utils/currentDiscussionState";
 import { formatReplayTime } from "./utils/transcriptReplay";
 import type { AnalyzedSegment, MeetingSummary, SessionLogEntry } from "./types/topic";
 
@@ -121,6 +122,10 @@ function MeetingMode({
     () => buildMeetingStateDashboard(topicEngine.decisionGraph, topicEngine.decisionSupport.materials, topicEngine.currentTopic?.title ?? null),
     [topicEngine.decisionGraph, topicEngine.decisionSupport.materials, topicEngine.currentTopic],
   );
+  const currentDiscussionState = useMemo(
+    () => buildCurrentDiscussionState(topicEngine.meetingGraph, topicEngine.currentTopicId, topicEngine.decisionGraph, topicEngine.segmentArchive),
+    [topicEngine.meetingGraph, topicEngine.currentTopicId, topicEngine.decisionGraph, topicEngine.segmentArchive],
+  );
   // Selecting a node keeps the user on the dashboard: evidence renders inline
   // (state+evidence unified, see ADR 0019). Only an explicit "関係を詳しく見る"
   // click opens the separate advanced trace map (mapMode "state").
@@ -179,8 +184,8 @@ function MeetingMode({
       <section className="dashboard-grid">
         <aside className="meeting-agenda-column">
           <section className="meeting-agenda-card">
-            <p className="eyebrow">AGENDA</p><h2>会議の状況</h2>
-            <div className="agenda-current"><span>現在の議題</span><strong>{topicEngine.currentTopic?.title ?? "議題はまだありません"}</strong></div>
+            <p className="eyebrow">AGENDA</p><h2>会議プロセス</h2>
+            <div className="agenda-current"><span>現在の議題</span><strong>{currentDiscussionState.topicTitle ?? "議題はまだありません"}</strong></div>
             <div className="agenda-count"><span>記録した発言</span><strong>{topicEngine.segmentArchive.length}</strong><small>件</small></div>
             <div className="agenda-guide"><span className="agenda-guide-step is-current">1</span><div><strong>発言を集める</strong><small>音声またはテキストで追加</small></div></div>
             <div className="agenda-guide"><span className={`agenda-guide-step ${topicEngine.segmentArchive.length ? "is-current" : ""}`}>2</span><div><strong>考えを整理する</strong><small>話題・課題・理由・行動</small></div></div>
@@ -199,7 +204,7 @@ function MeetingMode({
           />
           {mapMode === "dashboard" ? (
             <MeetingStateDashboard
-              currentTopicTitle={dashboard.currentTopicTitle}
+              currentDiscussionState={currentDiscussionState}
               confirmedDecisions={dashboard.confirmedDecisions}
               reasonsByDecisionId={dashboard.reasonsByDecisionId}
               structuralGaps={dashboard.structuralGaps}
@@ -207,7 +212,6 @@ function MeetingMode({
               systemSuggestedChecks={dashboard.systemSuggestedChecks}
               humanConfirmedChecks={dashboard.humanConfirmedChecks}
               nextActions={dashboard.nextActions}
-              now={dashboard.now}
               onExplore={exploreFromDashboard}
               selectedNode={selectedDashboardNode}
               selectedNodeParents={selectedDashboardNodeParents}

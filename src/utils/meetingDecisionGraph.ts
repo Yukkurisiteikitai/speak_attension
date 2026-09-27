@@ -17,7 +17,10 @@ const RISK_PATTERN = /(?:このまま|続けると|増える|リスク|危険|�
 const PROPOSAL_PATTERN = /(?:戻そう|戻ろう|しよう|しましょう|してはどう|提案します|ロールバック|停止|切り戻そう)/;
 const DECISION_PATTERN = /(?:それでいこう|それで行こう|決め(?:ます|た)|決定(?:します|した)|実施(?:します|する)|進めます|します$)/;
 const ACTION_PATTERN = /(?:今すぐ|直ちに|至急|ロールバック|戻す|停止する|対応する|実施する)/;
-const QUESTION_PATTERN = /[?？]|(?:ですか|ますか|でしょうか)$|^(?:なぜ|どうして|どういう|何が|誰が)/;
+// A plain "...か" ending (no polite ですか/ますか) is only treated as a question
+// when a wh-word appears earlier in the same sentence, to avoid matching
+// unrelated words/acknowledgements that merely end in "か" (e.g. "そうか").
+const QUESTION_PATTERN = /[?？]|(?:ですか|ますか|でしょうか)$|^(?:なぜ|どうして|どういう|何が|誰が)|(?:何|誰|いつ|どこ|なぜ|どう|どちら|どの).*か$/;
 const TENTATIVE_PATTERN = /(?:かもしれない|可能性|と思う|としたら|場合は)/;
 const NEGATIVE_PATTERN = /(?:しない|しません|見送|取り消|撤回|未決定)/;
 const BOUNDARY_PATTERN = /^(?:次に|次の議題|次の話題|話は変わ|話を変えると|切り替えて|別件|以上です|今日はここまで)|^(?:今日は|今回は).+について(?:決めます|検討します|話します)/;

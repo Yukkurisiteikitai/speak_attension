@@ -31,4 +31,12 @@ describe("topic extraction", () => {
   it("does not create phrases from acknowledgements", () => {
     expect(extractTopicPhrases("そうですね")).toEqual([]);
   });
+
+  it("never returns a phrase starting with a bare case particle", () => {
+    const phrases = extractTopicPhrases("問題のステップの修正はまだ完了してない");
+    expect(phrases.length).toBeGreaterThan(0);
+    for (const { phrase } of phrases) {
+      expect(phrase).not.toMatch(/^[のをがはにでともへ]/);
+    }
+  });
 });

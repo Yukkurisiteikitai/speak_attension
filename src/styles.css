@@ -2672,17 +2672,27 @@ input:focus {
 /* --- Meeting State Dashboard: the central "what's the state" summary (ADR 0018) --- */
 .meeting-state-dashboard { min-width: 0; display: grid; gap: 4px; }
 .meeting-state-dashboard h3 { margin: 0 0 6px; font-size: 14px; }
-.dashboard-topic { margin: 0 0 14px; padding: 10px 14px; border-radius: 10px; background: var(--green-soft); color: var(--green); font-weight: 700; font-size: 16px; }
+.next-actions-note { display: block; margin: 4px 0 16px; color: var(--muted); font-size: 12px; }
 
-.now-spotlight { margin: 4px 0 2px; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--strong-line); background: var(--surface-2); }
-.now-spotlight h3 { text-transform: uppercase; letter-spacing: .03em; font-size: 12px; color: var(--muted); }
-.now-spotlight p { margin: 4px 0; }
-.now-spotlight button { margin-top: 8px; }
-.now-spotlight.is-structural-gap { border-color: var(--amber); background: var(--amber-soft); }
-.now-spotlight.is-unresolved { border-color: var(--strong-line); background: var(--surface); }
-.now-spotlight.is-action { border-color: var(--green); background: var(--green-soft); }
-.now-spotlight.is-empty { color: var(--muted); }
-.now-spotlight-caption, .next-actions-note { display: block; margin: 4px 0 16px; color: var(--muted); font-size: 12px; }
+/* --- 現在地: orientation card, distinct from the state parts list below (ADR 0020) --- */
+.current-discussion-card { display: grid; gap: 12px; margin: 0 0 16px; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--strong-line); background: var(--surface); }
+.current-discussion-card > div { display: grid; gap: 4px; }
+.current-discussion-topic strong, .current-discussion-theme strong { font-size: 16px; }
+.topic-source-note { color: var(--muted); font-size: 11px; }
+.stage-badge { display: inline-block; width: fit-content; padding: 4px 10px; border-radius: 999px; font-size: 13px; font-weight: 700; }
+.stage-badge.stage-decided, .stage-badge.stage-in_progress { background: var(--green-soft); color: var(--green); }
+.stage-badge.stage-confirming_problem, .stage-badge.stage-organizing_reasons, .stage-badge.stage-generating_options,
+.stage-badge.stage-comparing_options, .stage-badge.stage-clarifying_execution { background: var(--amber-soft); color: var(--amber); }
+.stage-badge.stage-resolving_question, .stage-badge.stage-ambiguous, .stage-badge.stage-unknown { background: var(--surface-2); color: var(--muted); }
+.current-discussion-caption { color: var(--muted); font-size: 11px; }
+.current-discussion-question, .current-discussion-progress { padding: 10px 12px; border-radius: 10px; background: var(--surface-2); }
+.current-discussion-question p, .current-discussion-progress p { margin: 4px 0 8px; }
+.current-discussion-theme strong { color: var(--muted); }
+
+/* --- 空カテゴリの折りたたみ表示: keep empty sections from crowding out real content (ADR 0020) --- */
+.zero-state-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 6px 0; padding: 8px 12px; border-radius: 10px; background: var(--surface-2); color: var(--muted); font-size: 12px; }
+.zero-state-title { font-weight: 700; }
+.zero-state-collapse { margin-left: auto; }
 
 .decision-cards { display: grid; gap: 10px; margin: 6px 0 18px; }
 .decision-card { padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); }
