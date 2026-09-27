@@ -169,7 +169,7 @@ function MeetingMode({
     <>
       <header className="meeting-header">
         <div>
-          <p className="eyebrow">MEETING WORKSPACE</p>
+          <p className="eyebrow">会議ワークスペース</p>
           <h1>{topicEngine.meetingGraph.title}</h1>
         </div>
         <div className="header-metrics">
@@ -184,7 +184,7 @@ function MeetingMode({
       <section className="dashboard-grid">
         <aside className="meeting-agenda-column">
           <section className="meeting-agenda-card">
-            <p className="eyebrow">AGENDA</p><h2>会議プロセス</h2>
+            <p className="eyebrow">議事進行</p><h2>会議プロセス</h2>
             <div className="agenda-current"><span>現在の議題</span><strong>{currentDiscussionState.topicTitle ?? "議題はまだありません"}</strong></div>
             <div className="agenda-count"><span>記録した発言</span><strong>{topicEngine.segmentArchive.length}</strong><small>件</small></div>
             <div className="agenda-guide"><span className="agenda-guide-step is-current">1</span><div><strong>発言を集める</strong><small>音声またはテキストで追加</small></div></div>

@@ -28,7 +28,12 @@ export function ConversationView({ conversationTree, segments, selectedNodeId, o
           関係を見る（グラフ）
         </button>
       </div>
-      {view === "timeline" ? (
+      {/* Both stay mounted (hidden, not unmounted) so switching views never
+          drops state -- in particular ConversationTimeline's manual
+          classification corrections, which would otherwise silently reset
+          on every toggle. Same pattern as the Idea/Meeting mode switch in
+          App.tsx. */}
+      <div hidden={view !== "timeline"}>
         <ConversationTimeline
           conversationTree={conversationTree}
           segments={segments}
@@ -37,7 +42,8 @@ export function ConversationView({ conversationTree, segments, selectedNodeId, o
           onSelect={onSelect}
           onStart={onStart}
         />
-      ) : (
+      </div>
+      <div hidden={view !== "graph"}>
         <TopicGraph
           conversationTree={conversationTree}
           selectedNodeId={selectedNodeId}
@@ -45,7 +51,7 @@ export function ConversationView({ conversationTree, segments, selectedNodeId, o
           onSelect={onSelect}
           onStart={onStart}
         />
-      )}
+      </div>
     </div>
   );
 }

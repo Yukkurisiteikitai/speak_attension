@@ -95,6 +95,20 @@ describe("classifyUtterance: option vs proposal vs decision vs action", () => {
     expect(result.semanticRole).not.toBe("action");
     expect(result.commitment).not.toBe("committed");
   });
+
+  it("'今まで' (until now) is never mistaken for a deadline, in either action-verb alternative", () => {
+    const result = classifyUtterance("今まで対応していません");
+    expect(result.semanticRole).not.toBe("action");
+    expect(result.commitment).not.toBe("committed");
+  });
+
+  it("owner extraction fails safely (null) for two people joined by 'と', rather than a garbled name", () => {
+    const result = classifyUtterance("田中さんと鈴木さんが対応します");
+    expect(result.owner).not.toBe("田中さんと鈴木");
+    if (typeof result.owner === "string") {
+      expect(result.owner).not.toContain("と");
+    }
+  });
 });
 
 describe("classifyUtterance: agenda item vs action", () => {

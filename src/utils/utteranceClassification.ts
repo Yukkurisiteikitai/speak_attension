@@ -99,9 +99,9 @@ const DECISION_PATTERN = /それでいこう|それで行こう|に決め(?:ま�
 
 // An execution-commit verb, matching meetingDecisionGraph.ts's ACTION_PATTERN
 // shape (kept independent on purpose -- see module header). "まで" is
-// excluded right after "今" so "今まで" (until now) isn't mistaken for a
-// deadline marker.
-const ACTION_VERB_PATTERN = /(?:さん|氏|チーム|担当|私|自分)(?:が|は).*(?<!今)(?:まで|期限)|(?:まで|期限|締切).*(?:出します|出す|対応|確認|実施|進める)|(?:出します|対応します|確認します|実施します|進めます|やります)/;
+// excluded right after "今" (in both alternatives that use it) so "今まで"
+// (until now) isn't mistaken for a deadline marker.
+const ACTION_VERB_PATTERN = /(?:さん|氏|チーム|担当|私|自分)(?:が|は).*(?<!今)(?:まで|期限)|(?<!今)(?:まで|期限|締切).*(?:出します|出す|対応|確認|実施|進める)|(?:出します|対応します|確認します|実施します|進めます|やります)/;
 
 // An explicit evaluative endorsement of one option -- distinct from merely
 // reporting that one is "considering" or "thinking about" something.
@@ -123,8 +123,11 @@ const PROBLEM_PATTERN = /問題|課題|遅(?:い|さ)|困(?:る|って)|難し�
 
 const EVIDENCE_PATTERN = /(?:\d+(?:\.\d+)?%|\d+件|エラー率|エラー|壊れ|破損|確認され|発生して|増加して)/;
 
+// Excludes "と" from the captured name so "田中さんと鈴木さんが" (two people)
+// fails to match cleanly rather than capturing the garbled "田中さんと鈴木" --
+// no owner is safer than a corrupted one.
 function extractOwner(text: string): string | null {
-  return text.match(/(?:^|[、。\s])([^、。\s]+?)(?:さん)?が/)?.[1] ?? null;
+  return text.match(/(?:^|[、。\s])([^、。\sと]+?)(?:さん)?が/)?.[1] ?? null;
 }
 
 function extractDeadline(text: string): string | null {
