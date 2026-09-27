@@ -1,4 +1,4 @@
-import { Mic, RefreshCw, Sparkles, Square } from "lucide-react";
+import { Keyboard, Mic, RefreshCw, Sparkles, Square } from "lucide-react";
 
 type ControlPanelProps = {
   error: string | null;
@@ -34,9 +34,9 @@ export function ControlPanel({
       </div>
 
       <div className="control-row">
-        <button className="primary-button" type="button" onClick={isListening ? onStop : onStart} disabled={!isSupported}>
-          {isListening ? <Square size={18} /> : <Mic size={18} />}
-          <span>{isListening ? "マイク停止" : "マイク開始"}</span>
+        <button className="primary-button" type="button" onClick={isListening ? onStop : onStart}>
+          {isListening ? <Square size={18} /> : isSupported ? <Mic size={18} /> : <Keyboard size={18} />}
+          <span>{isListening ? "マイク停止" : isSupported ? "マイク開始" : "手入力を開く"}</span>
         </button>
         <button className="icon-button" type="button" onClick={onReset} aria-label="セッションをリセット">
           <RefreshCw size={18} />
@@ -48,8 +48,11 @@ export function ControlPanel({
         <span>{isOrganizing ? "会議を整理中…" : "会議を整理"}</span>
       </button>
 
-      <div className={`status-pill ${isListening ? "active" : ""}`}>{statusLabel}</div>
-      {error ? <div className="error-message">{error}</div> : null}
+      <div className={`status-pill ${isListening ? "active" : ""} ${!isSupported ? "is-unavailable" : ""}`} title={!isSupported ? "このブラウザーでは Web Speech API が提供されていません" : undefined}>
+        <span className="status-dot" aria-hidden="true" />{statusLabel}
+      </div>
+      {!isSupported ? <p className="speech-help">Firefox など一部ブラウザーでは音声認識に対応していません。Chrome または Edge で音声を使うか、手入力・ファイル再生をご利用ください。</p> : null}
+      {error && isSupported ? <div className="speech-error-note" role="alert">{error}</div> : null}
     </section>
   );
 }

@@ -44,9 +44,9 @@ export function ActionView({ graph, onUpdate, onExplore }: ActionViewProps) {
   );
 
   return (
-    <section className="panel action-view" aria-label="今すること">
+    <section className="panel action-view" aria-label="アクション一覧">
       <div className="section-head">
-        <h2>NOW / 今すること</h2>
+        <h2>アクション一覧</h2>
         <span>{actions.length}件</span>
       </div>
       {actions.length ? (
