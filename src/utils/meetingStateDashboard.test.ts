@@ -456,4 +456,31 @@ describe("buildMeetingStateDashboard", () => {
     // Proposal should not appear in unresolvedItems if it was adopted
     expect(adoptedDashboard.unresolvedItems.find((n) => n.id === proposal.id)).toBeUndefined();
   });
+
+  it("replay scenario: event planning meeting produces 4-card dashboard structure", () => {
+    // Replay JSON simulation: Event planning meeting with mixed decision states
+    const graph = [
+      segment("seg-2", "対戦ゲーム企画が上がっているんですけど、来場者が少ないときの集客が課題です", 5000),
+      segment("seg-3", "スマホで集客しやすいので、対戦ゲーム形式で進めましょう", 10000),
+      segment("seg-4", "対戦ゲーム形式を採用します", 15000),
+      segment("seg-5", "Wi-Fi負荷は検証されていないので、事前に確認が必要かもしれません", 20000),
+      segment("seg-6", "ランキング機能については、保留にしておきましょう", 25000),
+      segment("seg-7", "ポスターと許可の取得担当がまだ決まっていません", 30000),
+      segment("seg-8", "鈴木さんがプロトタイプを来週金曜日までに作成します", 35000),
+    ].reduce((g, seg) => appendMeetingDecisionSegment(g, seg), createInitialMeetingDecisionGraph());
+
+    const dashboard = buildMeetingStateDashboard(graph, [], null);
+
+    // Expected output format:
+    // Card 1 (決まったこと): confirmedDecisions
+    // Card 2 (なぜ): reasonsByDecisionId
+    // Card 3 (まだ分からないこと): unresolvedItems
+    // Card 4 (次にやること): nextActions
+
+    expect(dashboard).toBeDefined();
+    expect(dashboard.confirmedDecisions).toBeDefined();
+    expect(dashboard.reasonsByDecisionId).toBeDefined();
+    expect(dashboard.unresolvedItems).toBeDefined();
+    expect(dashboard.nextActions).toBeDefined();
+  });
 });
