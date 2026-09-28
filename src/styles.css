@@ -1098,6 +1098,30 @@ input:focus {
 }
 .semantic-badge.role-problem { background: rgba(177, 66, 58, 0.1); color: #b1423a; border-color: transparent; }
 
+/* --- Semantic Core の投影 (ADR 0022 §8, Phase 2) ---
+   1発話が複数の意味を持つ場合、意味単位ごとに1行にする。行ヘッダのボタンとは
+   兄弟要素にする (button の中に select を置けないため)。 --- */
+.timeline-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.timeline-units { list-style: none; margin: 0; padding: 0 10px 8px 10px; display: grid; gap: 4px; }
+.timeline-unit { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 4px 6px; border-radius: 8px; background: var(--surface-2); flex-wrap: wrap; }
+.timeline-unit-text { flex: 1; min-width: 120px; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 範囲 (会議の進行 / 議題の中身 / 成果物の中身) は意味とは独立した軸なので、
+   確定度の色分けから切り離して中立に出す。 */
+.semantic-badge-scope { font-weight: 500; font-size: 10px; padding: 1px 6px; border-radius: 999px; background: var(--surface); color: var(--muted); border: 1px solid var(--line); }
+
+/* 昇格の根拠。「規則が判定 (未確認)」を「参加者が確認」と同じ強さで
+   描かないこと自体が要件 (ADR 0018, ADR 0023 §6)。 */
+.semantic-badge-basis { font-weight: 700; font-size: 10px; padding: 1px 6px; border-radius: 999px; background: var(--surface); color: var(--muted); border: 1px dashed var(--line); }
+.semantic-badge.is-corrected .semantic-badge-basis { border-style: solid; }
+
+/* 参加者の修正と自動解析が食い違っていることの提示。注意色に留め、
+   エラー色 (赤) は使わない。 */
+.semantic-badge-conflict { font-weight: 700; font-size: 10px; padding: 1px 6px; border-radius: 999px; background: var(--amber-soft); color: var(--amber); }
+
+/* 参加者が修正済みの単位は輪郭で示す (色単独に依存しない)。 */
+.semantic-badge.is-corrected { box-shadow: 0 0 0 1px var(--green) inset; }
+
 .timeline-correction-menu { display: inline-flex; align-items: center; gap: 6px; flex: none; }
 .timeline-correction-menu select { font-size: 11px; padding: 2px 6px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); }
 .timeline-correction-badge { font-size: 10px; padding: 1px 6px; border-radius: 999px; background: var(--surface-2); color: var(--muted); }

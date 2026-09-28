@@ -1,0 +1,18 @@
+{
+  "id": "05-personal-consideration",
+  "intent": "個人的な検討は決定ではない",
+  "coverage": "personal consideration",
+  "utterances": [
+    {
+      "text": "個人的に考えているのが1、私は今までどんな情報があってどんな優先順位をつけて行動を",
+      "speaker": "スピーカー"
+    }
+  ],
+  "expect": {
+    "canonical": {
+      "actions": 0,
+      "decisions": 0
+    }
+  },
+  "notes": "role: option, commitment: considerのため決定・アクションへ入らない"
+}

@@ -1,71 +1,79 @@
 import { ThumbsUp } from "lucide-react";
-import { useMemo, useState } from "react";
-import type { AnalyzedSegment, ConversationTreeState } from "../types/topic";
-import { classifyUtterance, semanticRoleLabels, type SemanticRole, type UtteranceClassification } from "../utils/utteranceClassification";
+import { useMemo } from "react";
+import type { ConversationTreeState } from "../types/topic";
+import type { SemanticAxes, Scope, SemanticRole } from "../semantic/types";
+import type { TimelineRow } from "../semantic/timelineProjection";
+import { roleLabels, scopeLabels } from "../semantic/labels";
 import { SemanticBadge } from "./SemanticBadge";
-import { TimelineCorrectionMenu, type SemanticRoleOption } from "./TimelineCorrectionMenu";
+import { TimelineCorrectionMenu, type CorrectionAxisOption } from "./TimelineCorrectionMenu";
 import { downloadFile } from "../lib/download";
 
 type ConversationTimelineProps = {
+  // A projection of semantic state (ADR 0022 §8). This component performs no
+  // classification of its own -- that was the defect Phase 2 removed.
+  rows: TimelineRow[];
+  // Still legacy-owned: ratings and manual parent edits hang off conversation
+  // tree nodes. Used only to map a row back to its node id for those controls;
+  // Phase 4 moves them onto the semantic layer.
   conversationTree: ConversationTreeState;
-  segments: AnalyzedSegment[];
   selectedNodeId: string | null;
   onRate: (nodeId: string) => void;
   onSelect: (nodeId: string | null) => void;
+  onCorrect: (target: { utteranceId: string; unitId?: string }, axes: Partial<SemanticAxes>) => void;
   onStart?: () => void;
 };
 
-const ROLE_OPTIONS: SemanticRoleOption[] = (Object.keys(semanticRoleLabels) as SemanticRole[]).map((value) => ({
+const ROLE_OPTIONS: CorrectionAxisOption[] = (Object.keys(roleLabels) as SemanticRole[]).map((value) => ({
   value,
-  label: semanticRoleLabels[value],
+  label: roleLabels[value],
+}));
+
+const SCOPE_OPTIONS: CorrectionAxisOption[] = (Object.keys(scopeLabels) as Scope[]).map((value) => ({
+  value,
+  label: scopeLabels[value],
 }));
 
 export function ConversationTimeline({
+  rows,
   conversationTree,
-  segments,
   selectedNodeId,
   onRate,
   onSelect,
+  onCorrect,
   onStart,
 }: ConversationTimelineProps) {
-  const segmentById = useMemo(() => new Map(segments.map((s) => [s.id, s])), [segments]);
-
-  const sortedNodes = useMemo(
-    () => [...conversationTree.nodes].sort((a, b) => a.createdAt - b.createdAt),
-    [conversationTree.nodes]
+  // Ratings/manual-adjust live on tree nodes keyed by segment id, and the
+  // semantic layer uses that same id as the utterance id.
+  const nodeByUtteranceId = useMemo(
+    () => new Map(conversationTree.nodes.map((node) => [node.segmentId, node])),
+    [conversationTree.nodes],
   );
-
-  // Timeline-only classification (ADR 0021): never feeds the decision graph
-  // or Meeting State. A manual correction only overrides semanticRole for
-  // display/export -- it does not change how classifyUtterance itself works.
-  const classifications = useMemo(
-    () => new Map<string, UtteranceClassification>(sortedNodes.map((node) => [node.id, classifyUtterance(node.originalText)])),
-    [sortedNodes],
-  );
-  const [corrections, setCorrections] = useState<Map<string, SemanticRole>>(new Map());
-  const setCorrection = (nodeId: string, role: SemanticRole) => setCorrections((current) => {
-    const next = new Map(current);
-    next.set(nodeId, role);
-    return next;
-  });
 
   const exportClassifications = () => {
-    const rows = sortedNodes.map((node) => {
-      const auto = classifications.get(node.id)!;
-      const corrected = corrections.get(node.id) ?? null;
-      return {
-        nodeId: node.id,
-        segmentId: node.segmentId,
-        text: node.originalText,
-        createdAt: node.createdAt,
-        autoClassification: auto,
-        correctedSemanticRole: corrected,
-        isCorrected: corrected !== null,
-      };
-    });
     downloadFile(
       "timeline-classification.json",
-      JSON.stringify({ format: "timeline-utterance-classification", version: 1, exportedAt: Date.now(), rows }, null, 2),
+      JSON.stringify({
+        format: "timeline-semantic-projection",
+        version: 2,
+        exportedAt: Date.now(),
+        rows: rows.map((row) => ({
+          utteranceId: row.utteranceId,
+          seq: row.seq,
+          createdAt: row.createdAt,
+          speaker: row.speaker,
+          provider: row.provider,
+          text: row.text,
+          isCorrected: row.isCorrected,
+          units: row.units.map((unit) => ({
+            unitId: unit.unitId,
+            text: unit.text,
+            axes: unit.axes,
+            humanOverriddenAxes: unit.humanOverriddenAxes,
+            conflictingAxes: unit.conflictingAxes,
+            promotion: unit.promotion,
+          })),
+        })),
+      }, null, 2),
       "application/json",
     );
   };
@@ -77,117 +85,116 @@ export function ConversationTimeline({
           <h2>会話のタイムライン</h2>
           <span>発言を時系列で確認できます</span>
         </div>
-        {conversationTree.nodes.length > 0 ? (
+        {rows.length > 0 ? (
           <button type="button" className="quiet-button" onClick={exportClassifications}>
             分類をエクスポート
           </button>
         ) : null}
       </div>
 
-      {conversationTree.nodes.length === 0 ? (
+      {rows.length === 0 ? (
         <div className="conversation-empty-state">
-          <span className="empty-state-mark" aria-hidden="true">
-            ◌
-          </span>
+          <span className="empty-state-mark" aria-hidden="true">◌</span>
           <p className="eyebrow">会話のマップ</p>
           <h3>話し始めると、会議の流れがここに見えてきます</h3>
-          <p>
-            発言を「話題 → 課題 → 原因 → アクション」に整理し、決まったことや未解決の点をたどれます。
-          </p>
+          <p>発言を「話題 → 課題 → 原因 → アクション」に整理し、決まったことや未解決の点をたどれます。</p>
           <div className="empty-state-flow">
-            <span>話題</span>
-            <i>→</i>
-            <span>課題</span>
-            <i>→</i>
-            <span>アクション</span>
+            <span>話題</span><i>→</i><span>課題</span><i>→</i><span>アクション</span>
           </div>
           {onStart ? (
-            <button className="primary-button" type="button" onClick={onStart}>
-              会議を始める
-            </button>
+            <button className="primary-button" type="button" onClick={onStart}>会議を始める</button>
           ) : null}
         </div>
-      ) : null}
-
-      {conversationTree.nodes.length > 0 ? (
+      ) : (
         <ol className="timeline-list">
-          {sortedNodes.map((node) => {
-            const segment = segmentById.get(node.segmentId);
-            const speaker = segment?.metadata?.speaker ?? "発言者不明";
-            const isSelected = node.id === selectedNodeId;
-            const autoClassification = classifications.get(node.id)!;
-            const correctedRole = corrections.get(node.id) ?? null;
-            const effectiveClassification: UtteranceClassification = correctedRole
-              ? { ...autoClassification, semanticRole: correctedRole }
-              : autoClassification;
+          {rows.map((row) => {
+            const node = nodeByUtteranceId.get(row.utteranceId);
+            const isSelected = node ? node.id === selectedNodeId : false;
 
             return (
-              <li
-                key={node.id}
-                className={`timeline-row ${isSelected ? "is-selected" : ""}`}
-              >
-                <button
-                  type="button"
-                  className="timeline-row-button"
-                  onClick={() => onSelect(isSelected ? null : node.id)}
-                >
-                  <time>
-                    {new Date(node.createdAt).toLocaleTimeString("ja-JP", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </time>
-
-                  <span className="timeline-speaker">{speaker}</span>
-
-                  <SemanticBadge classification={effectiveClassification} />
-
-                  <div className="timeline-text-content">
-                    <div className="timeline-label">{node.label}</div>
-                    {node.originalText !== node.label ? (
-                      <details className="timeline-details">
-                        <summary>原文を見る</summary>
-                        <p>{node.originalText}</p>
-                      </details>
-                    ) : null}
-                  </div>
-
-                  {node.rating === 1 || node.manuallyAdjusted ? (
-                    <span className="timeline-status">
-                      {node.rating === 1 ? (
-                        <span className="timeline-rating" aria-label="高評価">
-                          <ThumbsUp size={14} aria-hidden="true" />
-                        </span>
-                      ) : null}
-                      {node.manuallyAdjusted ? <span className="timeline-manually-adjusted">手動修正</span> : null}
+              <li key={row.utteranceId} className={`timeline-row ${isSelected ? "is-selected" : ""}`}>
+                <div className="timeline-row-main">
+                  {/* The row header is the only clickable summary. The per-unit
+                      controls below are siblings, never children, of this button:
+                      a <select> inside a <button> is invalid HTML and its
+                      interaction is unreliable. */}
+                  <button
+                    type="button"
+                    className="timeline-row-button"
+                    onClick={() => (node ? onSelect(isSelected ? null : node.id) : undefined)}
+                  >
+                    <time>
+                      {new Date(row.createdAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}
+                    </time>
+                    <span className="timeline-speaker">{row.speaker ?? "発言者不明"}</span>
+                    <span className="timeline-text-content">
+                      <span className="timeline-label">{row.text}</span>
                     </span>
+                    {node?.rating === 1 || row.isCorrected ? (
+                      <span className="timeline-status">
+                        {node?.rating === 1 ? (
+                          <span className="timeline-rating" aria-label="高評価">
+                            <ThumbsUp size={14} aria-hidden="true" />
+                          </span>
+                        ) : null}
+                        {row.isCorrected ? <span className="timeline-manually-adjusted">手動修正</span> : null}
+                      </span>
+                    ) : null}
+                  </button>
+
+                  {/* One utterance can carry several meanings, so each unit is
+                      listed separately instead of forcing a single label. */}
+                  {row.units.length > 0 ? (
+                    <ul className="timeline-units">
+                      {row.units.map((unit) => (
+                        <li className="timeline-unit" key={unit.unitId}>
+                          <SemanticBadge unit={unit} />
+                          <span className="timeline-unit-text">{unit.text}</span>
+                          <TimelineCorrectionMenu
+                            axisLabel="意味"
+                            currentValue={unit.axes.role}
+                            isCorrected={unit.humanOverriddenAxes.includes("role")}
+                            options={ROLE_OPTIONS}
+                            onChange={(value) => onCorrect(
+                              { utteranceId: row.utteranceId, unitId: unit.unitId },
+                              { role: value as SemanticRole },
+                            )}
+                          />
+                          <TimelineCorrectionMenu
+                            axisLabel="範囲"
+                            currentValue={unit.axes.scope}
+                            isCorrected={unit.humanOverriddenAxes.includes("scope")}
+                            options={SCOPE_OPTIONS}
+                            onChange={(value) => onCorrect(
+                              { utteranceId: row.utteranceId, unitId: unit.unitId },
+                              { scope: value as Scope },
+                            )}
+                          />
+                        </li>
+                      ))}
+                    </ul>
                   ) : null}
-                </button>
+                </div>
 
-                <TimelineCorrectionMenu
-                  currentValue={effectiveClassification.semanticRole}
-                  isCorrected={correctedRole !== null}
-                  options={ROLE_OPTIONS}
-                  onChange={(value) => setCorrection(node.id, value as SemanticRole)}
-                />
-
-                <button
-                  type="button"
-                  className={`conversation-rating ${node.rating === 1 ? "is-rated" : ""}`}
-                  aria-label={`${node.label}を高評価${node.rating === 1 ? "から戻す" : "する"}`}
-                  aria-pressed={node.rating === 1}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onRate(node.id);
-                  }}
-                >
-                  <ThumbsUp size={14} aria-hidden="true" />
-                </button>
+                {node ? (
+                  <button
+                    type="button"
+                    className={`conversation-rating ${node.rating === 1 ? "is-rated" : ""}`}
+                    aria-label={`${node.label}を高評価${node.rating === 1 ? "から戻す" : "する"}`}
+                    aria-pressed={node.rating === 1}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onRate(node.id);
+                    }}
+                  >
+                    <ThumbsUp size={14} aria-hidden="true" />
+                  </button>
+                ) : null}
               </li>
             );
           })}
         </ol>
-      ) : null}
+      )}
     </section>
   );
 }

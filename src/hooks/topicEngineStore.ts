@@ -26,6 +26,11 @@ import { analyzeDecisionMaterials, updateDecisionMaterialStatus } from "../utils
 import { buildDiscussionPrompts, recordDiscussionAnswer, type DiscussionPrompt } from "../utils/meetingProgress";
 import { applyProgressReview, buildProgressReviewMessages } from "../utils/meetingProgressReview";
 import { buildRuleBasedMeetingSummary, renameMeetingSummaryNode } from "../utils/meetingSynthesis";
+import { appendEvent, appendUtterance, createEventLog, recentUtterances, type MeetingEventLog } from "../semantic/rawUtterance";
+import { emptyFastPathContext, runFastPath, FAST_PATH_CONTEXT_WINDOW } from "../semantic/fastPath";
+import { createCanonicalState, reduceCanonical } from "../semantic/canonicalReducer";
+import { SEMANTIC_CORE_FLAGS } from "../semantic/flags";
+import type { CanonicalMeetingState, HumanCorrection, SemanticAssertion, SemanticAxes } from "../semantic/types";
 import type { AnalyzedSegment, ConversationNodeRole, ConversationTreeState, DecisionMaterialStatus, DecisionSupportAnalysis, MeetingSummary, MeetingSummaryStatus, SessionLogEntry, TimedTranscriptSegment, TranscriptSegmentMetadata, TranscriptInputSource } from "../types/topic";
 
 type TopicEngineStoreSnapshot = {
@@ -37,7 +42,15 @@ type TopicEngineStoreSnapshot = {
   progressReviewError: string | null;
   engineState: TopicEngineState;
   conversationTree: ConversationTreeState;
+  // Semantic Core state, running alongside legacy (ADR 0022 §9, ADR 0023).
+  // Additive: nothing here feeds the legacy engine state.
+  semantic: SemanticState;
   bufferText: string;
+  // When the current speech buffer first received text, and when it last grew.
+  // Both null while the buffer is empty. Used to flush on an utterance
+  // boundary or a short silence instead of a fixed interval (ADR 0023 §7).
+  bufferStartedAt: number | null;
+  bufferUpdatedAt: number | null;
   logs: SessionLogEntry[];
   segmentArchive: AnalyzedSegment[];
   meetingSummary: MeetingSummary | null;
@@ -47,6 +60,20 @@ type TopicEngineStoreSnapshot = {
   meetingSummaryStartedAt: number | null;
   decisionSupport: DecisionSupportAnalysis;
 };
+
+// The raw utterance log is the primary source; assertions and canonical state
+// are derived from it. Human corrections are events in the log, not UI state --
+// that is what lets them survive a re-parse (ADR 0022 §5).
+type SemanticState = {
+  log: MeetingEventLog;
+  assertions: SemanticAssertion[];
+  corrections: HumanCorrection[];
+  canonical: CanonicalMeetingState;
+};
+
+function createSemanticState(): SemanticState {
+  return { log: createEventLog(), assertions: [], corrections: [], canonical: createCanonicalState() };
+}
 
 type TopicEngineStoreOptions = {
   onLog?: (entry: SessionLogEntry) => void;
@@ -62,6 +89,10 @@ type TopicEngineStore = {
   addLog: (entry: Omit<SessionLogEntry, "id" | "at"> & { at?: number }) => void;
   addTranscriptText: (text: string) => void;
   flushBuffer: () => void;
+  // Flushes only when the buffer has been quiet for `idleMs`, or has been
+  // accumulating for `maxAgeMs`. Cheap enough to poll; does nothing when the
+  // buffer is empty.
+  flushIfIdle: (idleMs: number, maxAgeMs: number) => void;
   getCurrentTopicGaps: () => ReturnType<typeof getCurrentTopicGaps>;
   getSnapshot: () => TopicEngineStoreSnapshot;
   organizeMeeting: () => Promise<void>;
@@ -73,6 +104,13 @@ type TopicEngineStore = {
   setOnLog: (onLog?: (entry: SessionLogEntry) => void) => void;
   submitTimedTranscript: (segment: TimedTranscriptSegment) => void;
   submitTranscript: (text: string, source: Exclude<TranscriptInputSource, "speech">) => void;
+  // Records a per-axis human override as an event. Partial by design: axes left
+  // out stay parser-derived.
+  recordSemanticCorrection: (
+    target: { utteranceId: string; unitId?: string },
+    axes: Partial<SemanticAxes>,
+    note?: string | null,
+  ) => void;
   toggleConversationNodeRating: (nodeId: string) => void;
   updateConversationNode: (nodeId: string, patch: { role?: ConversationNodeRole; parentId?: string | null }) => void;
   updateAction: (nodeId: string, patch: ActionUpdate) => void;
@@ -82,6 +120,13 @@ type TopicEngineStore = {
 };
 
 // Owns the live engine snapshot and the command queue for speech, manual text, and replay input.
+
+// Only explicit terminal punctuation. Deliberately does not treat polite verb
+// endings (です/ます) as boundaries: Web Speech emits mid-sentence final chunks,
+// and splitting on those would fragment one utterance across several segments,
+// which every downstream classifier reads as separate statements.
+const SENTENCE_END_PATTERN = /[。！？]$/;
+
 function cleanText(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
@@ -119,7 +164,10 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
     progressReviewError: null,
     engineState: createInitialTopicEngineState(),
     conversationTree: createInitialConversationTreeState(),
+    semantic: createSemanticState(),
     bufferText: "",
+    bufferStartedAt: null,
+    bufferUpdatedAt: null,
     logs: [],
     segmentArchive: [],
     meetingSummary: null,
@@ -138,6 +186,51 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
   let progressRequest = 0;
   let progressController: AbortController | null = null;
   let lastReviewedRevision = -1;
+
+  function flushSpeechBuffer() {
+    const text = cleanText(snapshot.bufferText);
+    if (!text) return;
+    snapshot = { ...snapshot, bufferText: "", bufferStartedAt: null, bufferUpdatedAt: null };
+    processSegment(text, "speech");
+  }
+
+  // Fast path only (ADR 0023 §2): one utterance, a bounded context, no history
+  // scan and no LLM. Purely additive -- it cannot alter the legacy transition it
+  // is called with.
+  function ingestIntoSemanticCore(current: SemanticState, segment: AnalyzedSegment): SemanticState {
+    if (!SEMANTIC_CORE_FLAGS.core) return current;
+
+    const appended = appendUtterance(current.log, {
+      id: segment.id,
+      text: segment.text,
+      createdAt: segment.createdAt,
+      provider: segment.source === "speech" ? "web_speech" : segment.source === "replay" ? "replay" : "manual",
+      speaker: segment.metadata?.speaker ?? null,
+    });
+
+    const { assertions } = runFastPath({
+      utterance: appended.utterance,
+      context: {
+        ...emptyFastPathContext(),
+        activeTopicId: snapshot.engineState.currentTopicId,
+        recentUtterances: recentUtterances(appended.log, FAST_PATH_CONTEXT_WINDOW),
+      },
+    });
+
+    const reduced = reduceCanonical(current.canonical, {
+      kind: "units_asserted",
+      at: appended.utterance.createdAt,
+      utterance: appended.utterance,
+      assertions,
+    });
+
+    return {
+      log: appended.log,
+      assertions: [...current.assertions, ...assertions],
+      corrections: current.corrections,
+      canonical: reduced.state,
+    };
+  }
 
   function refreshProgress() {
     const state = snapshot.engineState;
@@ -195,6 +288,9 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
       ...snapshot,
       engineState: transition.state,
       conversationTree: appendConversationSegment(snapshot.conversationTree, transition.segment),
+      // Same utterance, additionally ingested into Semantic Core. Keyed on the
+      // legacy segment id so projections can join the two while both exist.
+      semantic: ingestIntoSemanticCore(snapshot.semantic, transition.segment),
       // Engine state trims segments to the latest 80 for UI perf; keep the full
       // meeting here so the post-meeting report can quote every evidence segment.
       segmentArchive: [...snapshot.segmentArchive, transition.segment],
@@ -323,6 +419,7 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
     addTranscriptText(text) {
       const nextText = cleanText(text);
       if (!nextText) return;
+      const now = Date.now();
       const bufferText = [snapshot.bufferText, nextText].filter(Boolean).join(" ");
       addLog({
         type: "speech",
@@ -332,16 +429,27 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
       writeSnapshot({
         ...snapshot,
         bufferText,
+        bufferStartedAt: snapshot.bufferStartedAt ?? now,
+        bufferUpdatedAt: now,
       });
+      // An explicit sentence-final marker is a real utterance boundary, so the
+      // segment can enter the fast path now rather than waiting for silence.
+      // Japanese Web Speech usually omits punctuation, so this is an
+      // opportunistic shortcut -- flushIfIdle is the mechanism that actually
+      // bounds the latency.
+      if (SENTENCE_END_PATTERN.test(nextText)) flushSpeechBuffer();
     },
     flushBuffer() {
-      const text = cleanText(snapshot.bufferText);
-      if (!text) return;
-      snapshot = {
-        ...snapshot,
-        bufferText: "",
-      };
-      processSegment(text, "speech");
+      flushSpeechBuffer();
+    },
+    flushIfIdle(idleMs, maxAgeMs) {
+      if (!snapshot.bufferText) return;
+      const now = Date.now();
+      const quietFor = now - (snapshot.bufferUpdatedAt ?? now);
+      const bufferAge = now - (snapshot.bufferStartedAt ?? now);
+      // Silence is the boundary signal. maxAgeMs is only a backstop so that a
+      // speaker who never pauses still gets segmented.
+      if (quietFor >= idleMs || bufferAge >= maxAgeMs) flushSpeechBuffer();
     },
     getCurrentTopicGaps() {
       return getCurrentTopicGaps(snapshot.engineState);
@@ -413,7 +521,10 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
         progressReviewError: null,
         engineState: createInitialTopicEngineState(),
         conversationTree: createInitialConversationTreeState(),
+        semantic: createSemanticState(),
         bufferText: "",
+        bufferStartedAt: null,
+        bufferUpdatedAt: null,
         logs: [],
         segmentArchive: [],
         meetingSummary: null,
@@ -478,6 +589,26 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
       const nextText = cleanText(text);
       if (!nextText) return;
       processSegment(nextText, source);
+    },
+    recordSemanticCorrection(target, axes, note = null) {
+      if (Object.keys(axes).length === 0) return;
+      const correction: HumanCorrection = {
+        id: createId("correction"),
+        at: Date.now(),
+        target,
+        axes,
+        note,
+      };
+      // Appended to the event log as well as held for resolution: a correction is
+      // a first-class event, not a UI-local override that a re-render discards.
+      writeSnapshot({
+        ...snapshot,
+        semantic: {
+          ...snapshot.semantic,
+          log: appendEvent(snapshot.semantic.log, { kind: "human_correction", at: correction.at, correction }),
+          corrections: [...snapshot.semantic.corrections, correction],
+        },
+      });
     },
     toggleConversationNodeRating(nodeId) {
       const nextTree = toggleConversationNodeRating(snapshot.conversationTree, nodeId);

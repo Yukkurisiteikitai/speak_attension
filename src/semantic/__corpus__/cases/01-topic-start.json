@@ -1,0 +1,18 @@
+{
+  "id": "01-topic-start",
+  "intent": "議題提示を決定・アクションへ昇格させない",
+  "coverage": "topic start",
+  "utterances": [
+    {
+      "text": "今日はイベント形式について決めます",
+      "speaker": "ファシリテーター"
+    }
+  ],
+  "expect": {
+    "canonical": {
+      "decisions": 0,
+      "actions": 0
+    }
+  },
+  "notes": "scopeがmeeting_processなので不変条件I4により決定・アクションへ入らない"
+}

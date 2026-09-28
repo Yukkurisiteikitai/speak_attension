@@ -1,0 +1,17 @@
+{
+  "id": "19-explicitly-undecided",
+  "intent": "明示的な検討中は決定ではない",
+  "coverage": "明示的な検討中",
+  "utterances": [
+    {
+      "text": "いい質問ですね。そこはまだ検討中です。青チームで検証します",
+      "speaker": "スピーカー"
+    }
+  ],
+  "expect": {
+    "canonical": {
+      "decisions": 0
+    }
+  },
+  "notes": "現状false positiveとして昇格している。『検証します』の語尾が決定と誤判定される"
+}

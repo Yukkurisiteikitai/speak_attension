@@ -1,0 +1,18 @@
+{
+  "id": "15-multi-meaning",
+  "intent": "複数の意味を持つ長い発話の分割",
+  "coverage": "long multi-meaning",
+  "utterances": [
+    {
+      "text": "昨日のスプリントタスクは完了しました。ただし、APIレスポンスが予想より遅くて、パフォーマンステストをやり直す必要があります",
+      "speaker": "スピーカー"
+    }
+  ],
+  "expect": {
+    "canonical": {
+      "decisions": 0
+    },
+    "unitCount": 3
+  },
+  "notes": "unitCount: 3はreport / problem / proposal。complexな発話の分割例"
+}

@@ -21,6 +21,170 @@ describe("topicEngineStore", () => {
     expect(snapshot.logs[1]?.type).toBe("speech");
   });
 
+  it("flushes on silence so a final utterance is not held for the full buffer window", () => {
+    // ADR 0023 §7: a final transcript enters the fast path on the next quiet
+    // tick, not on a fixed 5s interval.
+    let now = 1_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const store = createTopicEngineStore();
+
+    store.addTranscriptText("レイテンシー対策を決めたいです");
+    now = 1_400; // 400ms of silence: below the idle threshold
+    store.flushIfIdle(800, 5_000);
+    expect(store.getSnapshot().engineState.segments).toHaveLength(0);
+    expect(store.getSnapshot().bufferText).toBe("レイテンシー対策を決めたいです");
+
+    now = 1_900; // 900ms of silence: flush
+    store.flushIfIdle(800, 5_000);
+    const snapshot = store.getSnapshot();
+    expect(snapshot.bufferText).toBe("");
+    expect(snapshot.engineState.segments[0]?.text).toBe("レイテンシー対策を決めたいです");
+  });
+
+  it("keeps merging while speech continues, then flushes as one segment", () => {
+    let now = 1_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const store = createTopicEngineStore();
+
+    store.addTranscriptText("今日は");
+    now = 1_300;
+    store.flushIfIdle(800, 5_000);
+    now = 1_500;
+    store.addTranscriptText("レイテンシー対策を決めたいです");
+    now = 2_400;
+    store.flushIfIdle(800, 5_000);
+
+    const snapshot = store.getSnapshot();
+    expect(snapshot.engineState.segments).toHaveLength(1);
+    expect(snapshot.engineState.segments[0]?.text).toBe("今日は レイテンシー対策を決めたいです");
+  });
+
+  it("flushes at the backstop even when speech never pauses", () => {
+    let now = 1_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const store = createTopicEngineStore();
+
+    for (let step = 0; step < 12; step += 1) {
+      store.addTranscriptText(`区切りのない発話${step}`);
+      now += 500; // always shorter than the idle threshold
+      store.flushIfIdle(800, 5_000);
+    }
+
+    expect(store.getSnapshot().engineState.segments.length).toBeGreaterThan(0);
+  });
+
+  it("flushes immediately on explicit terminal punctuation", () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_000);
+    const store = createTopicEngineStore();
+
+    store.addTranscriptText("レイテンシー対策を決めます。");
+
+    const snapshot = store.getSnapshot();
+    expect(snapshot.bufferText).toBe("");
+    expect(snapshot.engineState.segments[0]?.text).toBe("レイテンシー対策を決めます。");
+  });
+
+  it("does not split a polite verb ending into its own segment", () => {
+    // Web Speech emits mid-sentence final chunks; splitting on です/ます would
+    // fragment one utterance across segments.
+    vi.spyOn(Date, "now").mockReturnValue(1_000);
+    const store = createTopicEngineStore();
+
+    store.addTranscriptText("対応します");
+
+    expect(store.getSnapshot().engineState.segments).toHaveLength(0);
+    expect(store.getSnapshot().bufferText).toBe("対応します");
+  });
+
+  it("flushIfIdle does nothing when the buffer is empty", () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_000);
+    const store = createTopicEngineStore();
+
+    store.flushIfIdle(0, 0);
+
+    expect(store.getSnapshot().engineState.segments).toHaveLength(0);
+    expect(store.getSnapshot().logs).toHaveLength(0);
+  });
+
+  it("ingests each utterance into Semantic Core alongside the legacy engine", () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_000);
+    const store = createTopicEngineStore();
+
+    store.submitTranscript("対戦ゲーム形式を採用します", "manual");
+
+    const snapshot = store.getSnapshot();
+    // Legacy still runs untouched.
+    expect(snapshot.engineState.segments).toHaveLength(1);
+    // And the same utterance is in the semantic log, keyed by the segment id.
+    expect(snapshot.semantic.log.events).toHaveLength(1);
+    expect(snapshot.semantic.assertions.length).toBeGreaterThan(0);
+    expect(snapshot.semantic.assertions[0].unit.utteranceId).toBe(snapshot.engineState.segments[0].id);
+    expect(snapshot.semantic.canonical.byKind.decision).toHaveLength(1);
+  });
+
+  it("maps each input source onto a normalized provider", () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_000);
+    const store = createTopicEngineStore();
+
+    store.submitTranscript("手入力の発言です", "manual");
+    store.addTranscriptText("音声の発言です。");
+
+    const providers = store.getSnapshot().semantic.log.events
+      .flatMap((event) => (event.kind === "utterance_added" ? [event.utterance.provider] : []));
+    expect(providers).toEqual(["manual", "web_speech"]);
+  });
+
+  it("records a human correction as an event, not as UI state", () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_000);
+    const store = createTopicEngineStore();
+    store.submitTranscript("鈴木さんがプロトタイプを来週金曜日までに作成します", "manual");
+    const unitId = store.getSnapshot().semantic.assertions[0].unit.id;
+    const utteranceId = store.getSnapshot().engineState.segments[0].id;
+
+    store.recordSemanticCorrection({ utteranceId, unitId }, { role: "option" }, "実際は候補の一つ");
+
+    const snapshot = store.getSnapshot();
+    expect(snapshot.semantic.corrections).toHaveLength(1);
+    expect(snapshot.semantic.corrections[0].axes).toEqual({ role: "option" });
+    expect(snapshot.semantic.log.events.some((event) => event.kind === "human_correction")).toBe(true);
+  });
+
+  it("keeps a correction after further utterances are ingested", () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_000);
+    const store = createTopicEngineStore();
+    store.submitTranscript("鈴木さんがプロトタイプを来週金曜日までに作成します", "manual");
+    const unitId = store.getSnapshot().semantic.assertions[0].unit.id;
+    const utteranceId = store.getSnapshot().engineState.segments[0].id;
+    store.recordSemanticCorrection({ utteranceId, unitId }, { role: "option" });
+
+    store.submitTranscript("次の議題に移ります", "manual");
+
+    expect(store.getSnapshot().semantic.corrections).toHaveLength(1);
+  });
+
+  it("ignores a correction that names no axis", () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_000);
+    const store = createTopicEngineStore();
+    store.submitTranscript("対戦ゲーム形式を採用します", "manual");
+
+    store.recordSemanticCorrection({ utteranceId: "whatever" }, {});
+
+    expect(store.getSnapshot().semantic.corrections).toHaveLength(0);
+  });
+
+  it("clears semantic state on reset", () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_000);
+    const store = createTopicEngineStore();
+    store.submitTranscript("対戦ゲーム形式を採用します", "manual");
+
+    store.reset();
+
+    const snapshot = store.getSnapshot();
+    expect(snapshot.semantic.log.events).toEqual([]);
+    expect(snapshot.semantic.assertions).toEqual([]);
+    expect(snapshot.semantic.canonical.entries).toEqual([]);
+  });
+
   it("applies manual focus and lock against the latest engine state", () => {
     vi.spyOn(Date, "now")
       .mockReturnValueOnce(1_000)

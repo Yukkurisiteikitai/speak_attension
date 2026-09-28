@@ -1,0 +1,18 @@
+{
+  "id": "14-rhetorical-question",
+  "intent": "修辞的質問を捕捉する",
+  "coverage": "rhetorical question",
+  "utterances": [
+    {
+      "text": "このステップが完了することは何を意味するか",
+      "speaker": "スピーカー"
+    }
+  ],
+  "expect": {
+    "canonical": {
+      "questions": 1,
+      "decisions": 0
+    }
+  },
+  "notes": "act: ask, commitment: noneで質問として記録。決定へは入らない"
+}

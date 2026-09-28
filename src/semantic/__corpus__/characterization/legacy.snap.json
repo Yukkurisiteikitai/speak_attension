@@ -1,0 +1,555 @@
+[
+  {
+    "caseId": "01-topic-start",
+    "utterances": [
+      {
+        "text": "今日はイベント形式について決めます",
+        "timeline": {
+          "semanticRole": "topic",
+          "discourseAct": "topic_start",
+          "commitment": "none",
+          "owner": null,
+          "deadline": null
+        },
+        "tree": "topic",
+        "intent": "decision",
+        "decisionNodeTypes": []
+      }
+    ],
+    "confirmedDecisions": [],
+    "nextActions": [],
+    "structuralGapsCount": 0,
+    "unresolvedItemsCount": 0
+  },
+  {
+    "caseId": "02-agenda-item",
+    "utterances": [
+      {
+        "text": "今日整理したいことは3つ、スライド作成、コーディング、リファクタリングです",
+        "timeline": {
+          "semanticRole": "agenda_item",
+          "discourseAct": "enumerate",
+          "commitment": "none",
+          "owner": null,
+          "deadline": null
+        },
+        "tree": "statement",
+        "intent": "unknown",
+        "decisionNodeTypes": []
+      }
+    ],
+    "confirmedDecisions": [],
+    "nextActions": [],
+    "structuralGapsCount": 0,
+    "unresolvedItemsCount": 0
+  },
+  {
+    "caseId": "03-context",
+    "utterances": [
+      {
+        "text": "スライドの構成のベースはまず決まっていて、問題、解決へのプロセス、解決策のデモ、今後",
+        "timeline": {
+          "semanticRole": "context",
+          "discourseAct": "report",
+          "commitment": "mentioned",
+          "owner": null,
+          "deadline": null
+        },
+        "tree": "issue",
+        "intent": "concern",
+        "decisionNodeTypes": [
+          "problem"
+        ]
+      }
+    ],
+    "confirmedDecisions": [],
+    "nextActions": [],
+    "structuralGapsCount": 0,
+    "unresolvedItemsCount": 0
+  },
+  {
+    "caseId": "04-option-enumeration",
+    "utterances": [
+      {
+        "text": "方法としてA、B、Cがあります",
+        "timeline": {
+          "semanticRole": "option",
+          "discourseAct": "enumerate",
+          "commitment": "mentioned",
+          "owner": null,
+          "deadline": null
+        },
+        "tree": "statement",
+        "intent": "unknown",
+        "decisionNodeTypes": []
+      }
+    ],
+    "confirmedDecisions": [],
+    "nextActions": [],
+    "structuralGapsCount": 0,
+    "unresolvedItemsCount": 0
+  },
+  {
+    "caseId": "05-personal-consideration",
+    "utterances": [
+      {
+        "text": "個人的に考えているのが1、私は今までどんな情報があってどんな優先順位をつけて行動を",
+        "timeline": {
+          "semanticRole": "option",
+          "discourseAct": "report",
+          "commitment": "considered",
+          "owner": null,
+          "deadline": null
+        },
+        "tree": "action",
+        "intent": "unknown",
+        "decisionNodeTypes": []
+      }
+    ],
+    "confirmedDecisions": [],
+    "nextActions": [],
+    "structuralGapsCount": 0,
+    "unresolvedItemsCount": 0
+  },
+  {
+    "caseId": "06-proposal-with-reason",
+    "utterances": [
+      {
+        "text": "スマホで集客しやすいので、対戦ゲーム形式で進めましょう",
+        "timeline": {
+          "semanticRole": "reason",
+          "discourseAct": "report",
+          "commitment": "mentioned",
+          "owner": null,
+          "deadline": null
+        },
+        "tree": "statement",
+        "intent": "unknown",
+        "decisionNodeTypes": [
+          "reason"
+        ]
+      }
+    ],
+    "confirmedDecisions": [],
+    "nextActions": [],
+    "structuralGapsCount": 0,
+    "unresolvedItemsCount": 0
+  },
+  {
+    "caseId": "07-support",
+    "utterances": [
+      {
+        "text": "対戦ゲーム形式で進めましょう",
+        "timeline": {
+          "semanticRole": "other",
+          "discourseAct": "other",
+          "commitment": "none",
+          "owner": null,
+          "deadline": null
+        },
+        "tree": "statement",
+        "intent": "unknown",
+        "decisionNodeTypes": []
+      },
+      {
+        "text": "それでいきましょう",
+        "timeline": {
+          "semanticRole": "acknowledgement",
+          "discourseAct": "acknowledge",
+          "commitment": "none",
+          "owner": null,
+          "deadline": null
+        },
+        "tree": "statement",
+        "intent": "unknown",
+        "decisionNodeTypes": []
+      }
+    ],
+    "confirmedDecisions": [],
+    "nextActions": [],
+    "structuralGapsCount": 0,
+    "unresolvedItemsCount": 0
+  },
+  {
+    "caseId": "08-opposition",
+    "utterances": [
+      {
+        "text": "対戦ゲーム形式で進めましょう",
+        "timeline": {
+          "semanticRole": "other",
+          "discourseAct": "other",
+          "commitment": "none",
+          "owner": null,
+          "deadline": null
+        },
+        "tree": "statement",
+        "intent": "unknown",
+        "decisionNodeTypes": []
+      },
+      {
+        "text": "それは反対です。コストが見合いません",
+        "timeline": {
+          "semanticRole": "other",
+          "discourseAct": "other",
+          "commitment": "none",
+          "owner": null,
+          "deadline": null
+        },
+        "tree": "statement",
+        "intent": "unknown",
+        "decisionNodeTypes": []
+      }
+    ],
+    "confirmedDecisions": [],
+    "nextActions": [],
+    "structuralGapsCount": 0,
+    "unresolvedItemsCount": 0
+  },
+  {
+    "caseId": "09-decision-explicit",
+    "utterances": [
+      {
+        "text": "対戦ゲーム形式を採用します",
+        "timeline": {
+          "semanticRole": "other",
+          "discourseAct": "other",
+          "commitment": "none",
+          "owner": null,
+          "deadline": null
+        },
+        "tree": "statement",
+        "intent": "unknown",
+        "decisionNodeTypes": [
+          "decision",
+          "action"
+        ]
+      }
+    ],
+    "confirmedDecisions": [
+      "対戦ゲーム形式を採用します"
+    ],
+    "nextActions": [
+      {
+        "what": "対戦ゲーム形式を採用します",
+        "owner": null,
+        "deadline": null
+      }
+    ],
+    "structuralGapsCount": 1,
+    "unresolvedItemsCount": 0
+  },
+  {
+    "caseId": "10-decision-paraphrased",
+    "utterances": [
+      {
+        "text": "レイテンシー削減を優先で進めることにします。期限は10月末です",
+        "timeline": {
+          "semanticRole": "other",
+          "discourseAct": "other",
+          "commitment": "none",
+          "owner": null,
+          "deadline": null
+        },
+        "tree": "statement",
+        "intent": "unknown",
+        "decisionNodeTypes": []
+      }
+    ],
+    "confirmedDecisions": [],
+    "nextActions": [],
+    "structuralGapsCount": 0,
+    "unresolvedItemsCount": 0
+  },
+  {
+    "caseId": "11-action-commitment",
+    "utterances": [
+      {
+        "text": "鈴木さんがプロトタイプを来週金曜日までに作成します",
+        "timeline": {
+          "semanticRole": "action",
+          "discourseAct": "commit",
+          "commitment": "committed",
+          "owner": "鈴木",
+          "deadline": "金曜日まで"
+        },
+        "tree": "action",
+        "intent": "unknown",
+        "decisionNodeTypes": [
+          "decision",
+          "action"
+        ]
+      }
+    ],
+    "confirmedDecisions": [
+      "鈴木さんがプロトタイプを来週金曜日までに作成します"
+    ],
+    "nextActions": [
+      {
+        "what": "鈴木さんがプロトタイプを来週金曜日までに作成します",
+        "owner": "鈴木",
+        "deadline": null
+      }
+    ],
+    "structuralGapsCount": 1,
+    "unresolvedItemsCount": 0
+  },
+  {
+    "caseId": "12-deferred",
+    "utterances": [
+      {
+        "text": "ランキング機能については、保留にしておきましょう",
+        "timeline": {
+          "semanticRole": "other",
+          "discourseAct": "other",
+          "commitment": "none",
+          "owner": null,
+          "deadline": null
+        },
+        "tree": "statement",
+        "intent": "unknown",
+        "decisionNodeTypes": []
+      }
+    ],
+    "confirmedDecisions": [],
+    "nextActions": [],
+    "structuralGapsCount": 0,
+    "unresolvedItemsCount": 0
+  },
+  {
+    "caseId": "13-acknowledgement",
+    "utterances": [
+      {
+        "text": "そうですね",
+        "timeline": {
+          "semanticRole": "acknowledgement",
+          "discourseAct": "acknowledge",
+          "commitment": "none",
+          "owner": null,
+          "deadline": null
+        },
+        "tree": null,
+        "intent": "agreement",
+        "decisionNodeTypes": []
+      }
+    ],
+    "confirmedDecisions": [],
+    "nextActions": [],
+    "structuralGapsCount": 0,
+    "unresolvedItemsCount": 0
+  },
+  {
+    "caseId": "14-rhetorical-question",
+    "utterances": [
+      {
+        "text": "このステップが完了することは何を意味するか",
+        "timeline": {
+          "semanticRole": "question",
+          "discourseAct": "ask",
+          "commitment": "none",
+          "owner": null,
+          "deadline": null
+        },
+        "tree": "statement",
+        "intent": "unknown",
+        "decisionNodeTypes": [
+          "question"
+        ]
+      }
+    ],
+    "confirmedDecisions": [],
+    "nextActions": [],
+    "structuralGapsCount": 0,
+    "unresolvedItemsCount": 1
+  },
+  {
+    "caseId": "15-multi-meaning",
+    "utterances": [
+      {
+        "text": "昨日のスプリントタスクは完了しました。ただし、APIレスポンスが予想より遅くて、パフォーマンステストをやり直す必要があります",
+        "timeline": {
+          "semanticRole": "other",
+          "discourseAct": "other",
+          "commitment": "none",
+          "owner": null,
+          "deadline": null
+        },
+        "tree": "statement",
+        "intent": "unknown",
+        "decisionNodeTypes": []
+      }
+    ],
+    "confirmedDecisions": [],
+    "nextActions": [],
+    "structuralGapsCount": 0,
+    "unresolvedItemsCount": 0
+  },
+  {
+    "caseId": "16-reference-unresolved",
+    "utterances": [
+      {
+        "text": "対戦ゲーム形式で進めましょう",
+        "timeline": {
+          "semanticRole": "other",
+          "discourseAct": "other",
+          "commitment": "none",
+          "owner": null,
+          "deadline": null
+        },
+        "tree": "statement",
+        "intent": "unknown",
+        "decisionNodeTypes": []
+      },
+      {
+        "text": "それで進めましょう",
+        "timeline": {
+          "semanticRole": "acknowledgement",
+          "discourseAct": "acknowledge",
+          "commitment": "none",
+          "owner": null,
+          "deadline": null
+        },
+        "tree": "statement",
+        "intent": "unknown",
+        "decisionNodeTypes": []
+      }
+    ],
+    "confirmedDecisions": [],
+    "nextActions": [],
+    "structuralGapsCount": 0,
+    "unresolvedItemsCount": 0
+  },
+  {
+    "caseId": "17-topic-return",
+    "utterances": [
+      {
+        "text": "対戦ゲーム形式で進めましょう",
+        "timeline": {
+          "semanticRole": "other",
+          "discourseAct": "other",
+          "commitment": "none",
+          "owner": null,
+          "deadline": null
+        },
+        "tree": "statement",
+        "intent": "unknown",
+        "decisionNodeTypes": []
+      },
+      {
+        "text": "話を戻すと、Wi-Fi負荷の件ですが",
+        "timeline": {
+          "semanticRole": "other",
+          "discourseAct": "other",
+          "commitment": "none",
+          "owner": null,
+          "deadline": null
+        },
+        "tree": "statement",
+        "intent": "switch_topic",
+        "decisionNodeTypes": []
+      }
+    ],
+    "confirmedDecisions": [],
+    "nextActions": [],
+    "structuralGapsCount": 0,
+    "unresolvedItemsCount": 0
+  },
+  {
+    "caseId": "18-process-greeting",
+    "utterances": [
+      {
+        "text": "本日の朝会を始めます。進捗報告をお願いします",
+        "timeline": {
+          "semanticRole": "other",
+          "discourseAct": "other",
+          "commitment": "none",
+          "owner": null,
+          "deadline": null
+        },
+        "tree": "statement",
+        "intent": "unknown",
+        "decisionNodeTypes": [
+          "decision",
+          "action"
+        ]
+      }
+    ],
+    "confirmedDecisions": [
+      "本日の朝会を始めます。進捗報告をお願いします"
+    ],
+    "nextActions": [
+      {
+        "what": "本日の朝会を始めます。進捗報告をお願いします",
+        "owner": null,
+        "deadline": null
+      }
+    ],
+    "structuralGapsCount": 1,
+    "unresolvedItemsCount": 0
+  },
+  {
+    "caseId": "19-explicitly-undecided",
+    "utterances": [
+      {
+        "text": "いい質問ですね。そこはまだ検討中です。青チームで検証します",
+        "timeline": {
+          "semanticRole": "other",
+          "discourseAct": "other",
+          "commitment": "none",
+          "owner": null,
+          "deadline": null
+        },
+        "tree": "statement",
+        "intent": "unknown",
+        "decisionNodeTypes": [
+          "decision",
+          "action"
+        ]
+      }
+    ],
+    "confirmedDecisions": [
+      "いい質問ですね。そこはまだ検討中です。青チームで検証します"
+    ],
+    "nextActions": [
+      {
+        "what": "いい質問ですね。そこはまだ検討中です。青チームで検証します",
+        "owner": null,
+        "deadline": null
+      }
+    ],
+    "structuralGapsCount": 1,
+    "unresolvedItemsCount": 0
+  },
+  {
+    "caseId": "20-agenda-paraphrased",
+    "utterances": [
+      {
+        "text": "今日は今四半期のロードマップを確定します",
+        "timeline": {
+          "semanticRole": "agenda_item",
+          "discourseAct": "enumerate",
+          "commitment": "none",
+          "owner": null,
+          "deadline": null
+        },
+        "tree": "statement",
+        "intent": "unknown",
+        "decisionNodeTypes": [
+          "decision",
+          "action"
+        ]
+      }
+    ],
+    "confirmedDecisions": [
+      "今日は今四半期のロードマップを確定します"
+    ],
+    "nextActions": [
+      {
+        "what": "今日は今四半期のロードマップを確定します",
+        "owner": null,
+        "deadline": null
+      }
+    ],
+    "structuralGapsCount": 1,
+    "unresolvedItemsCount": 0
+  }
+]

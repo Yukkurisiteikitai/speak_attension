@@ -26,7 +26,10 @@ export function TranscriptPanel({ bufferText, interimText, lastFinalText, meetin
       </div>
 
       <div className="segment-buffer">
-        <span>5秒バッファ</span>
+        {/* No longer a fixed 5s window: the buffer flushes on terminal
+            punctuation, or after ~800ms of silence, with 5s as a backstop
+            (ADR 0024). So this usually shows nothing for long. */}
+        <span>確定待ち</span>
         <p>{bufferText || "発話待ち"}</p>
       </div>
 

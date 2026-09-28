@@ -1,21 +1,24 @@
 import { useState } from "react";
-import type { AnalyzedSegment, ConversationTreeState } from "../types/topic";
+import type { ConversationTreeState } from "../types/topic";
+import type { SemanticAxes } from "../semantic/types";
+import type { TimelineRow } from "../semantic/timelineProjection";
 import { ConversationTimeline } from "./ConversationTimeline";
 import { TopicGraph } from "./TopicGraph";
 
 type ConversationViewProps = {
   conversationTree: ConversationTreeState;
-  segments: AnalyzedSegment[];
+  timelineRows: TimelineRow[];
   selectedNodeId: string | null;
   onRate: (nodeId: string) => void;
   onSelect: (nodeId: string | null) => void;
+  onCorrect: (target: { utteranceId: string; unitId?: string }, axes: Partial<SemanticAxes>) => void;
   onStart?: () => void;
 };
 
 // Timeline is the primary way to read conversation history (ADR 0019 follow-up
 // feedback). The existing relationship graph (TopicGraph) is not deleted — it
 // stays reachable as a secondary view via one explicit toggle, never removed.
-export function ConversationView({ conversationTree, segments, selectedNodeId, onRate, onSelect, onStart }: ConversationViewProps) {
+export function ConversationView({ conversationTree, timelineRows, selectedNodeId, onRate, onSelect, onCorrect, onStart }: ConversationViewProps) {
   const [view, setView] = useState<"timeline" | "graph">("timeline");
 
   return (
@@ -29,17 +32,17 @@ export function ConversationView({ conversationTree, segments, selectedNodeId, o
         </button>
       </div>
       {/* Both stay mounted (hidden, not unmounted) so switching views never
-          drops state -- in particular ConversationTimeline's manual
-          classification corrections, which would otherwise silently reset
-          on every toggle. Same pattern as the Idea/Meeting mode switch in
-          App.tsx. */}
+          drops per-view UI state such as scroll position. Timeline corrections
+          no longer depend on this: they are events in the semantic log, so they
+          survive unmount on their own (ADR 0022 §5). */}
       <div hidden={view !== "timeline"}>
         <ConversationTimeline
+          rows={timelineRows}
           conversationTree={conversationTree}
-          segments={segments}
           selectedNodeId={selectedNodeId}
           onRate={onRate}
           onSelect={onSelect}
+          onCorrect={onCorrect}
           onStart={onStart}
         />
       </div>

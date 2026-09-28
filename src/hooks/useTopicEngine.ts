@@ -2,8 +2,17 @@ import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { createTopicEngineStore } from "./topicEngineStore";
 import type { LlmSettings } from "../utils/llmClient";
 import { buildMissingContributions } from "../utils/missingContribution";
+import { buildTimelineProjection } from "../semantic/timelineProjection";
+import { SEMANTIC_CORE_FLAGS } from "../semantic/flags";
 
-const SEGMENT_INTERVAL_MS = 5000;
+// A final Web Speech chunk should reach the fast path within the realtime
+// budget (ADR 0023 §10), not on a fixed 5s tick. The buffer is flushed once
+// speech has been quiet for SPEECH_IDLE_FLUSH_MS -- a pause is the boundary
+// signal -- with SPEECH_MAX_BUFFER_MS as a backstop for a speaker who never
+// pauses. Polling at SEGMENT_POLL_MS only reads two timestamps.
+const SEGMENT_POLL_MS = 250;
+const SPEECH_IDLE_FLUSH_MS = 800;
+const SPEECH_MAX_BUFFER_MS = 5000;
 
 type UseTopicEngineOptions = {
   onLog?: (entry: import("../types/topic").SessionLogEntry) => void;
@@ -37,10 +46,18 @@ export function useTopicEngine({ onLog, llmSettings }: UseTopicEngineOptions = {
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      store.flushBuffer();
-    }, SEGMENT_INTERVAL_MS);
+      store.flushIfIdle(SPEECH_IDLE_FLUSH_MS, SPEECH_MAX_BUFFER_MS);
+    }, SEGMENT_POLL_MS);
     return () => window.clearInterval(timer);
   }, [store]);
+
+  // Projection, not interpretation: buildTimelineProjection reads the assertions
+  // the fast path already produced. Memoized on the semantic snapshot so a new
+  // utterance does not re-derive the whole meeting.
+  const timelineRows = useMemo(
+    () => (SEMANTIC_CORE_FLAGS.timeline ? buildTimelineProjection(snapshot.semantic) : []),
+    [snapshot.semantic],
+  );
 
   const currentTopic = useMemo(
     () => snapshot.engineState.meetingGraph.nodes.find((node) => node.id === snapshot.engineState.currentTopicId) ?? null,
@@ -71,6 +88,9 @@ export function useTopicEngine({ onLog, llmSettings }: UseTopicEngineOptions = {
     addLog: store.addLog,
     addTranscriptText: store.addTranscriptText,
     bufferText: snapshot.bufferText,
+    // Semantic Core (ADR 0022 §9). Phase 2 consumes this for the Timeline only.
+    timelineRows,
+    recordSemanticCorrection: store.recordSemanticCorrection,
     conversationTree: snapshot.conversationTree,
     currentTopic,
     currentTopicGaps,

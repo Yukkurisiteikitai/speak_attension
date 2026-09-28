@@ -1,0 +1,19 @@
+{
+  "id": "12-deferred",
+  "intent": "明示的な保留を捕捉する",
+  "coverage": "deferred idea",
+  "utterances": [
+    {
+      "text": "ランキング機能については、保留にしておきましょう",
+      "speaker": "スピーカー"
+    }
+  ],
+  "expect": {
+    "canonical": {
+      "deferred": 1,
+      "decisions": 0,
+      "actions": 0
+    }
+  },
+  "notes": "act: defer, commitment: deferredで明示マーカーを含む。不変条件I9により保留は別区間"
+}

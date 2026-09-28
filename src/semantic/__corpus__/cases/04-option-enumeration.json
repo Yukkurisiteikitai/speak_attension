@@ -1,0 +1,18 @@
+{
+  "id": "04-option-enumeration",
+  "intent": "選択肢の列挙は提案ではない",
+  "coverage": "option enumeration",
+  "utterances": [
+    {
+      "text": "方法としてA、B、Cがあります",
+      "speaker": "スピーカー"
+    }
+  ],
+  "expect": {
+    "canonical": {
+      "proposals": 0,
+      "decisions": 0
+    }
+  },
+  "notes": "role: option, act: enumerate. commitment: mentionedなので提案へ昇格しない"
+}
