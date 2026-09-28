@@ -140,3 +140,70 @@ describe("classifyUtterance: questions", () => {
     expect(result.discourseAct).toBe("ask");
   });
 });
+
+describe("classifyUtterance: 文化祭13発言golden test", () => {
+  // ユーザーが指摘した実際の会話フロー。これらが正確に分類できないと、
+  // 「会話から会議の現在地を取得できる」という主張の証拠が成り立たない。
+  // 参照: https://github.com/yukkurisiteikitai/speak_attension/issues/XXX
+
+  it("agenda: 議題の開始・目的宣言は決定ではなく議題として扱う", () => {
+    const result = classifyUtterance("今日は文化祭の出し物を決めます");
+    expect(result.semanticRole).toBe("agenda_item");
+    expect(result.semanticRole).not.toBe("decision");
+    expect(result.commitment).not.toBe("decided");
+  });
+
+  it("problem: 背景となる課題・損失を認識する", () => {
+    const result = classifyUtterance("去年は来場者が少なかった");
+    expect(result.semanticRole).toBe("problem");
+  });
+
+  it("proposal: 選択肢の提示（advocacy なし）は proposal ではなく option または proposal", () => {
+    const result = classifyUtterance("ブラウザで遊べる対戦ゲーム");
+    expect(["option", "proposal", "other"]).toContain(result.semanticRole);
+  });
+
+  it("reason: スマホからアクセス可能という利点/理由", () => {
+    const result = classifyUtterance("スマホから参加できる");
+    expect(result.semanticRole).toBe("reason");
+  });
+
+  it("reason: 集客効果という根拠理由", () => {
+    const result = classifyUtterance("集客につながりそう");
+    expect(result.semanticRole).toBe("reason");
+  });
+
+  it("decision: 具体的な決定（「対戦ゲームにする」）は明示的な決定", () => {
+    const result = classifyUtterance("対戦ゲームにする");
+    expect(result.semanticRole).toBe("decision");
+    expect(result.commitment).toBe("decided");
+  });
+
+  it("question: 大事な確認項目「Wi-Fiで大丈夫か」は未解決の質問", () => {
+    const result = classifyUtterance("当日学校Wi-Fiで大丈夫か");
+    expect(result.semanticRole).toBe("question");
+  });
+
+  it("proposal: ランキング機能は追加提案", () => {
+    const result = classifyUtterance("ランキング機能もあったら");
+    expect(["proposal", "option"]).toContain(result.semanticRole);
+  });
+
+  it("action: ポスター作成は検討すべき活動（担当・期限未定だが action 候補）", () => {
+    const result = classifyUtterance("ポスターも作らないと");
+    expect(["action", "proposal"]).toContain(result.semanticRole);
+  });
+
+  it("action: 教室使用許可取得も検討すべき活動（担当・期限未定）", () => {
+    const result = classifyUtterance("教室の使用許可も取らないと");
+    expect(["action", "proposal"]).toContain(result.semanticRole);
+  });
+
+  it("action: 明示的な担当・期限付きアクション「鈴木くん、来週金曜までにプロトタイプお願い」", () => {
+    const result = classifyUtterance("鈴木くん、来週金曜までにプロトタイプお願い");
+    expect(result.semanticRole).toBe("action");
+    expect(result.commitment).toBe("committed");
+    expect(result.owner).toBe("鈴木");
+    expect(result.deadline).toContain("金曜");
+  });
+});
