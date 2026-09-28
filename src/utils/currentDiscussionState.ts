@@ -66,11 +66,11 @@ export function isWellFormedTopicTitle(title: string): boolean {
   return true;
 }
 
-function latestAgendaTitle(segments: AnalyzedSegment[]): string | null {
+function latestAgenda(segments: AnalyzedSegment[]): { title: string; createdAt: number } | null {
   const ordered = [...segments].sort((a, b) => b.createdAt - a.createdAt);
   for (const segment of ordered) {
     const title = extractAgendaTitle(segment.text);
-    if (title && isWellFormedTopicTitle(title)) return title;
+    if (title && isWellFormedTopicTitle(title)) return { title, createdAt: segment.createdAt };
   }
   return null;
 }
@@ -90,7 +90,10 @@ export function buildCurrentDiscussionState(
   // Scope: everything created since this topic last became active. This is a
   // simple, explainable approximation (not a proven causal link to the
   // topic) — when there is no current topic, fall back to the whole graph.
-  const sinceTs = currentTopicNode?.lastActivatedAt ?? 0;
+  // An explicit agenda statement ("今日は〜を決めます") is a firmer start of the
+  // discussion than the extracted topic, which a closing remark can reset.
+  const agenda = latestAgenda(segments);
+  const sinceTs = agenda?.createdAt ?? currentTopicNode?.lastActivatedAt ?? 0;
   const scopedNodes = decisionGraph.nodes.filter((node) => node.createdAt >= sinceTs);
 
   const unresolvedQuestionIds = new Set(selectUnresolvedQuestions(decisionGraph).map((node) => node.id));
@@ -149,9 +152,8 @@ export function buildCurrentDiscussionState(
 
   let topicTitle: string;
   let topicTitleSource: TopicTitleSource;
-  const agendaTitle = latestAgendaTitle(segments);
-  if (agendaTitle) {
-    topicTitle = truncate(agendaTitle, MAX_TITLE_LENGTH);
+  if (agenda) {
+    topicTitle = truncate(agenda.title, MAX_TITLE_LENGTH);
     topicTitleSource = "agenda";
   } else if (currentTopicNode && isWellFormedTopicTitle(currentTopicNode.title)) {
     topicTitle = currentTopicNode.title;

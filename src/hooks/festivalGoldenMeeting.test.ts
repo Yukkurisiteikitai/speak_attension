@@ -47,6 +47,12 @@ describe("golden: 文化祭の出し物を決める13発言", () => {
     expect(current.topicTitle).toBe("文化祭の出し物");
   });
 
+  it("締めの発言があっても現在地は議題の範囲で判定する", () => {
+    const { current } = runMeeting();
+    expect(current.stage).toBe("resolving_question");
+    expect(current.decisionThemeTitle).toBe("文化祭の出し物");
+  });
+
   it("決まったことは対戦ゲームの1件だけで、議題は決定にならない", () => {
     const { dashboard } = runMeeting();
     expect(dashboard.confirmedDecisions.map((node) => node.label)).toEqual(["出し物は対戦ゲームに決定"]);
@@ -70,6 +76,12 @@ describe("golden: 文化祭の出し物を決める13発言", () => {
       "question:サーバーはどうする？学校のWi-Fiで大丈夫かな",
       "proposal:ランキング機能",
     ]);
+  });
+
+  it("画面では未解決（Wi-Fi）と提案中（ランキング機能）を分けて出す", () => {
+    const { dashboard } = runMeeting();
+    expect(dashboard.openItems.map((node) => node.label)).toEqual(["サーバーはどうする？学校のWi-Fiで大丈夫かな"]);
+    expect(dashboard.pendingProposals.map((node) => node.label)).toEqual(["ランキング機能"]);
   });
 
   it("次にやることは3件で、鈴木・来週金曜のプロトタイプを含む", () => {

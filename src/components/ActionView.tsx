@@ -61,21 +61,25 @@ export function ActionView({ graph, onUpdate, onExplore }: ActionViewProps) {
                   <span>{urgencyLabel(action.urgency)}</span>
                 </div>
                 <dl>
-                  <div>
-                    <dt>理由</dt>
-                    <dd>{action.why ?? "根拠を確認中"}</dd>
-                  </div>
-                  <div>
-                    <dt>今やる理由</dt>
-                    <dd>{action.whyNow ?? "緊急性の根拠は未確認"}</dd>
-                  </div>
+                  {action.why ? (
+                    <div>
+                      <dt>理由</dt>
+                      <dd>{action.why}</dd>
+                    </div>
+                  ) : null}
+                  {action.whyNow ? (
+                    <div>
+                      <dt>今やる理由</dt>
+                      <dd>{action.whyNow}</dd>
+                    </div>
+                  ) : null}
                   <div>
                     <dt>担当 / 期限</dt>
                     <dd>{action.owner ?? "未割当"} / {action.deadline ?? "未設定"}</dd>
                   </div>
                 </dl>
                 <div className="action-card-footer">
-                  <span className={`decision-state state-${node.state}`}>{stateLabels[node.state]}</span>
+                  <span className={`decision-state state-${node.state}`}>{statusLabels[action.status ?? "decided"]}</span>
                   <button type="button" aria-expanded={expanded} onClick={() => setExpandedActionId(expanded ? null : node.id)}>
                     {expanded ? "根拠を閉じる" : "なぜ？ 根拠を見る"}
                   </button>
