@@ -26,7 +26,10 @@ const DECISION_PATTERN = /(?:それでいこう|それで行こう|(?<!を)決�
 // Direct request to a named person: "鈴木くん、来週金曜までにプロトタイプお願い".
 const ASSIGNMENT_PATTERN = /(?:^|[はが、\s])([^\sはが、。]{1,8}?)(?:くん|さん|君|ちゃん)[、,\s]+(.+?)(?:を)?(?:お願い(?:します)?|よろしく(?:お願いします)?|頼みます|頼む)$/;
 // Stated obligation without an owner: "ポスターも作らないと".
-const OBLIGATION_PATTERN = /^(.+?)(作ら|取ら|やら|出さ|用意し|準備し|確認し|申請し|し)(?:ないと|なきゃ|なければ(?:いけない|ならない)?)$/;
+const OBLIGATION_PATTERN = /^(.+?)(作ら|取ら|やら|出さ|用意し|準備し|確認し|申請し|し)(?:ないと|なきゃ|なければ(?:いけない|ならない)?)(?:だね|だよね|だな|ね|よね|な)?$/;
+// "たぶん大丈夫じゃない？" is a hedged guess, not a question and not an answer:
+// the open question it responds to must stay unresolved.
+const HEDGED_GUESS_PATTERN = /^(?:(?:たぶん|多分|おそらく|きっと)[、\s]*.{0,12}?|.{0,12}?(?:大丈夫|いける|問題ない))(?:じゃない|じゃん|でしょ|だろう?)[？?]?$/;
 const OBLIGATION_VERBS: Record<string, string> = { 作ら: "作る", 取ら: "取る", やら: "やる", 出さ: "出す", 用意し: "用意する", 準備し: "準備する", 確認し: "確認する", 申請し: "申請する", し: "する" };
 const BENEFIT_REASON_PATTERN = /^(.+?)(?:し|から)[、,\s]+(?:いい|良い)と思う$|に(?:も)?つなが(?:る|りそう)|できるし|メリット|利点/;
 const DEADLINE_PATTERN = /(?:今日|明日|今週|来週|再来週|今月|来月|\d+月\d+日|\d+時)?(?:[月火水木金土日]曜(?:日)?)?(?:中|の\d+時)?まで/;
@@ -172,6 +175,7 @@ export function appendMeetingDecisionSegment(
   };
 
   if (AGENDA_PATTERN.test(text)) return graph;
+  if (HEDGED_GUESS_PATTERN.test(segment.text.trim())) return graph;
 
   if (SUGGESTION_PATTERN.test(text) && !NEGATIVE_PATTERN.test(text)) {
     const proposal = makeNode("proposal", segment, suggestionLabel(text), "proposed");

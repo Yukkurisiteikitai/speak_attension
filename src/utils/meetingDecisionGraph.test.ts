@@ -43,6 +43,24 @@ describe("meetingDecisionGraph", () => {
     expect(graph.nodes.map((node) => node.type)).toEqual(["utterance"]);
   });
 
+  it("treats a hedged guess as neither a question nor an answer", () => {
+    let graph = appendMeetingDecisionSegment(createInitialMeetingDecisionGraph(), segment("q", "学校のWi-Fiで大丈夫かな？", 0));
+    graph = appendMeetingDecisionSegment(graph, segment("guess", "たぶん大丈夫じゃない？", 1));
+    expect(graph.nodes.filter((node) => node.type === "question").map((node) => node.id)).toEqual(["question-q"]);
+    expect(graph.edges.some((edge) => edge.relation === "answers")).toBe(false);
+  });
+
+  it("keeps a concern phrased with じゃない as a question", () => {
+    const graph = appendMeetingDecisionSegment(createInitialMeetingDecisionGraph(), segment("c", "それって問題じゃない？", 0));
+    expect(graph.nodes.some((node) => node.type === "question")).toBe(true);
+  });
+
+  it("reads an obligation with a sentence-final particle as an unassigned action", () => {
+    const graph = appendMeetingDecisionSegment(createInitialMeetingDecisionGraph(), segment("o", "顧問の先生に教室の使用許可も取らないとだね", 0));
+    const action = graph.nodes.find((node) => node.type === "action");
+    expect(action?.action).toMatchObject({ what: "顧問の先生に教室の使用許可を取る", owner: undefined, deadline: undefined });
+  });
+
   it("links a uniquely named adopted option and leaves ambiguous comparisons unlinked", () => {
     const base = ["A案でメールを自動化しましょう", "B案で電話を増やしましょう"].reduce((graph, text, index) => appendMeetingDecisionSegment(graph, segment(`p${index}`, text, index)), createInitialMeetingDecisionGraph());
     const chosen = appendMeetingDecisionSegment(base, segment("choice", "A案を採用します", 3));

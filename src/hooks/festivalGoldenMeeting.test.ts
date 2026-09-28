@@ -13,10 +13,10 @@ const FESTIVAL_MEETING = [
   "集客にもつながりそう",
   "じゃあ出し物は対戦ゲームで決定にしよう",
   "サーバーはどうする？学校のWi-Fiで大丈夫かな",
-  "たぶん大丈夫",
+  "たぶん大丈夫じゃない？",
   "ランキング機能もあったら面白いかも",
   "ポスターも作らないと",
-  "顧問に教室の使用許可も取らないと",
+  "顧問の先生に教室の使用許可も取らないとだね",
   "ゲーム本体は鈴木くん、来週金曜までにプロトタイプお願い",
   "じゃあ今日はここまで",
 ];
@@ -79,12 +79,12 @@ describe("golden: 文化祭の出し物を決める13発言", () => {
     expect(actions).toEqual(expect.arrayContaining([
       { what: "ゲーム本体のプロトタイプ", owner: "鈴木", deadline: "来週金曜まで" },
       { what: "ポスターを作る", owner: undefined, deadline: undefined },
-      { what: "顧問に教室の使用許可を取る", owner: undefined, deadline: undefined },
+      { what: "顧問の先生に教室の使用許可を取る", owner: undefined, deadline: undefined },
     ]));
   });
 
   it("担当・期限が未定のアクションは構造上の不足として出る", () => {
     const { dashboard } = runMeeting();
-    expect(dashboard.structuralGaps.map((gap) => gap.actionLabel).sort()).toEqual(["ポスターを作る", "顧問に教室の使用許可を取る"].sort());
+    expect(dashboard.structuralGaps.map((gap) => gap.actionLabel).sort()).toEqual(["ポスターを作る", "顧問の先生に教室の使用許可を取る"].sort());
   });
 });
