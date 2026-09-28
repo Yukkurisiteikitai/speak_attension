@@ -12,18 +12,57 @@ import type {
 export type { MeetingDecisionGraph, MeetingDecisionNode, MeetingDecisionEdge } from "../types/topic";
 
 const EVIDENCE_PATTERN = /(?:\d+(?:\.\d+)?%|\d+件|エラー率|エラー|壊れ|破損|確認され|発生して|増加して)/;
-const PROBLEM_PATTERN = /(?:課題|問題|不足|できない|困って|障害|壊れ|破損)/;
+const PROBLEM_PATTERN = /(?:課題|問題|不足|できない|困って|障害|壊れ|破損|少な(?:い|かった))/;
 const RISK_PATTERN = /(?:このまま|続けると|増える|リスク|危険|被害|損失)/;
 const PROPOSAL_PATTERN = /(?:戻そう|戻ろう|しよう|しましょう|してはどう|提案します|ロールバック|停止|切り戻そう)/;
-const DECISION_PATTERN = /(?:それでいこう|それで行こう|決め(?:ます|た)|決定(?:します|した)|実施(?:します|する)|進めます|します$)/;
+// "Xはどう(かな)" / "Xもあったら…" offer a candidate; checked before questions
+// so a suggestion phrased as a question is not left as an unanswered question.
+const SUGGESTION_PATTERN = /^(.+?)(?:は|って)どう(?:かな|でしょう|ですか|だろう)?$|^(.+?)(?:も|が)?あったら/;
+// "Xを決めます" names what is to be decided (agenda); "Xに/で/と決めます" is the result.
+const AGENDA_PATTERN = /^(?:じゃあ|では|それでは)?[、\s]*(?:今日|今回|本日)は[、\s]*(.+?)(?:を|について)(?:決めます|決める|決めたい|決めましょう|話し合います|検討します|話します)/;
+// Choosing between options: the chosen thing is named before で/に.
+const CHOICE_DECISION_PATTERN = /^(?:じゃあ|では|それでは)?[、\s]*(?:(.+?)は)?(.+?)(?:で|に)決定|^(?:じゃあ|では|それでは)?[、\s]*(?:(.+?)は)?(.+?)(?:で|に)決め(?:ます|た|よう|ましょう)/;
+const DECISION_PATTERN = /(?:それでいこう|それで行こう|(?<!を)決め(?:ます|た)|決定(?:します|した|にしよう|にします|にしましょう)|(?:で|に)決定|実施(?:します|する)|進めます|します$)/;
+// Direct request to a named person: "鈴木くん、来週金曜までにプロトタイプお願い".
+const ASSIGNMENT_PATTERN = /(?:^|[はが、\s])([^\sはが、。]{1,8}?)(?:くん|さん|君|ちゃん)[、,\s]+(.+?)(?:を)?(?:お願い(?:します)?|よろしく(?:お願いします)?|頼みます|頼む)$/;
+// Stated obligation without an owner: "ポスターも作らないと".
+const OBLIGATION_PATTERN = /^(.+?)(作ら|取ら|やら|出さ|用意し|準備し|確認し|申請し|し)(?:ないと|なきゃ|なければ(?:いけない|ならない)?)$/;
+const OBLIGATION_VERBS: Record<string, string> = { 作ら: "作る", 取ら: "取る", やら: "やる", 出さ: "出す", 用意し: "用意する", 準備し: "準備する", 確認し: "確認する", 申請し: "申請する", し: "する" };
+const BENEFIT_REASON_PATTERN = /^(.+?)(?:し|から)[、,\s]+(?:いい|良い)と思う$|に(?:も)?つなが(?:る|りそう)|できるし|メリット|利点/;
+const DEADLINE_PATTERN = /(?:今日|明日|今週|来週|再来週|今月|来月|\d+月\d+日|\d+時)?(?:[月火水木金土日]曜(?:日)?)?(?:中|の\d+時)?まで/;
 const ACTION_PATTERN = /(?:今すぐ|直ちに|至急|ロールバック|戻す|停止する|対応する|実施する)/;
 // A plain "...か" ending (no polite ですか/ますか) is only treated as a question
 // when a wh-word appears earlier in the same sentence, to avoid matching
 // unrelated words/acknowledgements that merely end in "か" (e.g. "そうか").
 const QUESTION_PATTERN = /[?？]|(?:ですか|ますか|でしょうか)$|^(?:なぜ|どうして|どういう|何が|誰が)|(?:何|誰|いつ|どこ|なぜ|どう|どちら|どの).*か$/;
-const TENTATIVE_PATTERN = /(?:かもしれない|可能性|と思う|としたら|場合は)/;
+// "いいと思う" is the speaker's evaluation, not a hedge about a fact.
+const TENTATIVE_PATTERN = /(?:かもしれない|可能性|(?<!(?:いい|良い))と思う|としたら|場合は)/;
 const NEGATIVE_PATTERN = /(?:しない|しません|見送|取り消|撤回|未決定)/;
-const BOUNDARY_PATTERN = /^(?:次に|次の議題|次の話題|話は変わ|話を変えると|切り替えて|別件|以上です|今日はここまで)|^(?:今日は|今回は).+について(?:決めます|検討します|話します)/;
+const BOUNDARY_PATTERN = /^(?:(?:じゃあ|では|それでは)[、\s]*)?(?:次に|次の議題|次の話題|話は変わ|話を変えると|切り替えて|別件|以上です|今日はここまで)|^(?:今日は|今回は).+について(?:決めます|検討します|話します)/;
+
+// The subject of an agenda statement, e.g. "今日は文化祭の出し物を決めます" -> "文化祭の出し物".
+export function extractAgendaTitle(text: string): string | null {
+  return compact(text).match(AGENDA_PATTERN)?.[1]?.trim() || null;
+}
+
+function extractDeadline(text: string): string | undefined {
+  if (/(?:今すぐ|直ちに|至急)/.test(text)) return "即時";
+  const match = text.match(DEADLINE_PATTERN)?.[0];
+  return match && match !== "まで" ? match : undefined;
+}
+
+function choiceDecisionLabel(text: string): { label: string; choice: string } | null {
+  const match = text.match(CHOICE_DECISION_PATTERN);
+  if (!match) return null;
+  const subject = (match[1] ?? match[3])?.trim();
+  const choice = (match[2] ?? match[4]).trim();
+  return { label: subject ? `${subject}は${choice}に決定` : `${choice}に決定`, choice };
+}
+
+function suggestionLabel(text: string): string {
+  const match = text.match(SUGGESTION_PATTERN);
+  return (match?.[1] ?? match?.[2] ?? text).trim();
+}
 
 function compact(text: string): string {
   return text.replace(/\s+/g, " ").trim().replace(/[。.!！?？]+$/g, "");
@@ -124,13 +163,22 @@ export function appendMeetingDecisionSegment(
   // Explicit topic boundaries prevent unrelated earlier evidence being reused.
   let boundary = -1;
   current.nodes.forEach((node, index) => {
-    if (node.type === "utterance" && BOUNDARY_PATTERN.test(node.label)) boundary = index;
+    if (node.type === "utterance" && (BOUNDARY_PATTERN.test(compact(node.label)) || AGENDA_PATTERN.test(compact(node.label)))) boundary = index;
   });
   const context = (): MeetingDecisionGraph => ({ ...graph, nodes: graph.nodes.slice(boundary + 1) });
   const attachSource = (node: MeetingDecisionNode) => {
     graph = addNode(graph, node);
     graph = addEdge(graph, node.id, utterance.id, "derived_from");
   };
+
+  if (AGENDA_PATTERN.test(text)) return graph;
+
+  if (SUGGESTION_PATTERN.test(text) && !NEGATIVE_PATTERN.test(text)) {
+    const proposal = makeNode("proposal", segment, suggestionLabel(text), "proposed");
+    attachSource(proposal);
+    for (const support of supportingNodes(context())) graph = addEdge(graph, proposal.id, support.id, "motivates");
+    return graph;
+  }
 
   if (QUESTION_PATTERN.test(segment.text) || QUESTION_PATTERN.test(text)) {
     const question = makeNode("question", segment, text, "human_stated");
@@ -140,6 +188,26 @@ export function appendMeetingDecisionSegment(
     return graph;
   }
   if (BOUNDARY_PATTERN.test(text)) return graph;
+
+  const assignment = text.match(ASSIGNMENT_PATTERN);
+  const obligation = assignment ? null : text.match(OBLIGATION_PATTERN);
+  if (assignment || obligation) {
+    let what: string;
+    let owner: string | undefined;
+    let deadline: string | undefined;
+    if (assignment) {
+      owner = assignment[1];
+      deadline = extractDeadline(assignment[2]);
+      const object = assignment[2].replace(DEADLINE_PATTERN, "").replace(/^に/, "").trim();
+      const scope = text.slice(0, assignment.index).match(/^(?:じゃあ|では)?[、\s]*(.+?)は?$/)?.[1];
+      what = scope ? `${scope}の${object}` : object;
+    } else {
+      what = `${obligation![1].replace(/も$/, "")}を${OBLIGATION_VERBS[obligation![2]]}`.replace(/をを/, "を");
+    }
+    const action = makeNode("action", segment, what, "decided", { what, owner, deadline, urgency: "medium", status: "decided" });
+    attachSource(action);
+    return graph;
+  }
 
   // Only direct affirmative answers are linked. Other statements remain
   // independent evidence rather than being guessed as an answer.
@@ -163,8 +231,9 @@ export function appendMeetingDecisionSegment(
     }
   }
   const causal = text.match(/^(.+?)(?:だから|なので|ため|ので|から)[、,\s]+(.+)$/);
-  if (isTentative || causal || /(?:原因|理由|なぜなら)/.test(text)) {
-    const reason = makeNode("reason", segment, causal?.[1] ?? text, isTentative ? "unconfirmed" : "human_stated");
+  const benefit = text.match(BENEFIT_REASON_PATTERN);
+  if (isTentative || causal || benefit || /(?:原因|理由|なぜなら)/.test(text)) {
+    const reason = makeNode("reason", segment, causal?.[1] ?? benefit?.[1] ?? text, isTentative ? "unconfirmed" : "human_stated");
     attachSource(reason);
     for (const evidence of context().nodes.filter((node) => node.type === "evidence").slice(-3)) {
       graph = addEdge(graph, reason.id, evidence.id, "supports");
@@ -193,7 +262,15 @@ export function appendMeetingDecisionSegment(
     for (const support of supportingNodes(context())) graph = addEdge(graph, proposal.id, support.id, "motivates");
   }
 
-  if (isDecision) {
+  const choice = isDecision ? choiceDecisionLabel(actionText) : null;
+  if (choice) {
+    // A choice between options is a decision, not work to do: no action node.
+    const decision = makeNode("decision", segment, choice.label, "decided");
+    attachSource(decision);
+    const chosen = [...context().nodes].reverse().find((node) => node.type === "proposal" && (node.label.includes(choice.choice) || choice.choice.includes(node.label)));
+    if (chosen) graph = addEdge(graph, decision.id, chosen.id, "decided_from");
+    for (const support of supportingNodes(context())) graph = addEdge(graph, decision.id, support.id, "motivates");
+  } else if (isDecision) {
     const refersToProposal = /^(?:それでいこう|それで行こう)/.test(actionText);
     const actionName = refersToProposal && !ACTION_PATTERN.test(actionText) ? priorProposal?.label ?? actionText : actionLabel(actionText, priorProposal);
     const decision = makeNode("decision", segment, actionName, "decided");

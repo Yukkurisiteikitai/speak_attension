@@ -142,9 +142,6 @@ describe("classifyUtterance: questions", () => {
 });
 
 describe("classifyUtterance: 文化祭13発言golden test", () => {
-  // ユーザーが指摘した実際の会話フロー。これらが正確に分類できないと、
-  // 「会話から会議の現在地を取得できる」という主張の証拠が成り立たない。
-  // 参照: https://github.com/yukkurisiteikitai/speak_attension/issues/XXX
 
   it("agenda: 議題の開始・目的宣言は決定ではなく議題として扱う", () => {
     const result = classifyUtterance("今日は文化祭の出し物を決めます");

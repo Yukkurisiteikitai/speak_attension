@@ -1,5 +1,5 @@
 import type { AnalyzedSegment, MeetingDecisionGraph, MeetingDecisionNode, TopicNode } from "../types/topic";
-import { selectUnresolvedQuestions } from "./meetingDecisionGraph";
+import { extractAgendaTitle, selectUnresolvedQuestions } from "./meetingDecisionGraph";
 
 // "現在地": what the meeting is doing right now, distinct from the parts list
 // (confirmed decisions / gaps / etc.). This is a derived UI concept — it never
@@ -8,7 +8,7 @@ import { selectUnresolvedQuestions } from "./meetingDecisionGraph";
 // that classification (the progress condition). Both are always presented as
 // rule-derived, never as an AI judgement of importance.
 
-export type TopicTitleSource = "extracted_topic" | "unresolved_question" | "recent_utterance" | "unknown";
+export type TopicTitleSource = "agenda" | "extracted_topic" | "unresolved_question" | "recent_utterance" | "unknown";
 
 export type DiscussionStageId =
   | "confirming_problem" // 問題を確認中
@@ -61,7 +61,18 @@ export function isWellFormedTopicTitle(title: string): boolean {
   const trimmed = title.trim();
   if (trimmed.length < 2) return false;
   if (/^[のをがはにでともへ]/.test(trimmed)) return false;
+  // Discourse markers ("じゃあ今日") mean extraction grabbed filler, not a subject.
+  if (/^(?:じゃあ|じゃ|では|それでは|えっと|えー|まあ)/.test(trimmed)) return false;
   return true;
+}
+
+function latestAgendaTitle(segments: AnalyzedSegment[]): string | null {
+  const ordered = [...segments].sort((a, b) => b.createdAt - a.createdAt);
+  for (const segment of ordered) {
+    const title = extractAgendaTitle(segment.text);
+    if (title && isWellFormedTopicTitle(title)) return title;
+  }
+  return null;
 }
 
 function isActionMissingOwnerOrDeadline(node: MeetingDecisionNode): boolean {
@@ -138,7 +149,11 @@ export function buildCurrentDiscussionState(
 
   let topicTitle: string;
   let topicTitleSource: TopicTitleSource;
-  if (currentTopicNode && isWellFormedTopicTitle(currentTopicNode.title)) {
+  const agendaTitle = latestAgendaTitle(segments);
+  if (agendaTitle) {
+    topicTitle = truncate(agendaTitle, MAX_TITLE_LENGTH);
+    topicTitleSource = "agenda";
+  } else if (currentTopicNode && isWellFormedTopicTitle(currentTopicNode.title)) {
     topicTitle = currentTopicNode.title;
     topicTitleSource = "extracted_topic";
   } else if (unresolvedQuestion) {
