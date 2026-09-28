@@ -23,8 +23,13 @@ Phase 0 corpus 設計、rollback strategy、risk analysis。
 |---|---|---|
 | [semantic-core-phase0.md](semantic-core-phase0.md) | Phase 0: golden corpus + characterization tests | **完了**（`npm run semantic:eval`） |
 | [semantic-core-phase1.md](semantic-core-phase1.md) | Phase 1: 型 + Fast Path sidecar parser | Phase 0 完了。ADR 0023 で改訂済み |
+| *(指示書なし)* | Phase 2: Timeline を Semantic Core へ | **完了**。指示書を経由せずこのセッションで直接実装した。検証記録は下記 |
 
 Phase 2以降は Phase 1 の結果を見てから発行する。
+
+### 検証記録
+
+[phase2-verification/](phase2-verification/) — Phase 2 merge 前に実ブラウザ（Playwright）で行った動作確認。スクリーンショットと再現スクリプトを含む。`npm run check` では検出できない不正HTML・未定義CSSの2件をここで発見・修正した。
 
 ## 関連ADR
 
