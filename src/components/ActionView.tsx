@@ -84,7 +84,7 @@ export function ActionView({ graph, onUpdate, onExplore }: ActionViewProps) {
                     {expanded ? "根拠を閉じる" : "なぜ？ 根拠を見る"}
                   </button>
                 </div>
-                {onExplore ? <button type="button" onClick={() => onExplore(node.id)}>中央のマップで根拠をたどる</button> : null}
+                {onExplore ? <button type="button" onClick={() => onExplore(node.id)}>元の発言を確認</button> : null}
                 <ActionEditor key={JSON.stringify(action)} node={node} onUpdate={onUpdate} />
                 {expanded ? (
                   <ol className="decision-trace" aria-label={`${action.what}の根拠経路`}>
@@ -127,7 +127,7 @@ function ActionEditor({ node, onUpdate }: { node: MeetingDecisionNode; onUpdate:
   const [urgency, setUrgency] = useState(action.urgency ?? "medium");
   const [note, setNote] = useState("");
   return <details>
-    <summary>状態を更新（{statusLabels[action.status ?? "decided"]}）</summary>
+    <summary>実行状況を更新</summary>
     <form onSubmit={(event) => {
       event.preventDefault();
       if (!note.trim()) return;

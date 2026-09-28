@@ -76,11 +76,18 @@ export function MeetingStateDashboard(props: Props) {
           <div className="section-head">
             <h3>
               {meetingTypeLabels[selectedNode.type]} ／{" "}
-              <span className={`decision-state state-${selectedNode.state}`}>{meetingStateLabels[selectedNode.state]}</span>
+              <span className={`decision-state state-${selectedNode.state}`}>
+                {selectedNode.action ? actionStatusLabels[selectedNode.action.status ?? "decided"] : meetingStateLabels[selectedNode.state]}
+              </span>
             </h3>
             <button type="button" onClick={onCloseSelection}>閉じる</button>
           </div>
           <p className="selected-evidence-label">{selectedNode.label}</p>
+          {selectedNode.action ? (
+            <p className="selected-evidence-meta">
+              担当: {selectedNode.action.owner ?? "未割当"} ／ 期限: {selectedNode.action.deadline ?? "未設定"}
+            </p>
+          ) : null}
           {selectedNode.type === "utterance" || selectedNode.type === "decision" || selectedNode.type === "outcome" ? (
             <p className="selected-evidence-meta">
               {new Date(selectedNode.createdAt).toLocaleString("ja-JP")} ／ {selectedNode.speaker ?? "発言者不明"}
