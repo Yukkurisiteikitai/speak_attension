@@ -6,7 +6,7 @@
 
 | アイデア出しモード（補助） | 会議モード（主） |
 | --- | --- |
-| `src/App.tsx` | `src/App.tsx` |
+| `src/App.tsx` / `src/components/IdeaModeView.tsx` | `src/components/MeetingMode.tsx` |
 | `src/hooks/ideaSessionStore.ts` | `src/hooks/useTopicEngine.ts` |
 | `src/utils/ideaSession.ts` | `src/hooks/topicEngineStore.ts` |
 | `src/utils/ideaExtraction.ts` | `src/utils/topicEngine.ts` |
@@ -58,7 +58,11 @@ speech / manual text / replay
 
 ### `src/App.tsx`
 
-アプリシェルとモード切替。既定で会議モードの「流れ・次の検討」を表示し、会議モードの各パネルも組み立てる。
+アプリシェル、モード切替、アイデア出しセッションの開始を担当する。会議画面の組み立ては `src/components/MeetingMode.tsx` に置く。
+
+### `src/components/MeetingMode.tsx`
+
+会議モードの状態接続と画面構成を担当する。音声・手入力・再生のフック、会議マップ切替、右レールの分析パネル、入力ドックをまとめる。アプリ全体のモード切替や会議からアイデア出しへの引き継ぎは `App.tsx` が担当する。
 
 ### 会議の流れ・次の検討
 

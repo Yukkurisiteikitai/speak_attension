@@ -7,3 +7,5 @@ npm-debug.log*
 logs
 docs/sample.md
 .DS_Store
+demo/manual-replay-builder.html
+demo/
