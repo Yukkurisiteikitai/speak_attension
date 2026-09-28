@@ -113,24 +113,41 @@ export function ConversationTimeline({
 
             return (
               <li key={row.utteranceId} className={`timeline-row ${isSelected ? "is-selected" : ""}`}>
-                <button
-                  type="button"
-                  className="timeline-row-button"
-                  onClick={() => (node ? onSelect(isSelected ? null : node.id) : undefined)}
-                >
-                  <time>
-                    {new Date(row.createdAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}
-                  </time>
-                  <span className="timeline-speaker">{row.speaker ?? "発言者不明"}</span>
+                <div className="timeline-row-main">
+                  {/* The row header is the only clickable summary. The per-unit
+                      controls below are siblings, never children, of this button:
+                      a <select> inside a <button> is invalid HTML and its
+                      interaction is unreliable. */}
+                  <button
+                    type="button"
+                    className="timeline-row-button"
+                    onClick={() => (node ? onSelect(isSelected ? null : node.id) : undefined)}
+                  >
+                    <time>
+                      {new Date(row.createdAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}
+                    </time>
+                    <span className="timeline-speaker">{row.speaker ?? "発言者不明"}</span>
+                    <span className="timeline-text-content">
+                      <span className="timeline-label">{row.text}</span>
+                    </span>
+                    {node?.rating === 1 || row.isCorrected ? (
+                      <span className="timeline-status">
+                        {node?.rating === 1 ? (
+                          <span className="timeline-rating" aria-label="高評価">
+                            <ThumbsUp size={14} aria-hidden="true" />
+                          </span>
+                        ) : null}
+                        {row.isCorrected ? <span className="timeline-manually-adjusted">手動修正</span> : null}
+                      </span>
+                    ) : null}
+                  </button>
 
-                  <div className="timeline-text-content">
-                    {/* One utterance can carry several meanings, so each unit is
-                        shown separately instead of forcing a single label. */}
-                    {row.units.length === 0 ? (
-                      <div className="timeline-label">{row.text}</div>
-                    ) : (
-                      row.units.map((unit) => (
-                        <div className="timeline-unit" key={unit.unitId}>
+                  {/* One utterance can carry several meanings, so each unit is
+                      listed separately instead of forcing a single label. */}
+                  {row.units.length > 0 ? (
+                    <ul className="timeline-units">
+                      {row.units.map((unit) => (
+                        <li className="timeline-unit" key={unit.unitId}>
                           <SemanticBadge unit={unit} />
                           <span className="timeline-unit-text">{unit.text}</span>
                           <TimelineCorrectionMenu
@@ -153,28 +170,11 @@ export function ConversationTimeline({
                               { scope: value as Scope },
                             )}
                           />
-                        </div>
-                      ))
-                    )}
-                    {row.units.length > 1 || (row.units[0] && row.units[0].text !== row.text) ? (
-                      <details className="timeline-details">
-                        <summary>原文を見る</summary>
-                        <p>{row.text}</p>
-                      </details>
-                    ) : null}
-                  </div>
-
-                  {node?.rating === 1 || row.isCorrected ? (
-                    <span className="timeline-status">
-                      {node?.rating === 1 ? (
-                        <span className="timeline-rating" aria-label="高評価">
-                          <ThumbsUp size={14} aria-hidden="true" />
-                        </span>
-                      ) : null}
-                      {row.isCorrected ? <span className="timeline-manually-adjusted">手動修正</span> : null}
-                    </span>
+                        </li>
+                      ))}
+                    </ul>
                   ) : null}
-                </button>
+                </div>
 
                 {node ? (
                   <button
