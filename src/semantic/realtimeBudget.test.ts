@@ -23,6 +23,30 @@ describe("realtimeBudget", () => {
     expect(breach).toBe(1600);
   });
 
+  it("budgets the progress map separately from, and below, the meeting state", () => {
+    expect(REALTIME_BUDGETS_MS.progressMapRender).toBeLessThan(REALTIME_BUDGETS_MS.provisionalMeetingState);
+  });
+
+  it("sets the total budget to the sum of the two state budgets", () => {
+    expect(REALTIME_BUDGETS_MS.totalVisibleUpdate).toBe(
+      REALTIME_BUDGETS_MS.provisionalMeetingState + REALTIME_BUDGETS_MS.progressMapRender,
+    );
+  });
+
+  it("flags a total that breaches even when every split stage passes", () => {
+    // The point of keeping a total alongside the split stages: three stages can
+    // each sit inside their own budget while the sum the user waits for does not.
+    const splitStagesPass = [
+      evaluateStage({ stage: "timelineRender", p95Ms: 40, utteranceCount: 2000 }),
+      evaluateStage({ stage: "provisionalMeetingState", p95Ms: 190, utteranceCount: 2000 }),
+      evaluateStage({ stage: "progressMapRender", p95Ms: 95, utteranceCount: 2000 }),
+    ];
+    expect(splitStagesPass.every((verdict) => verdict.withinBudget)).toBe(true);
+
+    const total = evaluateStage({ stage: "totalVisibleUpdate", p95Ms: 40 + 190 + 95, utteranceCount: 2000 });
+    expect(total.withinBudget).toBe(false);
+  });
+
   it("returns null when every measured length stays within budget", () => {
     expect(firstBreachingLength([
       { stage: "timelineRender", p95Ms: 1, utteranceCount: 100 },

@@ -30,6 +30,7 @@ Phase 2以降は Phase 1 の結果を見てから発行する。
 
 - [ADR 0022](../adr/0022-semantic-core-and-central-promotion-policy.md) — 意味モデルと Promotion Policy
 - [ADR 0023](../adr/0023-realtime-first-semantic-core-fast-and-refinement-paths.md) — realtime-first の二系統。**0022 と矛盾する場合は 0023 が優先**
+- [ADR 0024](../adr/0024-realtime-budget-stages-and-speech-boundary-flush.md) — budget段階（分割＋合計）と音声確定の境界flush
 
 ## 計測コマンド
 

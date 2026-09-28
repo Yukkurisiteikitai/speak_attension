@@ -755,11 +755,20 @@ ADR 0023 の通り Phase 4 で解消する。
 
 ## 10.4 UI renderまでのcritical path
 
+> **訂正（2026-09-28）**: この節の初版は「`flushBuffer` は `speech.stop()` 時に
+> しか呼ばれない／遅延は不定」と書いていたが、**誤りだった**。
+> `useTopicEngine.ts` に `setInterval(..., SEGMENT_INTERVAL_MS = 5000)` の
+> 定期flushが存在し、遅延は**最大5秒で有界**だった（UIの「5秒バッファ」表示は正しい）。
+> 結論（音声入力にrealtime性の欠落がある）は変わらないが、大きさが確定した。
+> この遅延は [ADR 0024](../adr/0024-realtime-budget-stages-and-speech-boundary-flush.md)
+> で修正済み。以下は修正後の記述。
+
 ```
 Web Speech onresult(isFinal)
   → addTranscriptText()          bufferTextへ連結（解析なし）
-  → （stopまたは明示flushまで待機）          ← ここに不定の遅延がある
-  → flushBuffer() → processSegment()
+  → 終端句読点があれば即flush / なければ無音800msでflush
+    （話し続けた場合の上限は5000ms）        ← 修正前は一律5000ms
+  → flushSpeechBuffer() → processSegment()
       → processTopicSegment()    上表の1〜10
       → applyTransition()        11〜15
       → emit()                   listener通知
@@ -768,16 +777,30 @@ Web Speech onresult(isFinal)
       → ConversationTimeline（全件再分類）
 ```
 
-**現在のcritical pathで最大の遅延要因は解析ではなく `bufferText` の滞留である。**
-`addTranscriptText` は確定テキストをbufferへ足すだけで、
-`flushBuffer` は `speech.stop()` 時（`App.tsx` の停止ボタン）にしか呼ばれない。
-つまり音声入力では、**発話が確定してもsegment化されない時間帯が存在する**。
+**修正前のcritical pathで最大の遅延要因は解析ではなく `bufferText` の滞留だった。**
+ingestが4.4ms、fast semantic budgetが150msである一方、
+音声入力は**発話確定から最大5000ms**（budgetの33倍）segment化されなかった。
+manual / replay は `submitTranscript` で直接 `processSegment` へ入るため
+遅延を持たず、**入力経路によってrealtime性が異なっていた**。
 
-ADR 0023 の「final → Fast Semantic Path」を満たすには、
-この滞留を解消する必要がある（Phase 2の対象）。
-manual / replay 入力は `submitTranscript` で直接 `processSegment` へ入るため
-この問題を持たない。**入力経路によってrealtime性が異なる**のは
-ADR 0023 §7 の統一契約に反する。
+単純に「final到着ごとに即処理する」修正は採らなかった。
+Web Speechの `isFinal` は文末ではなく認識チャンクの区切りであり、
+文中で確定するため、即処理すると1発話が複数segmentへ断片化する。
+下流の分類器はすべて文単位を前提としているので、
+precisionを上げるための移行で逆にprecisionを落とすことになる。
+
+採った方式は**境界シグナルによるflush**である（ADR 0024）。
+
+| 条件 | flushまでの遅延 |
+|---|---|
+| 終端句読点（`。！？`）で終わるチャンク | 即時 |
+| 無音が続いた場合 | 800ms |
+| 話し続けている場合（backstop） | 5000ms（変更なし） |
+
+`です` / `ます` などの丁寧形語尾は境界として扱わない。
+Web Speechが文中で確定する形なので、これを境界にすると断片化するため。
+この判断は `topicEngineStore.test.ts` の
+「does not split a polite verb ending into its own segment」で固定している。
 
 ## 10.5 Fast Pathへ残す処理
 
@@ -789,6 +812,10 @@ ADR 0023 §7 の統一契約に反する。
 - active topicとの照合（ただしscopeを全topicから **active topic＋直近参照topic** へ縮める）
 - provisional Canonical Stateのincremental更新（差分のみ）
 - Timeline projection（**新規発話1件のみの分類**に変更する。現在の全件再分類をやめる）
+
+`buildMeetingProgress` は `progressMapRender` として独立したbudget段階になった
+（ADR 0024）。分割した各段階がそれぞれのbudget内でも合計が超える場合を
+検出するため、`totalVisibleUpdate` も併せて計測する。
 
 ## 10.6 Refinement Pathへ移す処理
 

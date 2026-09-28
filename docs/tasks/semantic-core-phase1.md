@@ -2,6 +2,7 @@
 
 対象ADR: [ADR 0022](../adr/0022-semantic-core-and-central-promotion-policy.md)（意味モデル）
         [ADR 0023](../adr/0023-realtime-first-semantic-core-fast-and-refinement-paths.md)（realtime-first）
+        [ADR 0024](../adr/0024-realtime-budget-stages-and-speech-boundary-flush.md)（budget段階・音声flush）
 前提: [Phase 0](semantic-core-phase0.md) 完了（`src/semantic/__corpus__/` と `npm run semantic:eval` が存在する）
 想定実行: クラウド（branch指定）／単独セッション
 
@@ -13,8 +14,9 @@
 1. [AGENTS.md](../../AGENTS.md)
 2. [ADR 0022](../adr/0022-semantic-core-and-central-promotion-policy.md) — §3〜§7が実装対象
 3. [ADR 0023](../adr/0023-realtime-first-semantic-core-fast-and-refinement-paths.md) — **§2〜§10が実装対象。0022より優先**
-4. `src/semantic/__corpus__/README.md`（Phase 0の成果物）
-5. `src/semantic/realtimeBudget.ts` — budgetの単一定義
+4. [ADR 0024](../adr/0024-realtime-budget-stages-and-speech-boundary-flush.md) — budget段階は5つ
+5. `src/semantic/__corpus__/README.md`（Phase 0の成果物）
+6. `src/semantic/realtimeBudget.ts` — budgetの単一定義
 
 ## このPhaseの目的
 
@@ -220,6 +222,11 @@ export type CanonicalReducer = (state: CanonicalMeetingState, event: SemanticEve
    悪化させない。** sidecarはlegacyと並列に走るが、
    Phase 1では**legacyの同期パスへ挿入しない**ので、
    ingestの数値は変わらないはずである。変わっていたら挿入してしまっている。
+   段階は5つある（ADR 0024）。`progressMapRender` と `totalVisibleUpdate` は
+   **着手時点で既にbudgetを超えている**（二次オーダーが原因、Phase 4で解消）。
+   Phase 1の条件は「超過を悪化させない」であり、「解消する」ではない。
+   実行前に必ずbenchmarkを1回走らせ、着手時点の数値をPR本文に記録すること
+   （実行環境ごとに絶対値が変わるため、他環境の数値と比較しない）。
 8. `git diff --stat` に「絶対にやらないこと」2で列挙したファイルが含まれない。
 9. `src/components/` と `src/hooks/` に差分がない。
 10. Fast Pathの関数シグネチャが会議全体を受け取らない（`context` 経由のみ）。

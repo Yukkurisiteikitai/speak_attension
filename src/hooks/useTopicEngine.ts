@@ -3,7 +3,14 @@ import { createTopicEngineStore } from "./topicEngineStore";
 import type { LlmSettings } from "../utils/llmClient";
 import { buildMissingContributions } from "../utils/missingContribution";
 
-const SEGMENT_INTERVAL_MS = 5000;
+// A final Web Speech chunk should reach the fast path within the realtime
+// budget (ADR 0023 §10), not on a fixed 5s tick. The buffer is flushed once
+// speech has been quiet for SPEECH_IDLE_FLUSH_MS -- a pause is the boundary
+// signal -- with SPEECH_MAX_BUFFER_MS as a backstop for a speaker who never
+// pauses. Polling at SEGMENT_POLL_MS only reads two timestamps.
+const SEGMENT_POLL_MS = 250;
+const SPEECH_IDLE_FLUSH_MS = 800;
+const SPEECH_MAX_BUFFER_MS = 5000;
 
 type UseTopicEngineOptions = {
   onLog?: (entry: import("../types/topic").SessionLogEntry) => void;
@@ -37,8 +44,8 @@ export function useTopicEngine({ onLog, llmSettings }: UseTopicEngineOptions = {
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      store.flushBuffer();
-    }, SEGMENT_INTERVAL_MS);
+      store.flushIfIdle(SPEECH_IDLE_FLUSH_MS, SPEECH_MAX_BUFFER_MS);
+    }, SEGMENT_POLL_MS);
     return () => window.clearInterval(timer);
   }, [store]);
 

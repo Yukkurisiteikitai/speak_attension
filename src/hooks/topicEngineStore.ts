@@ -38,6 +38,11 @@ type TopicEngineStoreSnapshot = {
   engineState: TopicEngineState;
   conversationTree: ConversationTreeState;
   bufferText: string;
+  // When the current speech buffer first received text, and when it last grew.
+  // Both null while the buffer is empty. Used to flush on an utterance
+  // boundary or a short silence instead of a fixed interval (ADR 0023 §7).
+  bufferStartedAt: number | null;
+  bufferUpdatedAt: number | null;
   logs: SessionLogEntry[];
   segmentArchive: AnalyzedSegment[];
   meetingSummary: MeetingSummary | null;
@@ -62,6 +67,10 @@ type TopicEngineStore = {
   addLog: (entry: Omit<SessionLogEntry, "id" | "at"> & { at?: number }) => void;
   addTranscriptText: (text: string) => void;
   flushBuffer: () => void;
+  // Flushes only when the buffer has been quiet for `idleMs`, or has been
+  // accumulating for `maxAgeMs`. Cheap enough to poll; does nothing when the
+  // buffer is empty.
+  flushIfIdle: (idleMs: number, maxAgeMs: number) => void;
   getCurrentTopicGaps: () => ReturnType<typeof getCurrentTopicGaps>;
   getSnapshot: () => TopicEngineStoreSnapshot;
   organizeMeeting: () => Promise<void>;
@@ -82,6 +91,13 @@ type TopicEngineStore = {
 };
 
 // Owns the live engine snapshot and the command queue for speech, manual text, and replay input.
+
+// Only explicit terminal punctuation. Deliberately does not treat polite verb
+// endings (です/ます) as boundaries: Web Speech emits mid-sentence final chunks,
+// and splitting on those would fragment one utterance across several segments,
+// which every downstream classifier reads as separate statements.
+const SENTENCE_END_PATTERN = /[。！？]$/;
+
 function cleanText(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
@@ -120,6 +136,8 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
     engineState: createInitialTopicEngineState(),
     conversationTree: createInitialConversationTreeState(),
     bufferText: "",
+    bufferStartedAt: null,
+    bufferUpdatedAt: null,
     logs: [],
     segmentArchive: [],
     meetingSummary: null,
@@ -138,6 +156,13 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
   let progressRequest = 0;
   let progressController: AbortController | null = null;
   let lastReviewedRevision = -1;
+
+  function flushSpeechBuffer() {
+    const text = cleanText(snapshot.bufferText);
+    if (!text) return;
+    snapshot = { ...snapshot, bufferText: "", bufferStartedAt: null, bufferUpdatedAt: null };
+    processSegment(text, "speech");
+  }
 
   function refreshProgress() {
     const state = snapshot.engineState;
@@ -323,6 +348,7 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
     addTranscriptText(text) {
       const nextText = cleanText(text);
       if (!nextText) return;
+      const now = Date.now();
       const bufferText = [snapshot.bufferText, nextText].filter(Boolean).join(" ");
       addLog({
         type: "speech",
@@ -332,16 +358,27 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
       writeSnapshot({
         ...snapshot,
         bufferText,
+        bufferStartedAt: snapshot.bufferStartedAt ?? now,
+        bufferUpdatedAt: now,
       });
+      // An explicit sentence-final marker is a real utterance boundary, so the
+      // segment can enter the fast path now rather than waiting for silence.
+      // Japanese Web Speech usually omits punctuation, so this is an
+      // opportunistic shortcut -- flushIfIdle is the mechanism that actually
+      // bounds the latency.
+      if (SENTENCE_END_PATTERN.test(nextText)) flushSpeechBuffer();
     },
     flushBuffer() {
-      const text = cleanText(snapshot.bufferText);
-      if (!text) return;
-      snapshot = {
-        ...snapshot,
-        bufferText: "",
-      };
-      processSegment(text, "speech");
+      flushSpeechBuffer();
+    },
+    flushIfIdle(idleMs, maxAgeMs) {
+      if (!snapshot.bufferText) return;
+      const now = Date.now();
+      const quietFor = now - (snapshot.bufferUpdatedAt ?? now);
+      const bufferAge = now - (snapshot.bufferStartedAt ?? now);
+      // Silence is the boundary signal. maxAgeMs is only a backstop so that a
+      // speaker who never pauses still gets segmented.
+      if (quietFor >= idleMs || bufferAge >= maxAgeMs) flushSpeechBuffer();
     },
     getCurrentTopicGaps() {
       return getCurrentTopicGaps(snapshot.engineState);
@@ -414,6 +451,8 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
         engineState: createInitialTopicEngineState(),
         conversationTree: createInitialConversationTreeState(),
         bufferText: "",
+        bufferStartedAt: null,
+        bufferUpdatedAt: null,
         logs: [],
         segmentArchive: [],
         meetingSummary: null,

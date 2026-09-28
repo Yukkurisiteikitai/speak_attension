@@ -15,6 +15,16 @@ export const REALTIME_BUDGETS_MS = {
   fastSemantic: 150,
   // provisional Meeting State reflects the new utterance
   provisionalMeetingState: 200,
+  // The "流れ・次の検討" map, which only renders while that panel is open.
+  // Budgeted separately because it is the fastest-growing measured cost, and
+  // half of provisionalMeetingState because it is an optional panel rather
+  // than the primary surface. Not part of the original ADR 0023 targets.
+  progressMapRender: 100,
+  // Everything the facilitator waits for when every panel is on screen:
+  // ingest + timeline + meeting state + progress map. Budgeted as the sum of
+  // the two state budgets (200 + 100) so that splitting the stages cannot hide
+  // a regression that only shows up in the total. Also not an original target.
+  totalVisibleUpdate: 300,
 } as const;
 
 export type RealtimeStage = keyof typeof REALTIME_BUDGETS_MS;

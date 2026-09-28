@@ -96,11 +96,23 @@ function measureLength(targetCount: number): LengthResult {
 
 // Maps raw measurements onto the budgeted stages. A stage is the user-visible
 // wait, so it includes ingest: the Timeline cannot render before ingest returns.
+// The stages are reported both split and as a total, because three stages can
+// each sit inside their own budget while the sum the facilitator waits for does
+// not.
 function toStageMeasurements(result: LengthResult): StageMeasurement[] {
+  const timelineRender = result.ingestP95Ms + result.timelineMs;
+  const provisionalMeetingState = result.ingestP95Ms + result.meetingStateMs;
   return [
-    { stage: "timelineRender", p95Ms: result.ingestP95Ms + result.timelineMs, utteranceCount: result.utteranceCount },
+    { stage: "timelineRender", p95Ms: timelineRender, utteranceCount: result.utteranceCount },
     { stage: "fastSemantic", p95Ms: result.ingestP95Ms, utteranceCount: result.utteranceCount },
-    { stage: "provisionalMeetingState", p95Ms: result.ingestP95Ms + result.meetingStateMs, utteranceCount: result.utteranceCount },
+    { stage: "provisionalMeetingState", p95Ms: provisionalMeetingState, utteranceCount: result.utteranceCount },
+    { stage: "progressMapRender", p95Ms: result.progressMapMs, utteranceCount: result.utteranceCount },
+    // ingest is counted once, not once per panel.
+    {
+      stage: "totalVisibleUpdate",
+      p95Ms: result.ingestP95Ms + result.timelineMs + result.meetingStateMs + result.progressMapMs,
+      utteranceCount: result.utteranceCount,
+    },
   ];
 }
 
@@ -120,7 +132,13 @@ for (const result of results) {
 }
 
 console.log("\n--- Budget verdicts ---\n");
-const stages: RealtimeStage[] = ["timelineRender", "fastSemantic", "provisionalMeetingState"];
+const stages: RealtimeStage[] = [
+  "timelineRender",
+  "fastSemantic",
+  "provisionalMeetingState",
+  "progressMapRender",
+  "totalVisibleUpdate",
+];
 const allMeasurements = results.flatMap(toStageMeasurements);
 
 for (const stage of stages) {
@@ -135,10 +153,10 @@ for (const stage of stages) {
   );
 }
 
-// progressMap is not a budgeted stage (it only renders when that map is open)
-// but it is the fastest-growing cost measured, so report its shape explicitly.
+// progressMapRender only applies while that panel is open, so report its growth
+// shape explicitly alongside the verdict above.
 const progressGrowth = results.map((result) => `n=${result.utteranceCount}: ${result.progressMapMs.toFixed(1)}ms`).join("  ");
-console.log(`\nprogressMap (unbudgeted, renders only when opened): ${progressGrowth}`);
+console.log(`\nprogressMapRender (applies only while that panel is open): ${progressGrowth}`);
 
 const logsDir = path.join(process.cwd(), "logs");
 if (!fs.existsSync(logsDir)) fs.mkdirSync(logsDir, { recursive: true });

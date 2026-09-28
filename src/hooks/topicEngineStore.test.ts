@@ -21,6 +21,91 @@ describe("topicEngineStore", () => {
     expect(snapshot.logs[1]?.type).toBe("speech");
   });
 
+  it("flushes on silence so a final utterance is not held for the full buffer window", () => {
+    // ADR 0023 §7: a final transcript enters the fast path on the next quiet
+    // tick, not on a fixed 5s interval.
+    let now = 1_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const store = createTopicEngineStore();
+
+    store.addTranscriptText("レイテンシー対策を決めたいです");
+    now = 1_400; // 400ms of silence: below the idle threshold
+    store.flushIfIdle(800, 5_000);
+    expect(store.getSnapshot().engineState.segments).toHaveLength(0);
+    expect(store.getSnapshot().bufferText).toBe("レイテンシー対策を決めたいです");
+
+    now = 1_900; // 900ms of silence: flush
+    store.flushIfIdle(800, 5_000);
+    const snapshot = store.getSnapshot();
+    expect(snapshot.bufferText).toBe("");
+    expect(snapshot.engineState.segments[0]?.text).toBe("レイテンシー対策を決めたいです");
+  });
+
+  it("keeps merging while speech continues, then flushes as one segment", () => {
+    let now = 1_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const store = createTopicEngineStore();
+
+    store.addTranscriptText("今日は");
+    now = 1_300;
+    store.flushIfIdle(800, 5_000);
+    now = 1_500;
+    store.addTranscriptText("レイテンシー対策を決めたいです");
+    now = 2_400;
+    store.flushIfIdle(800, 5_000);
+
+    const snapshot = store.getSnapshot();
+    expect(snapshot.engineState.segments).toHaveLength(1);
+    expect(snapshot.engineState.segments[0]?.text).toBe("今日は レイテンシー対策を決めたいです");
+  });
+
+  it("flushes at the backstop even when speech never pauses", () => {
+    let now = 1_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const store = createTopicEngineStore();
+
+    for (let step = 0; step < 12; step += 1) {
+      store.addTranscriptText(`区切りのない発話${step}`);
+      now += 500; // always shorter than the idle threshold
+      store.flushIfIdle(800, 5_000);
+    }
+
+    expect(store.getSnapshot().engineState.segments.length).toBeGreaterThan(0);
+  });
+
+  it("flushes immediately on explicit terminal punctuation", () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_000);
+    const store = createTopicEngineStore();
+
+    store.addTranscriptText("レイテンシー対策を決めます。");
+
+    const snapshot = store.getSnapshot();
+    expect(snapshot.bufferText).toBe("");
+    expect(snapshot.engineState.segments[0]?.text).toBe("レイテンシー対策を決めます。");
+  });
+
+  it("does not split a polite verb ending into its own segment", () => {
+    // Web Speech emits mid-sentence final chunks; splitting on です/ます would
+    // fragment one utterance across segments.
+    vi.spyOn(Date, "now").mockReturnValue(1_000);
+    const store = createTopicEngineStore();
+
+    store.addTranscriptText("対応します");
+
+    expect(store.getSnapshot().engineState.segments).toHaveLength(0);
+    expect(store.getSnapshot().bufferText).toBe("対応します");
+  });
+
+  it("flushIfIdle does nothing when the buffer is empty", () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_000);
+    const store = createTopicEngineStore();
+
+    store.flushIfIdle(0, 0);
+
+    expect(store.getSnapshot().engineState.segments).toHaveLength(0);
+    expect(store.getSnapshot().logs).toHaveLength(0);
+  });
+
   it("applies manual focus and lock against the latest engine state", () => {
     vi.spyOn(Date, "now")
       .mockReturnValueOnce(1_000)
