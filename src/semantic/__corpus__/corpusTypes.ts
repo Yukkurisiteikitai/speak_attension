@@ -1,4 +1,8 @@
-export type SemanticUnit = {
+// The *expected* axes for one unit in a corpus case -- a golden expectation,
+// not the runtime unit. The runtime shape lives in src/semantic/types.ts and
+// carries span/provenance/epistemic as well; keeping the names distinct stops
+// a corpus expectation being mistaken for a parser output.
+export type SemanticUnitExpectation = {
   scope?: "meeting_process" | "subject_matter" | "artifact_content" | "unknown";
   role?: "topic" | "agenda_item" | "context" | "problem" | "reason" | "evidence" | "option" | "proposal" | "decision" | "action" | "question" | "acknowledgement" | "other";
   act?: "topic_start" | "enumerate" | "report" | "ask" | "suggest" | "advocate" | "oppose" | "decide" | "commit" | "defer" | "acknowledge" | "other";
@@ -16,7 +20,7 @@ export type CanonicalExpectation = {
 
 export type TestCaseExpectation = {
   canonical: CanonicalExpectation;
-  units?: SemanticUnit[];
+  units?: SemanticUnitExpectation[];
   unitCount?: number;
 };
 
