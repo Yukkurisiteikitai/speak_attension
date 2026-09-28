@@ -14,7 +14,8 @@
     "preview": "vite preview",
     "report:discord": "tsx --env-file-if-exists=.env scripts/sendImplementationReport.ts",
     "shadow-replay": "tsx design-hinge/replay/runShadowMode.ts",
-    "semantic:eval": "tsx scripts/evaluateSemanticCorpus.ts"
+    "semantic:eval": "tsx scripts/evaluateSemanticCorpus.ts",
+    "semantic:bench": "tsx scripts/benchmarkRealtime.ts"
   },
   "dependencies": {
     "@xyflow/react": "^12.8.4",

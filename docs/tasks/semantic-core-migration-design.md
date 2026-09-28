@@ -4,8 +4,14 @@ Status: draft / 未実装
 作成日: 2026-09-28
 対象: `src/utils` の意味解釈層、`src/hooks/topicEngineStore.ts`、`design-hinge/`
 
+> **改訂（2026-09-28）**: [ADR 0023](../adr/0023-realtime-first-semantic-core-fast-and-refinement-paths.md)
+> により、§3〜§6 の直列パイプライン記述は Fast Path / Refinement Path の
+> 二系統へ修正された。§10 に監査結果を追記した。
+> 直列パイプラインとして読まないこと。
+
 この文書は移行全体の設計・分析である。恒久的な決定は
-[ADR 0022](../adr/0022-semantic-core-and-central-promotion-policy.md) に、
+[ADR 0022](../adr/0022-semantic-core-and-central-promotion-policy.md) と
+[ADR 0023](../adr/0023-realtime-first-semantic-core-fast-and-refinement-paths.md) に、
 Phase ごとの実行手順は [Phase 0](semantic-core-phase0.md) /
 [Phase 1](semantic-core-phase1.md) の指示書に記録する。
 
@@ -474,6 +480,10 @@ Timeline（Phase 2）は `classifyUtterance` の唯一の利用者であり、
 Phase 4 で `decisionGraph` を Canonical State からの投影に置き換えると、
 上表の読み手は形が変わらないまま中身が正しくなる。
 
+各 Phase が Fast Path / Refinement Path のどちらを実装するかは
+[ADR 0023](../adr/0023-realtime-first-semantic-core-fast-and-refinement-paths.md)
+の Phase 表で決定している。Refinement Path の実稼働は Phase 5 まで行わない。
+
 ### 6.2 各 Phase の完了条件
 
 各 Phase 終了時に legacy との比較結果を
@@ -661,3 +671,143 @@ R8 の通り、semantic classification と STT を同時に debug しない。
 2. ADR 0022 を記録
 3. Phase 0: corpus ＋ characterization test の実装
 4. Phase 1: Semantic Core 型 ＋ sidecar parser（legacy 出力を変えない）
+
+---
+
+# 10. Realtime Architecture Audit（ADR 0023 の根拠）
+
+[ADR 0023](../adr/0023-realtime-first-semantic-core-fast-and-refinement-paths.md) で
+Semantic Core を Fast Path / Refinement Path の二系統へ修正した。
+その判断根拠となる監査結果を記録する。
+
+計測コマンド: `npm run semantic:bench`（`scripts/benchmarkRealtime.ts`）
+
+## 10.1 現在の1 utterance処理時間
+
+`submitTranscript` 1回の同期時間（ms）。`n` は会議の累積発話数。
+
+|    n | ingest p50 | ingest p95 | ingest max |
+|-----:|-----------:|-----------:|-----------:|
+|  100 |        0.3 |        0.6 |        0.9 |
+|  400 |        0.5 |        0.8 |        8.4 |
+|  800 |        0.6 |        1.0 |        2.2 |
+| 1600 |        1.0 |        1.8 |        2.2 |
+| 3200 |        1.9 |        4.4 |        5.3 |
+
+**Fast semantic budget 150ms に対して消費率3%。** 現状は問題ない。
+n=400のmax 8.4msは初回JIT由来で、p95には現れない。
+
+したがってADR 0023は既存の性能問題の修正ではなく、
+**Semantic Coreが持ち込みうる退行の予防**である。
+この数値がPhase 1以降の回帰基準になる。
+
+## 10.2 各moduleが同期的に行う仕事
+
+発話1件で同期実行されるもの（`processSegment` → `applyTransition`）。
+
+| 順 | module | 仕事 | scope |
+|---|---|---|---|
+| 1 | `intentRules.detectUtteranceIntent` | intent 8種の判定 | 当該発話のみ |
+| 2 | `topicExtraction.extractTopicPhrases` | 話題語候補の抽出 | 当該発話のみ |
+| 3 | `topicExtraction.resolveTopicReference` | 「それ」「この話」の解決 | 当該発話＋current topic |
+| 4 | `topicSelection.chooseSelectedTopic` | 既存topicとの照合 | **全topic node** |
+| 5 | `topicCoverage.detectCoverageUpdates` | 誰/いつ/なぜ の充足判定 | 当該発話のみ |
+| 6 | `topicLifecycle.updateCoverage` / `refreshTopicDerivedState` | topic更新 | 対象topicのみ |
+| 7 | `topicLifecycle.closeDormantTopics` | 休止topicのclose | **全topic node** |
+| 8 | `topicLifecycle.projectState` | React Flow投影の再構築 | graph全体＋直近80発話 |
+| 9 | `meetingDecisionGraph.appendMeetingDecisionSegment` | 型付きノード生成・関係付け | **全node（境界走査）** |
+| 10 | `topicLifecycle.createImportantMention` | 重要度判定 | 当該発話のみ |
+| 11 | `conversationTree.appendConversationSegment` | role判定・親推定 | **全tree node（祖先walk）** |
+| 12 | `segmentArchive` への追加 | 配列のspreadコピー | **全archive（O(n)コピー）** |
+| 13 | `refreshProgress` → `buildMissingContributions` | 不足点の再評価 | 全gap・全topic・decisionGraph |
+| 14 | `refreshProgress` → `buildDiscussionPrompts` | 質問候補の再導出 | **全archive走査** |
+| 15 | `runtimeLog.addLog` | ログ追記（payloadに全segment） | O(1) |
+
+描画時（React再レンダリング）に同期実行されるもの:
+
+| module | scope | n=3200実測 |
+|---|---|---|
+| `meetingStateDashboard.buildMeetingStateDashboard` | 全node＋決定ごとに全edge | 74.8ms（`buildCurrentDiscussionState` 含む） |
+| `currentDiscussionState.buildCurrentDiscussionState` | 全node | 0.1ms |
+| `ConversationTimeline` の `classifyUtterance` | **全tree nodeを毎回再分類** | 1.5ms |
+| `meetingProgress.buildMeetingProgress`（当該マップを開いている場合のみ） | **tree × graph の入れ子** | 336.5ms |
+
+## 10.3 Full-history scanの有無
+
+**ある。** 同期パスに以下が存在する。
+
+| 箇所 | 内容 | 現状の実測影響 |
+|---|---|---|
+| `appendMeetingDecisionSegment` の境界走査 | `current.nodes.forEach` で全nodeに `BOUNDARY_PATTERN` を適用 | ingestに含まれ、n=3200で4.4ms以内。許容範囲 |
+| `buildDiscussionPrompts` | `new Set(segments.map(...))` で全archive | 同上 |
+| `segmentArchive` のspreadコピー | 発話ごとに配列全体を複製（合計O(n²)） | 同上 |
+| `buildMeetingStateDashboard` | 決定ごとに `selectDecisionParents` が全edgeを走査 | **二次オーダー。n=3200で74.8ms** |
+| `buildMeetingProgress` | `tree.nodes` × `graph.nodes.filter(...)` | **二次オーダー。n=1600で84.7ms、n=3200で336.5ms** |
+
+`projectState` は全archiveではなく直近80発話（`state.segments`）のみを見る。
+これは正しい設計であり、他モジュールが従うべき前例である。
+
+**結論**: 軽い全履歴走査（ingest内）は現状許容できるが、
+描画時の二次オーダー2件は長時間会議で budget を破る。
+2時間の会議（5秒に1発話で約1440発話）は実際に到達する範囲である。
+`provisionalMeetingState` はこのままn≈5000でbudgetを破る。
+ADR 0023 の通り Phase 4 で解消する。
+
+## 10.4 UI renderまでのcritical path
+
+```
+Web Speech onresult(isFinal)
+  → addTranscriptText()          bufferTextへ連結（解析なし）
+  → （stopまたは明示flushまで待機）          ← ここに不定の遅延がある
+  → flushBuffer() → processSegment()
+      → processTopicSegment()    上表の1〜10
+      → applyTransition()        11〜15
+      → emit()                   listener通知
+  → useSyncExternalStore が再レンダリング
+      → buildMeetingStateDashboard / buildCurrentDiscussionState
+      → ConversationTimeline（全件再分類）
+```
+
+**現在のcritical pathで最大の遅延要因は解析ではなく `bufferText` の滞留である。**
+`addTranscriptText` は確定テキストをbufferへ足すだけで、
+`flushBuffer` は `speech.stop()` 時（`App.tsx` の停止ボタン）にしか呼ばれない。
+つまり音声入力では、**発話が確定してもsegment化されない時間帯が存在する**。
+
+ADR 0023 の「final → Fast Semantic Path」を満たすには、
+この滞留を解消する必要がある（Phase 2の対象）。
+manual / replay 入力は `submitTranscript` で直接 `processSegment` へ入るため
+この問題を持たない。**入力経路によってrealtime性が異なる**のは
+ADR 0023 §7 の統一契約に反する。
+
+## 10.5 Fast Pathへ残す処理
+
+当該発話と局所文脈だけで判定でき、かつ実測で軽いもの。
+
+- 単一発話に対する字句・構造シグナル（intent、話題語、coverage、重要度）
+- 6軸のうち明示マーカーで決まる部分（`scope` / `act` / `commitment` の explicit 判定）
+- span分割（`segmentUnits`。単一発話内で完結する）
+- active topicとの照合（ただしscopeを全topicから **active topic＋直近参照topic** へ縮める）
+- provisional Canonical Stateのincremental更新（差分のみ）
+- Timeline projection（**新規発話1件のみの分類**に変更する。現在の全件再分類をやめる）
+
+## 10.6 Refinement Pathへ移す処理
+
+- pronoun / reference resolution（`resolveTopicReference` の全解決）
+- multi-utterance relation resolution（`appendMeetingDecisionSegment` の近接関係付け）
+- 全履歴を見る一貫性チェック（`buildDiscussionPrompts`、`buildMissingContributions`）
+- ambiguous な option / proposal の切り分け
+- `closeDormantTopics`（休止判定は即時性を要しない）
+- LLM推論（title refine、gap review、synthesis。すべて既に非同期）
+- 二次オーダーの再構築（`buildMeetingProgress`、`buildMeetingStateDashboard` の全再計算）
+
+## 10.7〜10.10（ADR 0023 で決定済み）
+
+重複定義を作らないため、以下は ADR 0023 の該当節を参照する。
+この文書に写さない。
+
+| 監査項目 | 決定箇所 |
+|---|---|
+| 7. Incremental state reducer案 | [ADR 0023 §5](../adr/0023-realtime-first-semantic-core-fast-and-refinement-paths.md) |
+| 8. stale async resultを防ぐrevision/version設計 | ADR 0023 §8 |
+| 9. human correctionとbackground inferenceの競合解決 | ADR 0023 §9 |
+| 10. STT interim/final event contract | ADR 0023 §7 |

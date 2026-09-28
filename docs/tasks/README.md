@@ -21,7 +21,19 @@ Phase 0 corpus 設計、rollback strategy、risk analysis。
 
 | 指示書 | 内容 | 前提 |
 |---|---|---|
-| [semantic-core-phase0.md](semantic-core-phase0.md) | Phase 0: golden corpus + characterization tests | [ADR 0022](../adr/0022-semantic-core-and-central-promotion-policy.md) |
-| [semantic-core-phase1.md](semantic-core-phase1.md) | Phase 1: Semantic Core types + sidecar parser | Phase 0 完了 |
+| [semantic-core-phase0.md](semantic-core-phase0.md) | Phase 0: golden corpus + characterization tests | **完了**（`npm run semantic:eval`） |
+| [semantic-core-phase1.md](semantic-core-phase1.md) | Phase 1: 型 + Fast Path sidecar parser | Phase 0 完了。ADR 0023 で改訂済み |
 
 Phase 2以降は Phase 1 の結果を見てから発行する。
+
+## 関連ADR
+
+- [ADR 0022](../adr/0022-semantic-core-and-central-promotion-policy.md) — 意味モデルと Promotion Policy
+- [ADR 0023](../adr/0023-realtime-first-semantic-core-fast-and-refinement-paths.md) — realtime-first の二系統。**0022 と矛盾する場合は 0023 が優先**
+
+## 計測コマンド
+
+| コマンド | 用途 |
+|---|---|
+| `npm run semantic:eval` | corpus に対する決定・アクションの precision / recall と false positive |
+| `npm run semantic:bench` | realtime budget（ADR 0023 §10）に対する実測。report であり test ではない |
