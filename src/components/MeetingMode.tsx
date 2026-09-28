@@ -212,10 +212,11 @@ export function MeetingMode({
           ) : (
             <ConversationView
               conversationTree={topicEngine.conversationTree}
-              segments={topicEngine.segmentArchive}
+              timelineRows={topicEngine.timelineRows}
               selectedNodeId={selectedConversationNodeId}
               onRate={topicEngine.toggleConversationNodeRating}
               onSelect={setSelectedConversationNodeId}
+              onCorrect={topicEngine.recordSemanticCorrection}
               onStart={speech.start}
             />
           )}

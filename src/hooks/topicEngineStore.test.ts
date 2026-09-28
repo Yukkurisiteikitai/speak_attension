@@ -106,6 +106,85 @@ describe("topicEngineStore", () => {
     expect(store.getSnapshot().logs).toHaveLength(0);
   });
 
+  it("ingests each utterance into Semantic Core alongside the legacy engine", () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_000);
+    const store = createTopicEngineStore();
+
+    store.submitTranscript("対戦ゲーム形式を採用します", "manual");
+
+    const snapshot = store.getSnapshot();
+    // Legacy still runs untouched.
+    expect(snapshot.engineState.segments).toHaveLength(1);
+    // And the same utterance is in the semantic log, keyed by the segment id.
+    expect(snapshot.semantic.log.events).toHaveLength(1);
+    expect(snapshot.semantic.assertions.length).toBeGreaterThan(0);
+    expect(snapshot.semantic.assertions[0].unit.utteranceId).toBe(snapshot.engineState.segments[0].id);
+    expect(snapshot.semantic.canonical.byKind.decision).toHaveLength(1);
+  });
+
+  it("maps each input source onto a normalized provider", () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_000);
+    const store = createTopicEngineStore();
+
+    store.submitTranscript("手入力の発言です", "manual");
+    store.addTranscriptText("音声の発言です。");
+
+    const providers = store.getSnapshot().semantic.log.events
+      .flatMap((event) => (event.kind === "utterance_added" ? [event.utterance.provider] : []));
+    expect(providers).toEqual(["manual", "web_speech"]);
+  });
+
+  it("records a human correction as an event, not as UI state", () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_000);
+    const store = createTopicEngineStore();
+    store.submitTranscript("鈴木さんがプロトタイプを来週金曜日までに作成します", "manual");
+    const unitId = store.getSnapshot().semantic.assertions[0].unit.id;
+    const utteranceId = store.getSnapshot().engineState.segments[0].id;
+
+    store.recordSemanticCorrection({ utteranceId, unitId }, { role: "option" }, "実際は候補の一つ");
+
+    const snapshot = store.getSnapshot();
+    expect(snapshot.semantic.corrections).toHaveLength(1);
+    expect(snapshot.semantic.corrections[0].axes).toEqual({ role: "option" });
+    expect(snapshot.semantic.log.events.some((event) => event.kind === "human_correction")).toBe(true);
+  });
+
+  it("keeps a correction after further utterances are ingested", () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_000);
+    const store = createTopicEngineStore();
+    store.submitTranscript("鈴木さんがプロトタイプを来週金曜日までに作成します", "manual");
+    const unitId = store.getSnapshot().semantic.assertions[0].unit.id;
+    const utteranceId = store.getSnapshot().engineState.segments[0].id;
+    store.recordSemanticCorrection({ utteranceId, unitId }, { role: "option" });
+
+    store.submitTranscript("次の議題に移ります", "manual");
+
+    expect(store.getSnapshot().semantic.corrections).toHaveLength(1);
+  });
+
+  it("ignores a correction that names no axis", () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_000);
+    const store = createTopicEngineStore();
+    store.submitTranscript("対戦ゲーム形式を採用します", "manual");
+
+    store.recordSemanticCorrection({ utteranceId: "whatever" }, {});
+
+    expect(store.getSnapshot().semantic.corrections).toHaveLength(0);
+  });
+
+  it("clears semantic state on reset", () => {
+    vi.spyOn(Date, "now").mockReturnValue(1_000);
+    const store = createTopicEngineStore();
+    store.submitTranscript("対戦ゲーム形式を採用します", "manual");
+
+    store.reset();
+
+    const snapshot = store.getSnapshot();
+    expect(snapshot.semantic.log.events).toEqual([]);
+    expect(snapshot.semantic.assertions).toEqual([]);
+    expect(snapshot.semantic.canonical.entries).toEqual([]);
+  });
+
   it("applies manual focus and lock against the latest engine state", () => {
     vi.spyOn(Date, "now")
       .mockReturnValueOnce(1_000)

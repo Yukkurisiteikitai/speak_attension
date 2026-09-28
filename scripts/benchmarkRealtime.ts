@@ -16,6 +16,8 @@ import { buildMeetingStateDashboard } from "../src/utils/meetingStateDashboard";
 import { buildCurrentDiscussionState } from "../src/utils/currentDiscussionState";
 import { buildMeetingProgress } from "../src/utils/meetingProgress";
 import { classifyUtterance } from "../src/utils/utteranceClassification";
+import { buildTimelineProjection } from "../src/semantic/timelineProjection";
+import { SEMANTIC_CORE_FLAGS } from "../src/semantic/flags";
 import { evaluateStage, firstBreachingLength, type RealtimeStage, type StageMeasurement } from "../src/semantic/realtimeBudget";
 
 // Mixed real meeting speech (decisions, reports, options, fillers, references)
@@ -73,9 +75,12 @@ function measureLength(targetCount: number): LengthResult {
   const snapshot = store.getSnapshot();
   const engine = snapshot.engineState;
 
-  // Timeline currently re-classifies every node whenever the node list changes,
-  // so the per-utterance render cost is the whole-list cost.
-  const timelineMs = timeAverage(() => snapshot.conversationTree.nodes.map((node) => classifyUtterance(node.originalText)));
+  // Measures whichever Timeline path is live. Since Phase 2 that is the semantic
+  // projection; the legacy whole-list re-classification is kept behind the flag
+  // so a rollback is measured honestly too.
+  const timelineMs = SEMANTIC_CORE_FLAGS.timeline
+    ? timeAverage(() => buildTimelineProjection(snapshot.semantic))
+    : timeAverage(() => snapshot.conversationTree.nodes.map((node) => classifyUtterance(node.originalText)));
   const meetingStateMs = timeAverage(() => {
     buildMeetingStateDashboard(engine.decisionGraph, snapshot.decisionSupport.materials, null);
     buildCurrentDiscussionState(engine.meetingGraph, engine.currentTopicId, engine.decisionGraph, snapshot.segmentArchive);

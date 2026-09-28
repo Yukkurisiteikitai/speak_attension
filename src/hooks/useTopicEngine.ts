@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { createTopicEngineStore } from "./topicEngineStore";
 import type { LlmSettings } from "../utils/llmClient";
 import { buildMissingContributions } from "../utils/missingContribution";
+import { buildTimelineProjection } from "../semantic/timelineProjection";
+import { SEMANTIC_CORE_FLAGS } from "../semantic/flags";
 
 // A final Web Speech chunk should reach the fast path within the realtime
 // budget (ADR 0023 §10), not on a fixed 5s tick. The buffer is flushed once
@@ -49,6 +51,14 @@ export function useTopicEngine({ onLog, llmSettings }: UseTopicEngineOptions = {
     return () => window.clearInterval(timer);
   }, [store]);
 
+  // Projection, not interpretation: buildTimelineProjection reads the assertions
+  // the fast path already produced. Memoized on the semantic snapshot so a new
+  // utterance does not re-derive the whole meeting.
+  const timelineRows = useMemo(
+    () => (SEMANTIC_CORE_FLAGS.timeline ? buildTimelineProjection(snapshot.semantic) : []),
+    [snapshot.semantic],
+  );
+
   const currentTopic = useMemo(
     () => snapshot.engineState.meetingGraph.nodes.find((node) => node.id === snapshot.engineState.currentTopicId) ?? null,
     [snapshot.engineState.currentTopicId, snapshot.engineState.meetingGraph.nodes],
@@ -78,6 +88,9 @@ export function useTopicEngine({ onLog, llmSettings }: UseTopicEngineOptions = {
     addLog: store.addLog,
     addTranscriptText: store.addTranscriptText,
     bufferText: snapshot.bufferText,
+    // Semantic Core (ADR 0022 §9). Phase 2 consumes this for the Timeline only.
+    timelineRows,
+    recordSemanticCorrection: store.recordSemanticCorrection,
     conversationTree: snapshot.conversationTree,
     currentTopic,
     currentTopicGaps,
