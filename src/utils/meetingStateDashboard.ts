@@ -22,7 +22,12 @@ export type MeetingStateDashboardViewModel = {
   confirmedDecisions: MeetingDecisionNode[];
   reasonsByDecisionId: Record<string, MeetingDecisionNode[]>;
   structuralGaps: StructuralGap[];
+  // Union of the two lists below; kept whole for counting and corpus evaluation.
   unresolvedItems: MeetingDecisionNode[];
+  // Open questions and unconfirmed claims: something still has to be answered.
+  openItems: MeetingDecisionNode[];
+  // Proposals nobody adopted yet: optional ideas, not blockers.
+  pendingProposals: MeetingDecisionNode[];
   // Candidates surfaced by decisionSupport.ts. That engine is rule/regex based,
   // not an LLM call, so these must never be labeled "AI" in the UI or in this
   // model's naming — "system suggested", not "AI suggested".
@@ -145,6 +150,8 @@ export function buildMeetingStateDashboard(
     reasonsByDecisionId,
     structuralGaps,
     unresolvedItems,
+    openItems: unresolvedItems.filter((node) => node.type !== "proposal"),
+    pendingProposals: unresolvedItems.filter((node) => node.type === "proposal"),
     systemSuggestedChecks,
     humanConfirmedChecks,
     nextActions,

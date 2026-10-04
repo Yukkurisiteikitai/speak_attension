@@ -172,7 +172,8 @@ export function MeetingMode({
               confirmedDecisions={dashboard.confirmedDecisions}
               reasonsByDecisionId={dashboard.reasonsByDecisionId}
               structuralGaps={dashboard.structuralGaps}
-              unresolvedItems={dashboard.unresolvedItems}
+              openItems={dashboard.openItems}
+              pendingProposals={dashboard.pendingProposals}
               systemSuggestedChecks={dashboard.systemSuggestedChecks}
               humanConfirmedChecks={dashboard.humanConfirmedChecks}
               nextActions={dashboard.nextActions}

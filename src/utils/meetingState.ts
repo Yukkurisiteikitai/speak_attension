@@ -10,7 +10,7 @@ export const meetingTypeLabels: Record<MeetingDecisionNode["type"], string> = {
 export const meetingStateLabels = {
   human_stated: "参加者の発言", decided: "決定済み", proposed: "提案", ai_suggested: "システム提案", unconfirmed: "未確認",
 };
-export const actionStatusLabels = { proposed: "提案中", decided: "決定済み", in_progress: "実行中", done: "完了", cancelled: "撤回" };
+export const actionStatusLabels = { proposed: "提案中", decided: "実行予定", in_progress: "実行中", done: "完了", cancelled: "撤回" };
 export const actionUrgencyLabels = { low: "低", medium: "中", high: "高", critical: "最優先" };
 
 export function selectPendingMeetingNodes(graph: MeetingDecisionGraph): MeetingDecisionNode[] {

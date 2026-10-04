@@ -244,9 +244,9 @@
       {
         "text": "レイテンシー削減を優先で進めることにします。期限は10月末です",
         "timeline": {
-          "semanticRole": "other",
-          "discourseAct": "other",
-          "commitment": "none",
+          "semanticRole": "decision",
+          "discourseAct": "decide",
+          "commitment": "decided",
           "owner": null,
           "deadline": null
         },
@@ -270,7 +270,7 @@
           "discourseAct": "commit",
           "commitment": "committed",
           "owner": "鈴木",
-          "deadline": "金曜日まで"
+          "deadline": "来週金曜日まで"
         },
         "tree": "action",
         "intent": "unknown",

@@ -11,7 +11,8 @@ type Props = {
   confirmedDecisions: MeetingDecisionNode[];
   reasonsByDecisionId: Record<string, MeetingDecisionNode[]>;
   structuralGaps: StructuralGap[];
-  unresolvedItems: MeetingDecisionNode[];
+  openItems: MeetingDecisionNode[];
+  pendingProposals: MeetingDecisionNode[];
   systemSuggestedChecks: DecisionMaterial[];
   humanConfirmedChecks: DecisionMaterial[];
   nextActions: MeetingDecisionNode[];
@@ -36,7 +37,7 @@ function translateMissingFields(fields: string[]): string {
   return fields.map((f) => fieldMap[f] || f).join("・");
 }
 
-const ZERO_STATE_KEYS = ["decisions", "gaps", "unresolved", "suggested", "actions"] as const;
+const ZERO_STATE_KEYS = ["decisions", "gaps", "unresolved", "proposals", "suggested", "actions"] as const;
 type ZeroStateKey = (typeof ZERO_STATE_KEYS)[number];
 
 export function MeetingStateDashboard(props: Props) {
@@ -53,7 +54,8 @@ export function MeetingStateDashboard(props: Props) {
   const zeroCounts: Record<ZeroStateKey, number> = {
     decisions: props.confirmedDecisions.length,
     gaps: props.structuralGaps.length,
-    unresolved: props.unresolvedItems.length,
+    unresolved: props.openItems.length,
+    proposals: props.pendingProposals.length,
     suggested: props.systemSuggestedChecks.length,
     actions: props.nextActions.length,
   };
@@ -74,11 +76,18 @@ export function MeetingStateDashboard(props: Props) {
           <div className="section-head">
             <h3>
               {meetingTypeLabels[selectedNode.type]} ／{" "}
-              <span className={`decision-state state-${selectedNode.state}`}>{meetingStateLabels[selectedNode.state]}</span>
+              <span className={`decision-state state-${selectedNode.state}`}>
+                {selectedNode.action ? actionStatusLabels[selectedNode.action.status ?? "decided"] : meetingStateLabels[selectedNode.state]}
+              </span>
             </h3>
             <button type="button" onClick={onCloseSelection}>閉じる</button>
           </div>
           <p className="selected-evidence-label">{selectedNode.label}</p>
+          {selectedNode.action ? (
+            <p className="selected-evidence-meta">
+              担当: {selectedNode.action.owner ?? "未割当"} ／ 期限: {selectedNode.action.deadline ?? "未設定"}
+            </p>
+          ) : null}
           {selectedNode.type === "utterance" || selectedNode.type === "decision" || selectedNode.type === "outcome" ? (
             <p className="selected-evidence-meta">
               {new Date(selectedNode.createdAt).toLocaleString("ja-JP")} ／ {selectedNode.speaker ?? "発言者不明"}
@@ -178,18 +187,34 @@ export function MeetingStateDashboard(props: Props) {
       </div>
 
       <div className="gap-section">
-        <CollapsibleZeroState title="未確認・未解決" count={props.unresolvedItems.length} open={openZeroStates.has("unresolved")} onToggle={() => toggleZeroState("unresolved")}>
+        <CollapsibleZeroState title="未確認・未解決" count={props.openItems.length} open={openZeroStates.has("unresolved")} onToggle={() => toggleZeroState("unresolved")}>
           <div className="gap-list is-unresolved">
-            {props.unresolvedItems.map((node) => (
+            {props.openItems.map((node) => (
               <div className="gap-item" key={node.id}>
                 <p>
-                  <span>{meetingTypeLabels[node.type]}</span>
+                  <span>{meetingTypeLabels[node.type]}</span>{" "}
                   <strong>{node.label}</strong>
                 </p>
                 <button onClick={() => props.onExplore(node.id)}>根拠を見る</button>
               </div>
             ))}
-            {props.unresolvedItems.length === 0 ? <p className="empty-text">未確認・未解決の項目はありません。</p> : null}
+            {props.openItems.length === 0 ? <p className="empty-text">未確認・未解決の項目はありません。</p> : null}
+          </div>
+        </CollapsibleZeroState>
+      </div>
+
+      <div className="gap-section">
+        <CollapsibleZeroState title="提案中（未採用）" count={props.pendingProposals.length} open={openZeroStates.has("proposals")} onToggle={() => toggleZeroState("proposals")}>
+          <div className="gap-list is-unresolved">
+            {props.pendingProposals.map((node) => (
+              <div className="gap-item" key={node.id}>
+                <p>
+                  <strong>{node.label}</strong>
+                </p>
+                <button onClick={() => props.onExplore(node.id)}>根拠を見る</button>
+              </div>
+            ))}
+            {props.pendingProposals.length === 0 ? <p className="empty-text">採用待ちの提案はありません。</p> : null}
           </div>
         </CollapsibleZeroState>
       </div>

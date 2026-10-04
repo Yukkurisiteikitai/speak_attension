@@ -8,6 +8,7 @@ type CurrentDiscussionCardProps = {
 
 export function CurrentDiscussionCard({ state, onExploreQuestion }: CurrentDiscussionCardProps) {
   const sourceNoteText = {
+    agenda: "（議題の発言から）",
     unresolved_question: "（未解決の問いから）",
     recent_utterance: "（直近の発言から）",
     unknown: "（論点は特定できていません）",
