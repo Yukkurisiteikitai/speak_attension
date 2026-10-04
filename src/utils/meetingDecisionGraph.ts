@@ -1,3 +1,4 @@
+import { describesBadOutcome, isHedged, isNegatedEvent } from "./hedgedExpression";
 import type {
   ActionData,
   AnalyzedSegment,
@@ -38,8 +39,6 @@ const ACTION_PATTERN = /(?:今すぐ|直ちに|至急|ロールバック|戻す|
 // when a wh-word appears earlier in the same sentence, to avoid matching
 // unrelated words/acknowledgements that merely end in "か" (e.g. "そうか").
 const QUESTION_PATTERN = /[?？]|(?:ですか|ますか|でしょうか)$|^(?:なぜ|どうして|どういう|何が|誰が)|(?:何|誰|いつ|どこ|なぜ|どう|どちら|どの).*か$/;
-// "いいと思う" is the speaker's evaluation, not a hedge about a fact.
-const TENTATIVE_PATTERN = /(?:かもしれない|可能性|(?<!(?:いい|良い))と思う|としたら|場合は)/;
 const NEGATIVE_PATTERN = /(?:しない|しません|見送|取り消|撤回|未決定)/;
 const BOUNDARY_PATTERN = /^(?:(?:じゃあ|では|それでは)[、\s]*)?(?:次に|次の議題|次の話題|話は変わ|話を変えると|切り替えて|別件|以上です|今日はここまで)|^(?:今日は|今回は).+について(?:決めます|検討します|話します)/;
 
@@ -135,7 +134,7 @@ function whyNowForRisk(risk?: MeetingDecisionNode): string | undefined {
 }
 
 function answerMatchesQuestion(question: MeetingDecisionNode, text: string): boolean {
-  if (QUESTION_PATTERN.test(text) || TENTATIVE_PATTERN.test(text) || NEGATIVE_PATTERN.test(text)) return false;
+  if (QUESTION_PATTERN.test(text) || isHedged(text) || NEGATIVE_PATTERN.test(text)) return false;
   if (/(?:誰|担当)/.test(question.label)) return /(?:担当は|担当します|が担当|がやります|私が)/.test(text);
   if (/(?:いつ|期限|いつまで)/.test(question.label)) return /(?:まで|期限は|締切は|明日|今日|今週|来週|\d+月\d+日)/.test(text);
   if (/(?:なぜ|理由|根拠)/.test(question.label)) return /(?:理由は|根拠は|なぜなら|ため|ので|から)/.test(text);
@@ -221,13 +220,18 @@ export function appendMeetingDecisionSegment(
     graph = addEdge(graph, utterance.id, latestQuestion.id, "answers");
   }
 
-  if (EVIDENCE_PATTERN.test(text)) {
+  const isTentative = isHedged(text);
+  // A negated event ("落ちない") is neither a problem nor a risk, and a guess is not evidence.
+  const negated = isNegatedEvent(text);
+  if (EVIDENCE_PATTERN.test(text) && !negated && !isTentative) {
     const evidence = makeNode("evidence", segment, text, "human_stated");
     attachSource(evidence);
   }
 
-  const isTentative = TENTATIVE_PATTERN.test(text);
-  if (PROBLEM_PATTERN.test(text)) {
+  // A hedged bad outcome ("落ちるかもしれない") is a risk; a hedge alone says
+  // nothing about the kind, so it stays a plain utterance.
+  const isRisk = !negated && (RISK_PATTERN.test(text) || (isTentative && describesBadOutcome(text)));
+  if (PROBLEM_PATTERN.test(text) && !negated && !(isTentative && isRisk)) {
     const problem = makeNode("problem", segment, text, isTentative ? "unconfirmed" : "human_stated");
     attachSource(problem);
     for (const evidence of context().nodes.filter((node) => node.type === "evidence").slice(-3)) {
@@ -236,7 +240,7 @@ export function appendMeetingDecisionSegment(
   }
   const causal = text.match(/^(.+?)(?:だから|なので|ため|ので|から)[、,\s]+(.+)$/);
   const benefit = text.match(BENEFIT_REASON_PATTERN);
-  if (isTentative || causal || benefit || /(?:原因|理由|なぜなら)/.test(text)) {
+  if (causal || benefit || /(?:原因|理由|なぜなら)/.test(text)) {
     const reason = makeNode("reason", segment, causal?.[1] ?? benefit?.[1] ?? text, isTentative ? "unconfirmed" : "human_stated");
     attachSource(reason);
     for (const evidence of context().nodes.filter((node) => node.type === "evidence").slice(-3)) {
@@ -244,7 +248,7 @@ export function appendMeetingDecisionSegment(
     }
   }
 
-  if (RISK_PATTERN.test(text)) {
+  if (isRisk) {
     const risk = makeNode("risk", segment, causal?.[1] ?? text, isTentative ? "unconfirmed" : "human_stated");
     attachSource(risk);
     for (const evidence of context().nodes.filter((node) => node.type === "evidence").slice(-3)) {

@@ -10,3 +10,4 @@ docs/sample.md
 demo/manual-replay-builder.html
 demo/
 .env.local
+eval-data/
