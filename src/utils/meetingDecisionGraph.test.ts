@@ -207,3 +207,92 @@ it("links problem, question, proposal and decision back to evidence without cros
   const next = appendMeetingDecisionSegment(boundary, segment("new-question", "どう進めますか？", 11));
   expect(selectDecisionParents(next, "question-new-question").map((n) => n.type)).toEqual(["utterance"]);
 });
+
+describe("hedged expressions", () => {
+  const kinds = (text: string) => {
+    const graph = appendMeetingDecisionSegment(createInitialMeetingDecisionGraph(), segment("h", text, 0));
+    return graph.nodes.filter((node) => node.type !== "utterance").map((node) => `${node.type}:${node.state}`);
+  };
+
+  // A possible bad outcome is an unconfirmed risk whatever the phrasing.
+  it.each([
+    "サーバーが落ちる可能性があります",
+    "サーバーが落ちる可能性がある",
+    "サーバーが落ちるかもしれない",
+    "サーバーが落ちるかもしれません",
+    "サーバーが落ちることも考えられます",
+    "サーバーが落ちるケースとしては考えられる",
+    "サーバーが落ちるのではないか",
+    "サーバーが落ちるおそれがあります",
+    "サーバーが落ちると思います",
+    "サーバーが落ちると思う",
+    "サーバーが落ちるかと",
+    "サーバーが落ちそうです",
+  ])("reads %s as an unconfirmed risk", (text) => {
+    expect(kinds(text)).toEqual(["risk:unconfirmed"]);
+  });
+
+  // A hedge alone does not say what kind of statement it is.
+  it.each([
+    "たぶん金曜日に公開できると思う",
+    "たぶん金曜日に公開できると思います",
+    "金曜日に公開するのがいいかもしれません",
+    "金曜日に公開するのがいいかもしれない",
+  ])("leaves %s as a plain utterance", (text) => {
+    expect(kinds(text)).toEqual([]);
+  });
+
+  it("keeps a hedged problem unconfirmed", () => {
+    expect(kinds("認証に問題があるかもしれません")).toEqual(["problem:unconfirmed"]);
+    expect(kinds("認証に問題があるかもしれない")).toEqual(["problem:unconfirmed"]);
+  });
+
+  it("does not make a reason out of a hedge", () => {
+    expect(kinds("サーバーが落ちる可能性があります")).not.toContain("reason:unconfirmed");
+  });
+
+  it("still reads a hedged causal clause as a reason", () => {
+    expect(kinds("負荷が高いので、サーバーが落ちるかもしれません")).toContain("reason:unconfirmed");
+  });
+
+  it("does not treat an evaluation or a plain statement as a hedge", () => {
+    expect(kinds("金曜日に公開するのがいいと思う")).toEqual([]);
+    expect(kinds("金曜日に公開するのがいいと思います")).toEqual([]);
+    expect(kinds("金曜日に公開しましょう")).toEqual(["proposal:proposed"]);
+    expect(kinds("それでいこう")).toContain("decision:decided");
+    expect(kinds("サーバーが落ちた")).toEqual([]);
+  });
+
+  it("never turns a hedged statement into a decision", () => {
+    expect(kinds("たぶんそれでいこうと思います")).not.toContain("decision:decided");
+  });
+});
+
+it("reads 止まる and 失敗する as bad outcomes when hedged", () => {
+  for (const text of ["データベースが止まる可能性があります", "送信に失敗するかもしれないですね"]) {
+    const graph = appendMeetingDecisionSegment(createInitialMeetingDecisionGraph(), segment("b", text, 0));
+    expect(graph.nodes.filter((node) => node.type !== "utterance").map((node) => `${node.type}:${node.state}`)).toEqual(["risk:unconfirmed"]);
+  }
+});
+
+describe("negated events and hedges as evidence", () => {
+  const kinds = (text: string) =>
+    appendMeetingDecisionSegment(createInitialMeetingDecisionGraph(), segment("n", text, 0))
+      .nodes.filter((node) => node.type !== "utterance")
+      .map((node) => `${node.type}:${node.state}`);
+
+  it.each(["サーバーは落ちないと思います", "サーバーは落ちません", "問題なく動きます", "認証に問題はないと思います"])(
+    "leaves the negated event in %s unclassified",
+    (text) => expect(kinds(text)).toEqual([]),
+  );
+
+  it("does not record a guess as evidence", () => {
+    expect(kinds("データが壊れるのではないかと思います")).toEqual(["risk:unconfirmed"]);
+    expect(kinds("本番でエラーが出ることも考えられます")).toEqual(["risk:unconfirmed"]);
+  });
+
+  it("keeps an affirmed problem and a shortfall in knowledge", () => {
+    expect(kinds("認証に問題があります")).toEqual(["problem:human_stated"]);
+    expect(kinds("資料が不足している可能性があります")).toEqual(["problem:unconfirmed"]);
+  });
+});
