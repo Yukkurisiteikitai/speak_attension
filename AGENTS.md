@@ -8,6 +8,9 @@
 
 - [docs/STATE.md](docs/STATE.md): 現在の実装状態（現状の正）
 - [docs/CODE_GUIDE.md](docs/CODE_GUIDE.md): コードの読み方とデータフロー
+- [docs/DESIGN_PHILOSOPHY.md](docs/DESIGN_PHILOSOPHY.md): 設計思想 — Meeting State の概念、決定グラフの根拠追跡
+- [docs/IMPLEMENTATION_SPEC.md](docs/IMPLEMENTATION_SPEC.md): 意思決定支援機能の改修仕様と背景
+- [docs/RESEARCH_DESIGN.md](docs/RESEARCH_DESIGN.md): Voice Topic Graph と Design Hinge の研究設計
 - [docs/adr/](docs/adr/): 設計判断の履歴（既存 ADR は変更しない）
 - [docs/tasks/](docs/tasks/): 進行中の移行作業の指示書（クラウド実行用・自己完結）
 
