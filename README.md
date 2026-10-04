@@ -17,7 +17,7 @@ speak_attensionは、会議の進行を支援するローカル Web アプリで
 セルフホスト可能なフロントエンドのみの Web アプリです。**データベースは持たず、すべてブラウザ内で処理します**。
 
 - **開発環境での実行**：`npm install && npm run dev` で `http://127.0.0.1:5173/` を開く
-- **クラウド公開デモ**：[Cloudflare Workers](https://github.com/Yukkurisiteikitai/speak_attension) でホストしている公開版あり
+- **クラウド公開デモ**：<https://speak-attension.yourselfl.workers.dev/>（Cloudflare Workers でホスト）
 
 セッション状態はリロードすると失われるため、必要な結果は Markdown または JSON で保存してください。
 
@@ -45,7 +45,7 @@ AI が未設定・接続不可の場合は、ルールベース処理が自動�
 決定グラフ（決定・課題・アクション抽出）の実装は、会議音声を基準テストで検証しています：
 
 - **適合率** — 決定済みアクションの誤抽出を最小化しつつ、未解決の問い・未採用提案を正しく分類
-- **処理速度** — 発言 1600 件付近でリアルタイム予算内（最適化は Phase 4 予定）
+- **処理速度** — 音声入力は発言確定後の最大 5000ms の滞留を解消（終端句読点で即時、無音約 800ms で取り込み）。「流れ・次の検討」マップは発話 1600 件付近でリアルタイム予算を超えることが分かっており、Phase 4 で解消予定
 
 詳細は [`src/hooks/festivalGoldenMeeting.test.ts`](src/hooks/festivalGoldenMeeting.test.ts)、[`src/hooks/releaseDecisionMaterialsGolden.test.ts`](src/hooks/releaseDecisionMaterialsGolden.test.ts) を参照してください。
 
