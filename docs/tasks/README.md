@@ -27,6 +27,12 @@ Phase 0 corpus 設計、rollback strategy、risk analysis。
 
 Phase 2以降は Phase 1 の結果を見てから発行する。
 
+### 個別の課題
+
+| 指示書 | 内容 | 前提 |
+|---|---|---|
+| [hedged-expression-detection.md](hedged-expression-detection.md) | 推測・可能性の表現の判定を言い回しに依存させない（「と思います」「かもしれません」「考えられる」などが拾われない） | なし。決定グラフの基準ケース（PR #19）が merge 済みであること |
+
 ### 検証記録
 
 [phase2-verification/](phase2-verification/) — Phase 2 merge 前に実ブラウザ（Playwright）で行った動作確認。スクリーンショットと再現スクリプトを含む。`npm run check` では検出できない不正HTML・未定義CSSの2件をここで発見・修正した。

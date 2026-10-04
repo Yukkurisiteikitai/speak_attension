@@ -95,3 +95,4 @@ NOWカードから担当・期限・優先度・実行状態と結果／変更�
 - 「流れ・次の検討」マップ（`buildMeetingProgress`）は発言数に対して二次で増え、発話1600件付近でリアルタイム予算を超える。原因は `tree.nodes` × `graph.nodes` の入れ子で、Phase 4で解消する。`buildMeetingStateDashboard` も二次で、発話5000件付近で予算を超える。
 - 昇格しなかった意味単位は捨てずに「未分類」として保持するため、件数が従来より多くなる。表示方法はPhase 3で扱う。
 - corpusは20ケースで、実会議の録音を加えて広げる必要がある。
+- 決定グラフの推測・可能性の判定（`meetingDecisionGraph.ts` の `TENTATIVE_PATTERN`）は言い回しに依存する。「可能性がある」「かもしれない」「と思う」は未確認の理由として拾うが、「と思います」「かもしれません」「考えられる」「おそれがある」「のではないか」は拾わない。拾った場合も、リスクや仮説が理由として出る。対応は [docs/tasks/hedged-expression-detection.md](tasks/hedged-expression-detection.md)（2026-10-04 記録）。
