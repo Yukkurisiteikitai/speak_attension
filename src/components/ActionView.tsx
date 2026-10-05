@@ -43,12 +43,16 @@ export function ActionView({ graph, onUpdate, onExplore }: ActionViewProps) {
     [expandedActionId, graph],
   );
 
+  // The list only appears once the first action exists.
+  if (!graph.nodes.some((node) => node.type === "action")) return null;
+
   return (
     <section className="panel action-view" aria-label="アクション一覧">
-      <div className="section-head">
+      <details className="action-view-toggle" open>
+      <summary className="section-head">
         <h2>アクション一覧</h2>
         <span>{actions.length}件</span>
-      </div>
+      </summary>
       {actions.length ? (
         <div className="action-list">
           {actions.map((node) => {
@@ -114,6 +118,7 @@ export function ActionView({ graph, onUpdate, onExplore }: ActionViewProps) {
           <ol className="decision-trace">{pending.map((node) => <li key={node.id}><ol><ReasonStep graph={graph} node={node} /></ol>{node.action ? <ActionEditor key={JSON.stringify(node.action)} node={node} onUpdate={onUpdate} /> : null}</li>)}</ol>
         </details>
       ) : null}
+      </details>
     </section>
   );
 }
