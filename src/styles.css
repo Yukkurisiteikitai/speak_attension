@@ -2727,7 +2727,8 @@ input:focus {
 /* --- 空カテゴリの折りたたみ表示: keep empty sections from crowding out real content (ADR 0020) --- */
 .zero-state-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 6px 0; padding: 8px 12px; border-radius: 10px; background: var(--surface-2); color: var(--muted); font-size: 12px; }
 .zero-state-title { font-weight: 700; }
-.zero-state-collapse { margin-left: auto; }
+.zero-state-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }
+.zero-state-toggle h2 { margin: 0; }
 
 .decision-cards { display: grid; gap: 10px; margin: 6px 0 18px; }
 .decision-card { padding: 12px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); }
@@ -2933,3 +2934,6 @@ input:focus {
   .agenda-guide:last-of-type { grid-column: 1 / -1; }
   .is-meeting-mode .meeting-rail { grid-template-columns: 1fr; }
 }
+
+.action-view-toggle > summary { cursor: pointer; }
+.action-view-toggle > summary h2 { display: inline; }

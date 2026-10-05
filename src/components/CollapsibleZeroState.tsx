@@ -34,11 +34,11 @@ export function CollapsibleZeroState({
   if (!open) {
     return (
       <div className="zero-state-row">
-        <span className="zero-state-title">{title}</span>
-        <span className="zero-state-count">{emptyLabel ?? "0件"}</span>
-        <button type="button" onClick={onToggle}>
-          表示
+        <button type="button" className="zero-state-toggle" aria-expanded={false} onClick={onToggle}>
+          <span aria-hidden="true">▶</span>
+          <span className="zero-state-title">{title}</span>
         </button>
+        <span className="zero-state-count">{emptyLabel ?? "0件"}</span>
       </div>
     );
   }
@@ -47,11 +47,11 @@ export function CollapsibleZeroState({
   return (
     <>
       <div className="section-head">
-        <h2>{title}</h2>
-        <span>{count}件</span>
-        <button type="button" className="zero-state-collapse" onClick={onToggle}>
-          閉じる
+        <button type="button" className="zero-state-toggle" aria-expanded={true} onClick={onToggle}>
+          <span aria-hidden="true">▼</span>
+          <h2>{title}</h2>
         </button>
+        <span>{count}件</span>
       </div>
       {children}
     </>
