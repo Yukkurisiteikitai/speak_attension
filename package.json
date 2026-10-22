@@ -17,7 +17,8 @@
     "shadow-replay": "tsx design-hinge/replay/runShadowMode.ts",
     "semantic:eval": "tsx scripts/evaluateSemanticCorpus.ts",
     "decision:eval": "tsx scripts/evaluateDecisionGraph.ts",
-    "semantic:bench": "tsx scripts/benchmarkRealtime.ts"
+    "semantic:bench": "tsx scripts/benchmarkRealtime.ts",
+    "semantic:diff": "tsx scripts/diffSemanticPhase3.ts"
   },
   "dependencies": {
     "@xyflow/react": "^12.8.4",

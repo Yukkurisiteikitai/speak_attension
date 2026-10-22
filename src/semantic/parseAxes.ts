@@ -62,7 +62,13 @@ const DEFER_MARKERS = [/保留/, /後回し/, /次回(?:に|へ)/, /いったん
 
 // Reporting one's own ongoing deliberation. Must beat the execution markers:
 // 「まだ検討中です。青チームで検証します」 is not a decision.
-const CONSIDERATION_MARKERS = [/検討(?:中|します|しています)/, /個人的に(?:は)?考えて/, /考えています/, /と思っています/, /検証します/];
+const CONSIDERATION_MARKERS = [
+  /検討(?:中|します|しています|することにします|することにしました)/,
+  /個人的に(?:は)?考えて/,
+  /考えています/,
+  /と思っています/,
+  /検証します/,
+];
 
 // Committing to carry something out. Requires a full execution form at the end
 // of the clause, not merely the presence of a verb stem.
