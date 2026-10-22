@@ -1,0 +1,562 @@
+{
+  "phase": 3,
+  "acceptance": "core false positives must not exceed legacy's, and must be fewer overall (design doc §6.2)",
+  "summary": {
+    "legacyFalsePositives": 7,
+    "coreFalsePositives": 0,
+    "newFalsePositives": 0,
+    "passesAcceptance": true
+  },
+  "cases": [
+    {
+      "caseId": "01-topic-start",
+      "expected": {
+        "decisions": 0,
+        "actions": 0
+      },
+      "decisions": {
+        "onlyLegacy": [],
+        "onlyCore": [],
+        "both": []
+      },
+      "actions": {
+        "onlyLegacy": [],
+        "onlyCore": [],
+        "both": []
+      },
+      "falsePositive": {
+        "legacy": {
+          "decisions": false,
+          "actions": false
+        },
+        "core": {
+          "decisions": false,
+          "actions": false
+        }
+      }
+    },
+    {
+      "caseId": "02-agenda-item",
+      "expected": {
+        "actions": 0,
+        "decisions": 0
+      },
+      "decisions": {
+        "onlyLegacy": [],
+        "onlyCore": [],
+        "both": []
+      },
+      "actions": {
+        "onlyLegacy": [],
+        "onlyCore": [],
+        "both": []
+      },
+      "falsePositive": {
+        "legacy": {
+          "decisions": false,
+          "actions": false
+        },
+        "core": {
+          "decisions": false,
+          "actions": false
+        }
+      }
+    },
+    {
+      "caseId": "03-context",
+      "expected": {
+        "decisions": 0
+      },
+      "decisions": {
+        "onlyLegacy": [],
+        "onlyCore": [],
+        "both": []
+      },
+      "actions": {
+        "onlyLegacy": [],
+        "onlyCore": [],
+        "both": []
+      },
+      "falsePositive": {
+        "legacy": {
+          "decisions": false,
+          "actions": false
+        },
+        "core": {
+          "decisions": false,
+          "actions": false
+        }
+      }
+    },
+    {
+      "caseId": "04-option-enumeration",
+      "expected": {
+        "proposals": 0,
+        "decisions": 0
+      },
+      "decisions": {
+        "onlyLegacy": [],
+        "onlyCore": [],
+        "both": []
+      },
+      "actions": {
+        "onlyLegacy": [],
+        "onlyCore": [],
+        "both": []
+      },
+      "falsePositive": {
+        "legacy": {
+          "decisions": false,
+          "actions": false
+        },
+        "core": {
+          "decisions": false,
+          "actions": false
+        }
+      }
+    },
+    {
+      "caseId": "05-personal-consideration",
+      "expected": {
+        "actions": 0,
+        "decisions": 0
+      },
+      "decisions": {
+        "onlyLegacy": [],
+        "onlyCore": [],
+        "both": []
+      },
+      "actions": {
+        "onlyLegacy": [],
+        "onlyCore": [],
+        "both": []
+      },
+      "falsePositive": {
+        "legacy": {
+          "decisions": false,
+          "actions": false
+        },
+        "core": {
+          "decisions": false,
+          "actions": false
+        }
+      }
+    },
+    {
+      "caseId": "06-proposal-with-reason",
+      "expected": {
+        "proposals": 1,
+        "decisions": 0
+      },
+      "decisions": {
+        "onlyLegacy": [],
+        "onlyCore": [],
+        "both": []
+      },
+      "actions": {
+        "onlyLegacy": [],
+        "onlyCore": [],
+        "both": []
+      },
+      "falsePositive": {
+        "legacy": {
+          "decisions": false,
+          "actions": false
+        },
+        "core": {
+          "decisions": false,
+          "actions": false
+        }
+      }
+    },
+    {
+      "caseId": "07-support",
+      "expected": {
+        "decisions": 0
+      },
+      "decisions": {
+        "onlyLegacy": [],
+        "onlyCore": [],
+        "both": []
+      },
+      "actions": {
+        "onlyLegacy": [],
+        "onlyCore": [],
+        "both": []
+      },
+      "falsePositive": {
+        "legacy": {
+          "decisions": false,
+          "actions": false
+        },
+        "core": {
+          "decisions": false,
+          "actions": false
+        }
+      }
+    },
+    {
+      "caseId": "08-opposition",
+      "expected": {
+        "decisions": 0
+      },
+      "decisions": {
+        "onlyLegacy": [],
+        "onlyCore": [],
+        "both": []
+      },
+      "actions": {
+        "onlyLegacy": [],
+        "onlyCore": [],
+        "both": []
+      },
+      "falsePositive": {
+        "legacy": {
+          "decisions": false,
+          "actions": false
+        },
+        "core": {
+          "decisions": false,
+          "actions": false
+        }
+      }
+    },
+    {
+      "caseId": "09-decision-explicit",
+      "expected": {
+        "decisions": 1,
+        "actions": 0
+      },
+      "decisions": {
+        "onlyLegacy": [],
+        "onlyCore": [],
+        "both": [
+          "対戦ゲーム形式を採用します"
+        ]
+      },
+      "actions": {
+        "onlyLegacy": [
+          "対戦ゲーム形式を採用します"
+        ],
+        "onlyCore": [],
+        "both": []
+      },
+      "falsePositive": {
+        "legacy": {
+          "decisions": false,
+          "actions": true
+        },
+        "core": {
+          "decisions": false,
+          "actions": false
+        }
+      }
+    },
+    {
+      "caseId": "10-decision-paraphrased",
+      "expected": {
+        "decisions": 1
+      },
+      "decisions": {
+        "onlyLegacy": [],
+        "onlyCore": [
+          "レイテンシー削減を優先で進めることにします。期限は10月末です"
+        ],
+        "both": []
+      },
+      "actions": {
+        "onlyLegacy": [],
+        "onlyCore": [],
+        "both": []
+      },
+      "falsePositive": {
+        "legacy": {
+          "decisions": false,
+          "actions": false
+        },
+        "core": {
+          "decisions": false,
+          "actions": false
+        }
+      }
+    },
+    {
+      "caseId": "11-action-commitment",
+      "expected": {
+        "actions": 1,
+        "decisions": 0
+      },
+      "decisions": {
+        "onlyLegacy": [
+          "鈴木さんがプロトタイプを来週金曜日までに作成します"
+        ],
+        "onlyCore": [],
+        "both": []
+      },
+      "actions": {
+        "onlyLegacy": [],
+        "onlyCore": [],
+        "both": [
+          "鈴木さんがプロトタイプを来週金曜日までに作成します"
+        ]
+      },
+      "falsePositive": {
+        "legacy": {
+          "decisions": true,
+          "actions": false
+        },
+        "core": {
+          "decisions": false,
+          "actions": false
+        }
+      }
+    },
+    {
+      "caseId": "12-deferred",
+      "expected": {
+        "deferred": 1,
+        "decisions": 0,
+        "actions": 0
+      },
+      "decisions": {
+        "onlyLegacy": [],
+        "onlyCore": [],
+        "both": []
+      },
+      "actions": {
+        "onlyLegacy": [],
+        "onlyCore": [],
+        "both": []
+      },
+      "falsePositive": {
+        "legacy": {
+          "decisions": false,
+          "actions": false
+        },
+        "core": {
+          "decisions": false,
+          "actions": false
+        }
+      }
+    },
+    {
+      "caseId": "13-acknowledgement",
+      "expected": {},
+      "decisions": {
+        "onlyLegacy": [],
+        "onlyCore": [],
+        "both": []
+      },
+      "actions": {
+        "onlyLegacy": [],
+        "onlyCore": [],
+        "both": []
+      },
+      "falsePositive": {
+        "legacy": {
+          "decisions": false,
+          "actions": false
+        },
+        "core": {
+          "decisions": false,
+          "actions": false
+        }
+      }
+    },
+    {
+      "caseId": "14-rhetorical-question",
+      "expected": {
+        "questions": 1,
+        "decisions": 0
+      },
+      "decisions": {
+        "onlyLegacy": [],
+        "onlyCore": [],
+        "both": []
+      },
+      "actions": {
+        "onlyLegacy": [],
+        "onlyCore": [],
+        "both": []
+      },
+      "falsePositive": {
+        "legacy": {
+          "decisions": false,
+          "actions": false
+        },
+        "core": {
+          "decisions": false,
+          "actions": false
+        }
+      }
+    },
+    {
+      "caseId": "15-multi-meaning",
+      "expected": {
+        "decisions": 0
+      },
+      "decisions": {
+        "onlyLegacy": [],
+        "onlyCore": [],
+        "both": []
+      },
+      "actions": {
+        "onlyLegacy": [],
+        "onlyCore": [],
+        "both": []
+      },
+      "falsePositive": {
+        "legacy": {
+          "decisions": false,
+          "actions": false
+        },
+        "core": {
+          "decisions": false,
+          "actions": false
+        }
+      }
+    },
+    {
+      "caseId": "16-reference-unresolved",
+      "expected": {
+        "decisions": 0
+      },
+      "decisions": {
+        "onlyLegacy": [],
+        "onlyCore": [],
+        "both": []
+      },
+      "actions": {
+        "onlyLegacy": [],
+        "onlyCore": [],
+        "both": []
+      },
+      "falsePositive": {
+        "legacy": {
+          "decisions": false,
+          "actions": false
+        },
+        "core": {
+          "decisions": false,
+          "actions": false
+        }
+      }
+    },
+    {
+      "caseId": "17-topic-return",
+      "expected": {},
+      "decisions": {
+        "onlyLegacy": [],
+        "onlyCore": [],
+        "both": []
+      },
+      "actions": {
+        "onlyLegacy": [],
+        "onlyCore": [],
+        "both": []
+      },
+      "falsePositive": {
+        "legacy": {
+          "decisions": false,
+          "actions": false
+        },
+        "core": {
+          "decisions": false,
+          "actions": false
+        }
+      }
+    },
+    {
+      "caseId": "18-process-greeting",
+      "expected": {
+        "decisions": 0,
+        "actions": 0
+      },
+      "decisions": {
+        "onlyLegacy": [
+          "本日の朝会を始めます。進捗報告をお願いします"
+        ],
+        "onlyCore": [],
+        "both": []
+      },
+      "actions": {
+        "onlyLegacy": [
+          "本日の朝会を始めます。進捗報告をお願いします"
+        ],
+        "onlyCore": [],
+        "both": []
+      },
+      "falsePositive": {
+        "legacy": {
+          "decisions": true,
+          "actions": true
+        },
+        "core": {
+          "decisions": false,
+          "actions": false
+        }
+      }
+    },
+    {
+      "caseId": "19-explicitly-undecided",
+      "expected": {
+        "decisions": 0
+      },
+      "decisions": {
+        "onlyLegacy": [
+          "いい質問ですね。そこはまだ検討中です。青チームで検証します"
+        ],
+        "onlyCore": [],
+        "both": []
+      },
+      "actions": {
+        "onlyLegacy": [
+          "いい質問ですね。そこはまだ検討中です。青チームで検証します"
+        ],
+        "onlyCore": [],
+        "both": []
+      },
+      "falsePositive": {
+        "legacy": {
+          "decisions": true,
+          "actions": false
+        },
+        "core": {
+          "decisions": false,
+          "actions": false
+        }
+      }
+    },
+    {
+      "caseId": "20-agenda-paraphrased",
+      "expected": {
+        "decisions": 0,
+        "actions": 0
+      },
+      "decisions": {
+        "onlyLegacy": [
+          "今日は今四半期のロードマップを確定します"
+        ],
+        "onlyCore": [],
+        "both": []
+      },
+      "actions": {
+        "onlyLegacy": [
+          "今日は今四半期のロードマップを確定します"
+        ],
+        "onlyCore": [],
+        "both": []
+      },
+      "falsePositive": {
+        "legacy": {
+          "decisions": true,
+          "actions": true
+        },
+        "core": {
+          "decisions": false,
+          "actions": false
+        }
+      }
+    }
+  ]
+}

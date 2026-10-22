@@ -55,6 +55,9 @@ describe("detectAct / detectRole / detectCommitment", () => {
     // 「まだ検討中です。青チームで検証します」 must not come out decided.
     expect(detectCommitment("そこはまだ検討中です。青チームで検証します")).toBe("considered");
     expect(detectCommitment("個人的に考えているのが1、私は今までどんな情報が")).toBe("considered");
+    // 「次回検討することにします」 is a deferred deliberation, not a decision.
+    expect(detectCommitment("この件は次回検討することにします")).toBe("considered");
+    expect(detectAct("この件は次回検討することにします")).toBe("report");
   });
 
   it("distinguishes support from opposition", () => {
