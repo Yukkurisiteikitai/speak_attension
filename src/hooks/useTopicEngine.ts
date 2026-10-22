@@ -3,6 +3,9 @@ import { createTopicEngineStore } from "./topicEngineStore";
 import type { LlmSettings } from "../utils/llmClient";
 import { buildMissingContributions } from "../utils/missingContribution";
 import { buildTimelineProjection } from "../semantic/timelineProjection";
+import { projectMeetingState } from "../semantic/meetingStateProjection";
+import { meetingStateGraphFromProjection } from "../semantic/meetingStateGraph";
+import { utterancesOf } from "../semantic/rawUtterance";
 import { SEMANTIC_CORE_FLAGS } from "../semantic/flags";
 
 // A final Web Speech chunk should reach the fast path within the realtime
@@ -59,6 +62,18 @@ export function useTopicEngine({ onLog, llmSettings }: UseTopicEngineOptions = {
     [snapshot.semantic],
   );
 
+  // Phase 3: the graph the Meeting State dashboard reads. Flag off = the legacy
+  // decisionGraph, unchanged. Flag on = a projection of canonical state, so the
+  // dashboard cannot show a decision the promotion policy did not admit.
+  const meetingStateGraph = useMemo(() => {
+    if (!SEMANTIC_CORE_FLAGS.meetingState) return snapshot.engineState.decisionGraph;
+    const createdAt = new Map(utterancesOf(snapshot.semantic.log).map((utterance) => [utterance.id, utterance.createdAt]));
+    return meetingStateGraphFromProjection(
+      projectMeetingState(snapshot.semantic.canonical),
+      (utteranceId) => createdAt.get(utteranceId) ?? 0,
+    );
+  }, [snapshot.engineState.decisionGraph, snapshot.semantic]);
+
   const currentTopic = useMemo(
     () => snapshot.engineState.meetingGraph.nodes.find((node) => node.id === snapshot.engineState.currentTopicId) ?? null,
     [snapshot.engineState.currentTopicId, snapshot.engineState.meetingGraph.nodes],
@@ -90,6 +105,7 @@ export function useTopicEngine({ onLog, llmSettings }: UseTopicEngineOptions = {
     bufferText: snapshot.bufferText,
     // Semantic Core (ADR 0022 §9). Phase 2 consumes this for the Timeline only.
     timelineRows,
+    meetingStateGraph,
     recordSemanticCorrection: store.recordSemanticCorrection,
     conversationTree: snapshot.conversationTree,
     currentTopic,

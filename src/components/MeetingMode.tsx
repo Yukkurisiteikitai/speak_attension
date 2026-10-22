@@ -83,8 +83,8 @@ export function MeetingMode({
   const [mapMode, setMapMode] = useState<MeetingMapMode>("dashboard");
   const [selectedDecisionId, setSelectedDecisionId] = useState<string | null>(null);
   const dashboard = useMemo(
-    () => buildMeetingStateDashboard(topicEngine.decisionGraph, topicEngine.decisionSupport.materials, topicEngine.currentTopic?.title ?? null),
-    [topicEngine.decisionGraph, topicEngine.decisionSupport.materials, topicEngine.currentTopic],
+    () => buildMeetingStateDashboard(topicEngine.meetingStateGraph, topicEngine.decisionSupport.materials, topicEngine.currentTopic?.title ?? null),
+    [topicEngine.meetingStateGraph, topicEngine.decisionSupport.materials, topicEngine.currentTopic],
   );
   const currentDiscussionState = useMemo(
     () => buildCurrentDiscussionState(topicEngine.meetingGraph, topicEngine.currentTopicId, topicEngine.decisionGraph, topicEngine.segmentArchive),
@@ -96,12 +96,12 @@ export function MeetingMode({
   const exploreFromDashboard = useCallback((id: string) => setSelectedDecisionId(id), []);
   const openTraceMap = useCallback(() => setMapMode("state"), []);
   const selectedDashboardNode = useMemo(
-    () => topicEngine.decisionGraph.nodes.find((node) => node.id === selectedDecisionId) ?? null,
-    [topicEngine.decisionGraph, selectedDecisionId],
+    () => topicEngine.meetingStateGraph.nodes.find((node) => node.id === selectedDecisionId) ?? null,
+    [topicEngine.meetingStateGraph, selectedDecisionId],
   );
   const selectedDashboardNodeParents = useMemo(
-    () => (selectedDecisionId ? selectDecisionParents(topicEngine.decisionGraph, selectedDecisionId).filter((node) => node.id !== selectedDecisionId) : []),
-    [topicEngine.decisionGraph, selectedDecisionId],
+    () => (selectedDecisionId ? selectDecisionParents(topicEngine.meetingStateGraph, selectedDecisionId).filter((node) => node.id !== selectedDecisionId) : []),
+    [topicEngine.meetingStateGraph, selectedDecisionId],
   );
   const stopSpeech = speech.stop;
   const flushMeeting = topicEngine.flushBuffer;
