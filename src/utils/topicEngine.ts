@@ -3,13 +3,16 @@ import type {
   FocusState,
   ImportantMention,
   MeetingGraph,
+  MeetingDecisionGraph,
   TopicDecisionLog,
   TopicGap,
   TopicGraphEdge,
   TopicGraphNode,
   TopicNode,
   TranscriptInputSource,
+  TranscriptSegmentMetadata,
 } from "../types/topic";
+import { appendMeetingDecisionSegment, createInitialMeetingDecisionGraph } from "./meetingDecisionGraph";
 import { detectUtteranceIntent } from "./intentRules";
 import { detectCoverageUpdates, sortGaps } from "./topicCoverage";
 import { extractTopicPhrases, resolveTopicReference } from "./topicExtraction";
@@ -18,6 +21,7 @@ import { createId, createInitialMeetingGraph, createTopicEdge, getRootTopicId, p
 import { appendEvidenceSegmentIds, chooseSelectedTopic, createTopicFromPhrase, mergeAliases, mergeAliasStrings } from "./topicSelection";
 
 export type TopicEngineState = {
+  decisionGraph: MeetingDecisionGraph;
   meetingGraph: MeetingGraph;
   nodes: TopicGraphNode[];
   edges: TopicGraphEdge[];
@@ -56,6 +60,7 @@ export function createInitialTopicEngineState(now = Date.now()): TopicEngineStat
     segments: [],
   });
   return {
+    decisionGraph: createInitialMeetingDecisionGraph(),
     meetingGraph,
     nodes: projection.nodes,
     edges: projection.edges,
@@ -153,6 +158,7 @@ export function processTopicSegment(
   text: string,
   source: TranscriptInputSource,
   now = Date.now(),
+  metadata?: TranscriptSegmentMetadata,
 ): TopicEngineTransition {
   const segmentId = createId("seg");
   const segmentIndex = state.segmentCount + 1;
@@ -234,6 +240,7 @@ export function processTopicSegment(
   const focusRelation = relationFromIntent(intent, selectedTopicId, nextCurrentTopicId);
   const createdGapIds = nextGraph.gaps.filter((gap) => gap.createdAt === now).map((gap) => gap.id);
   const segment: AnalyzedSegment = {
+    metadata,
     id: segmentId,
     text,
     createdAt: now,
@@ -277,10 +284,12 @@ export function processTopicSegment(
   const importantMention = createImportantMention(segmentId, text, selectedTopicId, segment.analysis.focusAlignmentScore);
   const nextSegments = [segment, ...state.segments].slice(0, 80);
   const projection = projectState(nextGraph, nextCurrentTopicId, nextSegments, projectGraphToFlow);
+  const decisionGraph = appendMeetingDecisionSegment(state.decisionGraph, segment);
 
   return {
     state: {
       ...state,
+      decisionGraph,
       meetingGraph: {
         ...nextGraph,
         gapSummary: {

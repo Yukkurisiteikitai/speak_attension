@@ -84,6 +84,11 @@ function makeAliasPhrases(clause: string): string[] {
 function cleanupPhrase(value: string): string {
   return value
     .replace(/^(今日は|今回|では|その|この|あの|次に|まず|あとで|あと)\s*/g, "")
+    // tokenize() removes stopwords like "問題"/"は" as infix matches, which can
+    // leave a dangling leading case particle glued to the next content run
+    // (e.g. "問題のステップの修正" -> "のステップの修正"). Strip it so a topic
+    // title never starts with a bare particle.
+    .replace(/^[のをがはにでともへ]+/, "")
     .replace(/(について|の件|って|では|です|ます|の|が|を|は)$/g, "")
     .replace(/\s+/g, " ")
     .trim();

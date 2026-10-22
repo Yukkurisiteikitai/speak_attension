@@ -1,0 +1,18 @@
+{
+  "id": "20-agenda-paraphrased",
+  "intent": "議題提示の言い換えは決定ではない",
+  "coverage": "議題提示の言い換え",
+  "utterances": [
+    {
+      "text": "今日は今四半期のロードマップを確定します",
+      "speaker": "ファシリテーター"
+    }
+  ],
+  "expect": {
+    "canonical": {
+      "decisions": 0,
+      "actions": 0
+    }
+  },
+  "notes": "現状false positiveとして昇格している。『今日は』『確定します』で語尾マッチの形で決定と誤判定"
+}

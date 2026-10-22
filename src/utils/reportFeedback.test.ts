@@ -26,6 +26,7 @@ function createReport(findings: MeetingReportFinding[]): MeetingReport {
     topicCount: 2,
     decidedTopicCount: 1,
     findings,
+    nextContributions: [],
   };
 }
 

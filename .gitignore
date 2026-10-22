@@ -1,6 +1,13 @@
-node_modules/
-dist/
-docs/plans/
-.vite/
+.env
+node_modules
+dist
+docs/plans
+.vite
 npm-debug.log*
+logs
 docs/sample.md
+.DS_Store
+demo/manual-replay-builder.html
+demo/
+.env.local
+eval-data/

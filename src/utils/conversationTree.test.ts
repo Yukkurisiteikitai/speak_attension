@@ -34,6 +34,11 @@ function buildExample() {
 }
 
 describe("conversation tree", () => {
+  it("starts a separate branch for an explicit next agenda without a topic phrase", () => {
+    const state = ["連絡方法について話します", "担当の不足が問題です", "次の議題は予算です", "費用が課題です"].reduce((tree, text, index) => appendConversationSegment(tree, segment(`n${index}`, text, index)), createInitialConversationTreeState());
+    expect(state.nodes[2]).toMatchObject({ role: "topic", parentId: null });
+    expect(state.nodes[3].parentId).toBe(state.nodes[2].id);
+  });
   it("builds the requested topic → issue → cause → action/alternative hierarchy and ignores fillers", () => {
     const state = buildExample();
     expect(state.nodes.map(({ label, role }) => ({ label, role }))).toEqual([

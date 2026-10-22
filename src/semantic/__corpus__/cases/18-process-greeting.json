@@ -1,0 +1,18 @@
+{
+  "id": "18-process-greeting",
+  "intent": "会議進行の挨拶は決定ではない",
+  "coverage": "会議進行の挨拶",
+  "utterances": [
+    {
+      "text": "本日の朝会を始めます。進捗報告をお願いします",
+      "speaker": "ファシリテーター"
+    }
+  ],
+  "expect": {
+    "canonical": {
+      "decisions": 0,
+      "actions": 0
+    }
+  },
+  "notes": "現状false positiveとして昇格している。『始めます』『お願いします』の語尾が捕捉される"
+}

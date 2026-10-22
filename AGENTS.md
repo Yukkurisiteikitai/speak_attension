@@ -2,13 +2,17 @@
 
 ## What this is
 
-アイデア出しを支援するローカル Web アプリです。主モードはアイデア出し、副モードは会議ダッシュボードです。音声または手入力からキーワードを集め、グループ化・選択・エクスポートできます。
+会議の進行を支援するローカル Web アプリです。主モードは会議、副モードはアイデア出しです。起動時は会議モードを開き、中央には「会議の状況」（今決まっていること・確認が必要な項目・次にやること）を既定表示します。アイデア出しモードでは音声または手入力からキーワードを集め、グループ化・選択・エクスポートできます。
 
 ## Read next
 
 - [docs/STATE.md](docs/STATE.md): 現在の実装状態（現状の正）
 - [docs/CODE_GUIDE.md](docs/CODE_GUIDE.md): コードの読み方とデータフロー
+- [docs/DESIGN_PHILOSOPHY.md](docs/DESIGN_PHILOSOPHY.md): 設計思想 — Meeting State の概念、決定グラフの根拠追跡
+- [docs/IMPLEMENTATION_SPEC.md](docs/IMPLEMENTATION_SPEC.md): 意思決定支援機能の改修仕様と背景
+- [docs/RESEARCH_DESIGN.md](docs/RESEARCH_DESIGN.md): Voice Topic Graph と Design Hinge の研究設計
 - [docs/adr/](docs/adr/): 設計判断の履歴（既存 ADR は変更しない）
+- [docs/tasks/](docs/tasks/): 進行中の移行作業の指示書（クラウド実行用・自己完結）
 
 ## Hard constraints
 
@@ -16,6 +20,7 @@
 - LLM を使う機能には必ずルールベースの fallback を用意し、LLM がなくても全機能を使えるようにする。
 - Deepgram、Whisper、独自 STT、Python、DB 永続化、認証、TTS、話者分離は追加しない。
 - リアルタイムのセグメント処理はルールベースを維持する。LLM は非同期の後処理層だけで使う。
+- 確認済み発言・決定・提案・AI/ルールの確認候補・未確認は同じ状態として扱わない。AI やルールが単独で「決定」「重要」「危険」を確定しない（[ADR 0018](docs/adr/0018-meeting-state-primary-surface-and-epistemic-boundaries.md)）。
 
 ## Verify
 

@@ -1,0 +1,70 @@
+{
+  "meetingId": "meeting-event-planning-20260927",
+  "title": "イベント企画打ち合わせ",
+  "createdAt": "2026-09-27T10:00:00Z",
+  "segments": [
+    {
+      "id": "seg-1",
+      "text": "今日はイベント形式について決めます",
+      "createdAt": 0,
+      "source": "manual",
+      "speaker": "ファシリテーター"
+    },
+    {
+      "id": "seg-2",
+      "text": "対戦ゲーム企画が上がっているんですけど、来場者が少ないときの集客が課題です",
+      "createdAt": 5000,
+      "source": "manual",
+      "speaker": "企画担当"
+    },
+    {
+      "id": "seg-3",
+      "text": "スマホで集客しやすいので、対戦ゲーム形式で進めましょう",
+      "createdAt": 10000,
+      "source": "manual",
+      "speaker": "マーケティング"
+    },
+    {
+      "id": "seg-4",
+      "text": "対戦ゲーム形式を採用します",
+      "createdAt": 15000,
+      "source": "manual",
+      "speaker": "ファシリテーター"
+    },
+    {
+      "id": "seg-5",
+      "text": "Wi-Fi負荷は検証されていないので、事前に確認が必要かもしれません",
+      "createdAt": 20000,
+      "source": "manual",
+      "speaker": "技術担当"
+    },
+    {
+      "id": "seg-6",
+      "text": "ランキング機能については、保留にしておきましょう",
+      "createdAt": 25000,
+      "source": "manual",
+      "speaker": "企画担当"
+    },
+    {
+      "id": "seg-7",
+      "text": "ポスターと許可の取得担当がまだ決まっていません",
+      "createdAt": 30000,
+      "source": "manual",
+      "speaker": "ファシリテーター"
+    },
+    {
+      "id": "seg-8",
+      "text": "鈴木さんがプロトタイプを来週金曜日までに作成します",
+      "createdAt": 35000,
+      "source": "manual",
+      "speaker": "プロジェクトマネージャー"
+    },
+    {
+      "id": "seg-9",
+      "text": "本当ですか？了解です。鈴木さんにお願いします",
+      "createdAt": 40000,
+      "source": "manual",
+      "speaker": "ファシリテーター"
+    }
+  ]
+}

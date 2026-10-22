@@ -1,0 +1,17 @@
+{
+  "id": "03-context",
+  "intent": "背景説明は決定ではない",
+  "coverage": "context",
+  "utterances": [
+    {
+      "text": "スライドの構成のベースはまず決まっていて、問題、解決へのプロセス、解決策のデモ、今後",
+      "speaker": "スピーカー"
+    }
+  ],
+  "expect": {
+    "canonical": {
+      "decisions": 0
+    }
+  },
+  "notes": "role: contextは背景説明。信号には見えるが昇格対象外"
+}

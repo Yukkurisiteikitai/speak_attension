@@ -1,0 +1,17 @@
+{
+  "id": "10-decision-paraphrased",
+  "intent": "言い換えられた決定は現状legacyが取りこぼす",
+  "coverage": "decision（言い換え）",
+  "utterances": [
+    {
+      "text": "レイテンシー削減を優先で進めることにします。期限は10月末です",
+      "speaker": "ファシリテーター"
+    }
+  ],
+  "expect": {
+    "canonical": {
+      "decisions": 1
+    }
+  },
+  "notes": "現状legacyは取りこぼす。DECISION_PATTERNが『ことにします』を含まないため"
+}

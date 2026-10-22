@@ -1,0 +1,21 @@
+{
+  "id": "16-reference-unresolved",
+  "intent": "参照解決不能の場合はunresolvedへ",
+  "coverage": "reference expression",
+  "utterances": [
+    {
+      "text": "対戦ゲーム形式で進めましょう",
+      "speaker": "スピーカー1"
+    },
+    {
+      "text": "それで進めましょう",
+      "speaker": "スピーカー2"
+    }
+  ],
+  "expect": {
+    "canonical": {
+      "decisions": 0
+    }
+  },
+  "notes": "参照「それ」を推測してはならない。解決できない場合にunresolvedになることを検証"
+}

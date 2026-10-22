@@ -1,0 +1,19 @@
+{
+  "id": "17-topic-return",
+  "intent": "話題の戻りは前話題の根拠を引き継がない",
+  "coverage": "topic change / return",
+  "utterances": [
+    {
+      "text": "対戦ゲーム形式で進めましょう",
+      "speaker": "スピーカー1"
+    },
+    {
+      "text": "話を戻すと、Wi-Fi負荷の件ですが",
+      "speaker": "スピーカー2"
+    }
+  ],
+  "expect": {
+    "canonical": {}
+  },
+  "notes": "話題の戻りはmeeting_processスコープ。前話題の根拠を引き継がない"
+}

@@ -1,0 +1,21 @@
+{
+  "id": "08-opposition",
+  "intent": "異議は決定ではない",
+  "coverage": "opposition",
+  "utterances": [
+    {
+      "text": "対戦ゲーム形式で進めましょう",
+      "speaker": "スピーカー1"
+    },
+    {
+      "text": "それは反対です。コストが見合いません",
+      "speaker": "スピーカー2"
+    }
+  ],
+  "expect": {
+    "canonical": {
+      "decisions": 0
+    }
+  },
+  "notes": "act: oppose, commitment: rejectedなので決定ではない。文脈は提案を含める"
+}

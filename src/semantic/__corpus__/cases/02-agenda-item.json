@@ -1,0 +1,18 @@
+{
+  "id": "02-agenda-item",
+  "intent": "議題の列挙はアクションにしない",
+  "coverage": "agenda item",
+  "utterances": [
+    {
+      "text": "今日整理したいことは3つ、スライド作成、コーディング、リファクタリングです",
+      "speaker": "ファシリテーター"
+    }
+  ],
+  "expect": {
+    "canonical": {
+      "actions": 0,
+      "decisions": 0
+    }
+  },
+  "notes": "role: agenda_itemは会議進行上の分類であり、確定アクションへ昇格しない"
+}

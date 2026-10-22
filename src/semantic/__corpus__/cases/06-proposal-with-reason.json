@@ -1,0 +1,19 @@
+{
+  "id": "06-proposal-with-reason",
+  "intent": "理由付き提案の場合、理由と提案は別unit",
+  "coverage": "proposal",
+  "utterances": [
+    {
+      "text": "スマホで集客しやすいので、対戦ゲーム形式で進めましょう",
+      "speaker": "スピーカー"
+    }
+  ],
+  "expect": {
+    "canonical": {
+      "proposals": 1,
+      "decisions": 0
+    },
+    "unitCount": 2
+  },
+  "notes": "unitCount: 2はreason + proposal。proposalはcommitment: proposedなので決定へ昇格しない"
+}

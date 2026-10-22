@@ -2,11 +2,15 @@ import type {
   AnalyzedSegment,
   ImportantMention,
   MeetingGraph,
+  MeetingDecisionGraph,
+  MissingContribution,
   TopicGapSeverity,
   TopicGapType,
   TopicNode,
 } from "../types/topic";
 import { buildTopicGaps } from "./topicCoverage";
+import { buildMissingContributions } from "./missingContribution";
+import { createInitialMeetingDecisionGraph } from "./meetingDecisionGraph";
 
 export type MeetingReportFindingKind = "topic_gap" | "important_mention" | "llm_added";
 
@@ -36,11 +40,13 @@ export type MeetingReport = {
   topicCount: number;
   decidedTopicCount: number;
   findings: MeetingReportFinding[];
+  nextContributions: MissingContribution[];
 };
 
 export type BuildMeetingReportInput = {
   meetingGraph: MeetingGraph;
   importantMentions: ImportantMention[];
+  decisionGraph?: MeetingDecisionGraph;
   segments: AnalyzedSegment[];
   now?: number;
 };
@@ -128,6 +134,14 @@ export function buildMeetingReport(input: BuildMeetingReportInput): MeetingRepor
     );
   });
 
+  const nextContributions = buildMissingContributions({
+    gaps: meetingGraph.gaps,
+    topics,
+    decisionGraph: input.decisionGraph ?? createInitialMeetingDecisionGraph(),
+    segments,
+    currentTopicId: null,
+  });
+
   return {
     meetingId: meetingGraph.meetingId,
     meetingTitle: meetingGraph.title,
@@ -136,6 +150,7 @@ export function buildMeetingReport(input: BuildMeetingReportInput): MeetingRepor
     topicCount: topics.length,
     decidedTopicCount: topics.filter((topic) => topic.coverage.decision).length,
     findings,
+    nextContributions,
   };
 }
 
@@ -179,6 +194,16 @@ export function renderMeetingReportMarkdown(report: MeetingReport): string {
   lines.push(`- セグメント数: ${report.segmentCount}`);
   lines.push(`- トピック数: ${report.topicCount} (決定済み ${report.decidedTopicCount})`);
   lines.push(`- 指摘件数: ${report.findings.length}`);
+
+  if (report.nextContributions.length > 0) {
+    lines.push("");
+    lines.push("## 次回確認すること");
+    for (const contribution of report.nextContributions) {
+      lines.push("");
+      lines.push("- " + contribution.question);
+      lines.push("  - 発言例: " + contribution.exampleUtterance);
+    }
+  }
 
   const severities: TopicGapSeverity[] = ["high", "medium", "low"];
   for (const severity of severities) {

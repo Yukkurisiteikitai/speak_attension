@@ -12,7 +12,7 @@ import {
   type IdeaSessionState,
   type IdeaUtteranceSource,
 } from "../utils/ideaSession";
-import type { LlmSettings } from "../utils/llmClient";
+import { providerLabel, type LlmSettings } from "../utils/llmClient";
 
 export type IdeaGroupingStatus = "idle" | "running" | "done" | "error";
 
@@ -73,7 +73,7 @@ export function createIdeaSessionStore(initialSession: IdeaSessionState = create
           write({
             session: applyGrouping(started, groups, "llm"),
             groupingStatus: "done",
-            groupingNote: `ローカルLLM(${llmSettings.model})でグループ化しました。`,
+            groupingNote: `${providerLabel()} (${llmSettings.model})でグループ化しました。`,
           });
           return;
         } catch (error) {

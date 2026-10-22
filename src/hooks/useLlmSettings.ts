@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { DEFAULT_LLM_SETTINGS, type LlmSettings } from "../utils/llmClient";
+import { DEFAULT_LLM_SETTINGS, restoreLocalLlmSettings, type LlmSettings } from "../utils/llmClient";
 
 export function useLlmSettings(storageKey = "speak_attension.llmSettings") {
   const [llmSettings, setLlmSettingsState] = useState<LlmSettings>(() => {
@@ -7,10 +7,11 @@ export function useLlmSettings(storageKey = "speak_attension.llmSettings") {
       const raw = window.localStorage.getItem(storageKey);
       if (!raw) return DEFAULT_LLM_SETTINGS;
       const parsed = JSON.parse(raw) as Partial<LlmSettings>;
-      return {
-        baseUrl: parsed.baseUrl || DEFAULT_LLM_SETTINGS.baseUrl,
-        model: parsed.model || DEFAULT_LLM_SETTINGS.model,
-      };
+      const restored = restoreLocalLlmSettings(parsed);
+      if (restored.baseUrl !== parsed.baseUrl || restored.model !== parsed.model) {
+        window.localStorage.setItem(storageKey, JSON.stringify(restored));
+      }
+      return restored;
     } catch {
       return DEFAULT_LLM_SETTINGS;
     }

@@ -1,0 +1,70 @@
+{
+  "meetingId": "meeting-standup-20260927",
+  "title": "朝会 - プロジェクトA進捗確認",
+  "createdAt": "2026-09-27T09:30:00Z",
+  "segments": [
+    {
+      "id": "seg-1",
+      "text": "本日の朝会を始めます。進捗報告をお願いします",
+      "createdAt": 0,
+      "source": "manual",
+      "speaker": "スクラムマスター"
+    },
+    {
+      "id": "seg-2",
+      "text": "昨日のスプリントタスクは完了しました。ただし、APIレスポンスが予想より遅くて、パフォーマンステストをやり直す必要があります",
+      "createdAt": 5000,
+      "source": "manual",
+      "speaker": "開発者A"
+    },
+    {
+      "id": "seg-3",
+      "text": "パフォーマンステストは本日中に完了します",
+      "createdAt": 12000,
+      "source": "manual",
+      "speaker": "開発者A"
+    },
+    {
+      "id": "seg-4",
+      "text": "レビューはいつになりますか？",
+      "createdAt": 18000,
+      "source": "manual",
+      "speaker": "QA"
+    },
+    {
+      "id": "seg-5",
+      "text": "結果を待ってから判断します。明日朝には共有できます",
+      "createdAt": 25000,
+      "source": "manual",
+      "speaker": "開発者A"
+    },
+    {
+      "id": "seg-6",
+      "text": "デザインチームはどう？",
+      "createdAt": 32000,
+      "source": "manual",
+      "speaker": "スクラムマスター"
+    },
+    {
+      "id": "seg-7",
+      "text": "デザイン案は明日までに確定します。ただし、ブランドカラーの最終確認がまだ取れていません",
+      "createdAt": 40000,
+      "source": "manual",
+      "speaker": "デザイナー"
+    },
+    {
+      "id": "seg-8",
+      "text": "ブランドカラー確認は本社に問い合わせしてください",
+      "createdAt": 48000,
+      "source": "manual",
+      "speaker": "スクラムマスター"
+    },
+    {
+      "id": "seg-9",
+      "text": "了解です。今日中に確認取ります",
+      "createdAt": 55000,
+      "source": "manual",
+      "speaker": "デザイナー"
+    }
+  ]
+}
