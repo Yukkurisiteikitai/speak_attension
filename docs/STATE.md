@@ -1,6 +1,6 @@
 # Current State
 
-最終更新日: 2026-10-26
+最終更新日: 2026-10-27
 
 ## 現在できること
 
@@ -85,6 +85,16 @@ NOWカードから担当・期限・優先度・実行状態と結果／変更�
 現在の適用範囲は「会話のタイムライン」だけである（`src/semantic/flags.ts` の `timeline`）。タイムラインは自分で分類をやり直さず、Semantic Coreの投影を表示する。1発話が複数の意味を持つ場合は意味単位ごとに分けて表示し、各単位が「会議の状況」へ昇格したかどうかと、その根拠が「規則が判定（未確認）」か「参加者が確認」かを区別して示す。分類の手動修正は軸ごとの部分上書きとしてイベントログに残るため、画面を切り替えても再解析しても失われない。修正と自動解析が食い違う場合は「自動解析と相違」として示し、自動側を勝たせない。
 
 「会議の状況」は `meetingState` フラグが有効のときだけ、Canonical State の投影（`src/semantic/meetingStateGraph.ts`）を表示する。フラグは既定で無効のため、利用者から見た動作は従来のままである。「会話マップ」「決定グラフ」は従来の実装のまま（`flags.ts` の他のフラグは無効）。フラグを有効にすると、「会議の状況」から開く関係マップ・アクション一覧は従来の決定グラフを読むため、ノードIDが一致しない。従来の分類器（`utteranceClassification.ts`・`conversationTree.ts`・`meetingDecisionGraph.ts`）は削除せず並存させ、Phase 6で重複を解消する。`npm run semantic:eval` が従来実装とSemantic Coreを同じcorpusで採点し、`npm run semantic:bench` がリアルタイム予算の消費率を報告する（テストではなくレポート）。
+
+### Phase 3の根拠追跡（2026-10-27）
+
+Phase 3の画面接続は実装済みだが、`meetingState` フラグは無効のままで、利用者向けの切替はまだ行っていない。現状の `meetingStateGraphFromProjection` はCanonical Entryを表示ノードへ変換するだけで、エッジを空にしている。Canonical Entryには根拠発話IDとAssertion IDがあるが、会議状況の選択パネルはIDから原文を引いて表示しない。そのため、この画面から根拠発話や理由のつながりをたどれない。
+
+関係Assertionの型とFast Pathの出力はあるが、ライブストアは `runFastPath` のAssertionだけを保持し、RelationAssertionを取り込んでいない。`relations_asserted` reducerも現状ではrevisionを進めるだけで、関係を保存しない。表示グラフが空エッジになるのはこのためである。さらに表示変換はCanonical Entryの `basis` を落とし、`rule_explicit` を既存型の `createdBy: "ai"` にまとめている。人の確認と規則の明示判定を画面で区別できない。
+
+今後は次の順で根拠経路を作る。まずCanonical Entryの発話IDをRaw Utteranceへ解決し、元発言の原文・時刻・話者を項目の詳細で表示する。次にRelationAssertionをライブ状態へ保持し、Semantic UnitからCanonical EntryへID対応付けして、根拠の関係を表示する。関係の種類・根拠・確度は保持し、推定関係を確認済みの事実として扱わない。由来も `rule_explicit`・`human_confirmed`・`provisional` の区別を表示モデルと画面まで残す。根拠が見つからない場合は「根拠未接続」と明示する。
+
+有効化前に、会議状況の項目から元発言を開けること、関係の両端と関係の由来を表示できること、複数根拠・根拠欠落・未確認関係を区別できることをストアから画面までのテストで確認する。現在は発言ログ全体から時刻Mapを組み立てているため、長い会議での更新コストも測定し、全ログの再走査が発話ごとに繰り返されない形にする。
 
 音声入力は、発言確定後の最大5000msの滞留を解消した。終端句読点があれば即時、無音約800ms、話し続けた場合の上限5000msで発言を取り込む（[ADR 0024](adr/0024-realtime-budget-stages-and-speech-boundary-flush.md)）。
 
