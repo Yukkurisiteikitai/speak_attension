@@ -14,7 +14,7 @@
 | アイデア出しの状態・変換 | `src/hooks/ideaSessionStore.ts`, `src/utils/ideaSession.ts` | 状態遷移、採否、Markdown/JSON出力をここで管理する。 |
 | 会議の状態・リアルタイム処理 | `src/hooks/topicEngineStore.ts`, `src/utils/topicEngine.ts` | 発話1件ごとの処理はルールベースで完結させる。 |
 | LLM通信 | `src/utils/llmClient.ts`, `src/utils/llmConnection.ts` | LM Studio (`http://127.0.0.1:1234/v1`) だけを使う。失敗は呼び出し元でルールベース結果を保持する。 |
-| ローカルHTTP/WebSocket | `server/index.ts` | WebSocket中継、ログ保存、Discord送信の秘密情報管理を担う。 |
+| ローカルHTTP API | `server/localServer.ts` | Origin・本文制限、ログ保存、Discord送信の秘密情報管理を担う。 |
 | ブラウザの運用ログ | `src/lib/runtimeLog.ts` | ブラウザはファイルを直接書けないため `/api/logs` へ送る。 |
 
 より詳細なコード案内は [CODE_GUIDE.md](CODE_GUIDE.md) を正とします。
