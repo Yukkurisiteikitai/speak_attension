@@ -162,9 +162,9 @@ LM Studio との OpenAI 互換通信共通部。`ideaGrouping` と `llmGapReview
 
 `src/hooks/useLlmConnectionCheck.ts` は接続確認中・成功・失敗の表示状態と、未設定モデルの自動入力を両モードで共通管理する。
 
-### `server/index.ts` / `src/lib/runtimeLog.ts`
+### `server/localServer.ts` / `src/lib/runtimeLog.ts`
 
-ローカルサーバーはブラウザーからの構造化ログを `/api/logs` で受け、`logs/runtime-YYYY-MM-DD.jsonl` へ追記する。`/api/discord/report` は `.env` の `DISCORD_WEBHOOK_URL` だけを使ってレポートを送る。URLやLLM入力本文はログへ保存しない。
+ローカルサーバーは許可された開発画面のOriginからJSON形式の構造化ログを `/api/logs` で受け、`logs/runtime-YYYY-MM-DD.jsonl` へ追記する。`/api/discord/report` は `.env` の `DISCORD_WEBHOOK_URL` だけを使って番号付きのレポートを送る。URLやLLM入力本文はログへ保存しない。WebSocket中継は使用しない。
 
 ### `src/utils/llmGapReview.ts` / `src/utils/llmTopicTitle.ts` / `src/utils/llmMeetingSynthesis.ts`
 
