@@ -24,6 +24,7 @@ export type MeetingStateProjection = {
   problems: CanonicalEntry[];
   topics: CanonicalEntry[];
   context: CanonicalEntry[];
+  relations: CanonicalMeetingState["relations"];
 };
 
 const SUPPORTED_KINDS: readonly CanonicalKind[] = [
@@ -35,9 +36,10 @@ export function projectMeetingState(state: CanonicalMeetingState): MeetingStateP
   const decisions = entriesOfKind(state, "decision");
 
   return {
-    confirmedDecisions: decisions.filter((entry) => entry.basis !== "provisional"),
-    provisionalDecisions: decisions.filter((entry) => entry.basis === "provisional"),
-    actions: entriesOfKind(state, "action"),
+    relations: state.relations,
+    confirmedDecisions: decisions.filter((entry) => entry.basis !== "provisional" && !entry.blocked),
+    provisionalDecisions: decisions.filter((entry) => entry.basis === "provisional" || entry.blocked),
+    actions: entriesOfKind(state, "action").filter((entry) => !entry.blocked),
     deferred: entriesOfKind(state, "deferred"),
     questions: entriesOfKind(state, "question"),
     unresolved: entriesOfKind(state, "unresolved"),

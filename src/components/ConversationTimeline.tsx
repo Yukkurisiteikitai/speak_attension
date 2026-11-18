@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import type { ConversationTreeState } from "../types/topic";
 import type { SemanticAxes, Scope, SemanticRole } from "../semantic/types";
 import type { TimelineRow } from "../semantic/timelineProjection";
-import { roleLabels, scopeLabels } from "../semantic/labels";
+import { itemFieldLabels, roleLabels, scopeLabels } from "../semantic/labels";
 import { SemanticBadge } from "./SemanticBadge";
 import { TimelineCorrectionMenu, type CorrectionAxisOption } from "./TimelineCorrectionMenu";
 import { downloadFile } from "../lib/download";
@@ -19,7 +19,7 @@ type ConversationTimelineProps = {
   selectedNodeId: string | null;
   onRate: (nodeId: string) => void;
   onSelect: (nodeId: string | null) => void;
-  onCorrect: (target: { utteranceId: string; unitId?: string }, axes: Partial<SemanticAxes>) => void;
+  onCorrect: (target: { utteranceId: string; unitId?: string }, axes: Partial<SemanticAxes>) => void | Promise<unknown>;
   onStart?: () => void;
 };
 
@@ -71,6 +71,7 @@ export function ConversationTimeline({
             humanOverriddenAxes: unit.humanOverriddenAxes,
             conflictingAxes: unit.conflictingAxes,
             promotion: unit.promotion,
+            item: unit.item,
           })),
         })),
       }, null, 2),
@@ -150,6 +151,11 @@ export function ConversationTimeline({
                         <li className="timeline-unit" key={unit.unitId}>
                           <SemanticBadge unit={unit} />
                           <span className="timeline-unit-text">{unit.text}</span>
+                          {unit.item?.fields && Object.entries(itemFieldLabels).flatMap(([key, label]) => {
+                            const value = unit.item!.fields[key as keyof typeof itemFieldLabels];
+                            return value && (key !== "content" || value !== unit.text)
+                              ? [<small key={key}>{label}：{value}</small>] : [];
+                          })}
                           <TimelineCorrectionMenu
                             axisLabel="意味"
                             currentValue={unit.axes.role}

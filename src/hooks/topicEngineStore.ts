@@ -26,10 +26,17 @@ import { analyzeDecisionMaterials, updateDecisionMaterialStatus } from "../utils
 import { buildDiscussionPrompts, recordDiscussionAnswer, type DiscussionPrompt } from "../utils/meetingProgress";
 import { applyProgressReview, buildProgressReviewMessages } from "../utils/meetingProgressReview";
 import { buildRuleBasedMeetingSummary, renameMeetingSummaryNode } from "../utils/meetingSynthesis";
-import { appendEvent, appendUtterance, createEventLog, recentUtterances, type MeetingEventLog } from "../semantic/rawUtterance";
+import { appendUtterance, createEventLog, recentUtterances, type MeetingEventLog } from "../semantic/rawUtterance";
 import { emptyFastPathContext, runFastPath, FAST_PATH_CONTEXT_WINDOW } from "../semantic/fastPath";
-import { createCanonicalState, reduceCanonical } from "../semantic/canonicalReducer";
+import { createCanonicalState, entriesOfKind, reduceCanonical } from "../semantic/canonicalReducer";
+import { applyItemCorrection, applyReviewAction, synchronizeReview, type ReviewResult } from "../semantic/reviewEventReducer";
+import type { ReviewAction, ReviewTarget } from "../semantic/meetingItem";
 import { SEMANTIC_CORE_FLAGS } from "../semantic/flags";
+import { MEETING_ARCHIVE_SCHEMA_VERSION, projectMeetingArchive, type MeetingArchive, type ArchiveProjection } from "../semantic/meetingArchive";
+import type { MeetingArchiveStorage, MeetingArchiveSummary } from "../semantic/meetingArchiveStorage";
+import { REVIEW_POLICY_VERSION } from "../semantic/reviewPolicy";
+import { compareDecisionProjections } from "../semantic/meetingStateConsistency";
+import { buildMeetingStateDashboard } from "../utils/meetingStateDashboard";
 import type { CanonicalMeetingState, HumanCorrection, SemanticAssertion, SemanticAxes } from "../semantic/types";
 import type { AnalyzedSegment, ConversationNodeRole, ConversationTreeState, DecisionMaterialStatus, DecisionSupportAnalysis, MeetingSummary, MeetingSummaryStatus, SessionLogEntry, TimedTranscriptSegment, TranscriptSegmentMetadata, TranscriptInputSource } from "../types/topic";
 
@@ -59,6 +66,7 @@ type TopicEngineStoreSnapshot = {
   meetingSummaryStale: boolean;
   meetingSummaryStartedAt: number | null;
   decisionSupport: DecisionSupportAnalysis;
+  legacyEvents: import("../semantic/meetingArchive").ArchivedLegacyEvent[];
 };
 
 // The raw utterance log is the primary source; assertions and canonical state
@@ -69,17 +77,27 @@ type SemanticState = {
   assertions: SemanticAssertion[];
   corrections: HumanCorrection[];
   canonical: CanonicalMeetingState;
+  endedAt: number | null;
 };
 
 function createSemanticState(): SemanticState {
-  return { log: createEventLog(), assertions: [], corrections: [], canonical: createCanonicalState() };
+  return { log: createEventLog(), assertions: [], corrections: [], canonical: createCanonicalState(), endedAt: null };
 }
 
 type TopicEngineStoreOptions = {
+  storage?: MeetingArchiveStorage;
   onLog?: (entry: SessionLogEntry) => void;
 };
 
 type TopicEngineStore = {
+  finishMeeting: () => void;
+  saveMeeting: () => Promise<{ ok: boolean; error?: string }>;
+  restoreMeeting: (id: string) => Promise<{ ok: boolean; error?: string }>;
+  listSavedMeetings: () => Promise<{ ok: boolean; meetings?: MeetingArchiveSummary[]; error?: string }>;
+  deleteSavedMeeting: (id: string) => Promise<{ ok: boolean; error?: string }>;
+  getArchive: () => MeetingArchive | null;
+  resumeMeeting: () => void;
+  reviewMinutes: (targets: ReviewTarget[], action: ReviewAction, bulk?: boolean) => Promise<ReviewResult>;
   setMeetingReview: (review: MeetingReview) => void;
   armDiscussionPrompt: (id: string | null, needsResearch?: boolean) => void;
   reviewProgress: () => Promise<void>;
@@ -110,7 +128,7 @@ type TopicEngineStore = {
     target: { utteranceId: string; unitId?: string },
     axes: Partial<SemanticAxes>,
     note?: string | null,
-  ) => void;
+  ) => Promise<{ ok: boolean; error?: string }>;
   toggleConversationNodeRating: (nodeId: string) => void;
   updateConversationNode: (nodeId: string, patch: { role?: ConversationNodeRole; parentId?: string | null }) => void;
   updateAction: (nodeId: string, patch: ActionUpdate) => void;
@@ -155,6 +173,9 @@ function attachSegmentMetadata(
 
 export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): TopicEngineStore {
   let onLog = options.onLog;
+  const archiveStorage = options.storage;
+  let activeArchiveId: string | null = null;
+  let legacyEvents: import("../semantic/meetingArchive").ArchivedLegacyEvent[] = [];
   let snapshot: TopicEngineStoreSnapshot = {
     meetingReview: initialMeetingReview(),
     armedDiscussionPrompt: null,
@@ -176,6 +197,7 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
     meetingSummaryStale: false,
     meetingSummaryStartedAt: null,
     decisionSupport: { status: "idle", materials: [], analyzedAt: null },
+    legacyEvents: [],
   };
   const listeners = new Set<() => void>();
   let currentLlmSettings: LlmSettings | null = null;
@@ -188,8 +210,8 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
   let lastReviewedRevision = -1;
 
   function flushSpeechBuffer() {
-    const text = cleanText(snapshot.bufferText);
-    if (!text) return;
+    const text = snapshot.bufferText;
+    if (!text.trim()) return;
     snapshot = { ...snapshot, bufferText: "", bufferStartedAt: null, bufferUpdatedAt: null };
     processSegment(text, "speech");
   }
@@ -197,23 +219,27 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
   // Fast path only (ADR 0023 §2): one utterance, a bounded context, no history
   // scan and no LLM. Purely additive -- it cannot alter the legacy transition it
   // is called with.
-  function ingestIntoSemanticCore(current: SemanticState, segment: AnalyzedSegment): SemanticState {
+  function ingestIntoSemanticCore(current: SemanticState, segment: AnalyzedSegment, rawText: string): SemanticState {
     if (!SEMANTIC_CORE_FLAGS.core) return current;
 
     const appended = appendUtterance(current.log, {
       id: segment.id,
-      text: segment.text,
+      text: rawText,
       createdAt: segment.createdAt,
       provider: segment.source === "speech" ? "web_speech" : segment.source === "replay" ? "replay" : "manual",
       speaker: segment.metadata?.speaker ?? null,
+      audio: segment.metadata ? {
+        startMs: segment.metadata.startMs, endMs: segment.metadata.endMs, confidence: segment.metadata.confidence,
+      } : undefined,
     });
+    if (appended.log === current.log) return current;
 
-    const { assertions } = runFastPath({
+    const { assertions, relations } = runFastPath({
       utterance: appended.utterance,
       context: {
         ...emptyFastPathContext(),
         activeTopicId: snapshot.engineState.currentTopicId,
-        recentUtterances: recentUtterances(appended.log, FAST_PATH_CONTEXT_WINDOW),
+        recentUtterances: recentUtterances(current.log, FAST_PATH_CONTEXT_WINDOW),
       },
     });
 
@@ -224,11 +250,18 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
       assertions,
     });
 
+    const canonical = relations.length
+      ? reduceCanonical(reduced.state, { kind: "relations_asserted", relations, at: appended.utterance.createdAt }).state
+      : reduced.state;
+    const next = { log: appended.log, canonical };
+    const synchronized = relations.some((link) => link.relation === "withdraws" || link.relation === "supersedes")
+      ? synchronizeReview(next, current, snapshot.engineState.meetingGraph.meetingId, appended.utterance.createdAt, false)
+      : next;
     return {
-      log: appended.log,
+      ...current,
+      ...synchronized,
       assertions: [...current.assertions, ...assertions],
       corrections: current.corrections,
-      canonical: reduced.state,
     };
   }
 
@@ -247,6 +280,26 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
     progressController?.abort();
     progressController = null;
     lastReviewedRevision = -1;
+  }
+
+  function buildArchive(): MeetingArchive {
+    const graph = snapshot.engineState.meetingGraph;
+    const dashboard = buildMeetingStateDashboard(snapshot.engineState.decisionGraph, snapshot.decisionSupport.materials, null);
+    const legacyTitles = new Set(dashboard.confirmedDecisions.map((entry) => entry.label));
+    const canonicalTitles = new Set(entriesOfKind(snapshot.semantic.canonical, "decision")
+      .filter((entry) => !entry.disposition && !entry.blocked).map((entry) => entry.label));
+    const stateConsistency = compareDecisionProjections(canonicalTitles, legacyTitles);
+    return {
+      schemaVersion: MEETING_ARCHIVE_SCHEMA_VERSION,
+      id: graph.meetingId,
+      metadata: { title: graph.title, startedAt: snapshot.engineState.meetingStartedAt,
+        endedAt: snapshot.semantic.endedAt ?? Date.now() },
+      policyVersion: REVIEW_POLICY_VERSION,
+      legacyGraph: graph,
+      legacyEvents,
+      events: snapshot.semantic.log.events,
+      stateConsistency,
+    };
   }
 
   function emit() {
@@ -273,7 +326,7 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
     onLog?.(nextEntry);
   }
 
-  function applyTransition(transition: TopicEngineTransition, now: number) {
+  function applyTransition(transition: TopicEngineTransition, now: number, rawText: string) {
     addLog({
       type: "decision",
       message: `segment analyzed as ${transition.segment.analysis.focusRelation}`,
@@ -284,13 +337,18 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
       },
       at: now,
     });
+    legacyEvents = [...legacyEvents, {
+      id: transition.segment.id, text: rawText, createdAt: transition.segment.createdAt,
+      source: transition.segment.source, speaker: transition.segment.metadata?.speaker ?? null,
+    }];
     snapshot = {
       ...snapshot,
       engineState: transition.state,
+      legacyEvents,
       conversationTree: appendConversationSegment(snapshot.conversationTree, transition.segment),
       // Same utterance, additionally ingested into Semantic Core. Keyed on the
       // legacy segment id so projections can join the two while both exist.
-      semantic: ingestIntoSemanticCore(snapshot.semantic, transition.segment),
+      semantic: ingestIntoSemanticCore(snapshot.semantic, transition.segment, rawText),
       // Engine state trims segments to the latest 80 for UI perf; keep the full
       // meeting here so the post-meeting report can quote every evidence segment.
       segmentArchive: [...snapshot.segmentArchive, transition.segment],
@@ -306,12 +364,14 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
     }
   }
 
-  function processSegment(text: string, source: TranscriptInputSource, metadata?: TranscriptSegmentMetadata) {
+  function processSegment(text: string, source: TranscriptInputSource, metadata?: TranscriptSegmentMetadata, stableId?: string, createdAt?: number) {
+    if (snapshot.semantic.endedAt !== null) return;
     const armed = snapshot.armedDiscussionPrompt;
     const prompt = armed && snapshot.discussionPrompts.find((item) => item.id === armed.id && ["open", "deferred"].includes(item.status));
     const now = Date.now();
-    const transition = attachSegmentMetadata(processTopicSegment(snapshot.engineState, text, source, now, metadata), metadata);
-    applyTransition(transition, now);
+    const transition = attachSegmentMetadata(processTopicSegment(snapshot.engineState, cleanText(text), source, createdAt ?? now, metadata), metadata);
+    if (stableId) transition.segment.id = stableId;
+    applyTransition(transition, now, text);
     if (armed) {
       writeSnapshot({ ...snapshot, armedDiscussionPrompt: null,
         discussionPrompts: prompt ? recordDiscussionAnswer(snapshot.discussionPrompts, prompt, transition.segment.id, armed.needsResearch) : snapshot.discussionPrompts,
@@ -417,10 +477,11 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
     },
     addLog,
     addTranscriptText(text) {
+      if (snapshot.semantic.endedAt !== null) return;
       const nextText = cleanText(text);
       if (!nextText) return;
       const now = Date.now();
-      const bufferText = [snapshot.bufferText, nextText].filter(Boolean).join(" ");
+      const bufferText = [snapshot.bufferText, text].filter(Boolean).join(" ");
       addLog({
         type: "speech",
         message: "speech chunk received",
@@ -508,6 +569,8 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
       });
     },
     reset() {
+      activeArchiveId = null;
+      legacyEvents = [];
       cancelProgressReview();
       titleRefineQueue = [];
       sessionEpoch += 1;
@@ -533,6 +596,7 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
         meetingSummaryStale: false,
         meetingSummaryStartedAt: null,
         decisionSupport: { status: "idle", materials: [], analyzedAt: null },
+        legacyEvents: [],
       });
     },
     setFocusLocked(locked) {
@@ -575,7 +639,7 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
     submitTimedTranscript(segment) {
       const nextText = cleanText(segment.text);
       if (!nextText) return;
-      processSegment(nextText, "replay", {
+      processSegment(segment.text, "replay", {
         speaker: segment.speaker,
         startMs: segment.startMs,
         endMs: segment.endMs,
@@ -588,10 +652,130 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
     submitTranscript(text, source) {
       const nextText = cleanText(text);
       if (!nextText) return;
-      processSegment(nextText, source);
+      processSegment(text, source);
     },
-    recordSemanticCorrection(target, axes, note = null) {
-      if (Object.keys(axes).length === 0) return;
+    getArchive() {
+      return snapshot.semantic.log.events.length ? buildArchive() : null;
+    },
+    async listSavedMeetings() {
+      if (!archiveStorage) return { ok: false, error: "このブラウザーでは端末内保存を利用できません。" };
+      const result = await archiveStorage.list();
+      return result.ok ? { ok: true, meetings: result.value } : { ok: false, error: "保存済み会議を読み込めませんでした。" };
+    },
+    async saveMeeting() {
+      if (!archiveStorage) return { ok: false, error: "このブラウザーでは端末内保存を利用できません。" };
+      if (!snapshot.semantic.log.events.some((event) => event.kind === "utterance_added")) {
+        return { ok: false, error: "発言がないため会議を保存できません。" };
+      }
+      const result = await archiveStorage.save(buildArchive());
+      if (!result.ok) return { ok: false, error: result.error === "quota"
+        ? "端末の保存容量が不足しています。会議データは保存されていません。"
+        : "端末への保存に失敗しました。会議データは保存されていません。" };
+      activeArchiveId = snapshot.engineState.meetingGraph.meetingId;
+      return { ok: true };
+    },
+    async deleteSavedMeeting(id: string) {
+      if (!archiveStorage) return { ok: false, error: "このブラウザーでは端末内保存を利用できません。" };
+      const result = await archiveStorage.remove(id);
+      return result.ok ? { ok: true } : { ok: false, error: "保存済み会議を削除できませんでした。" };
+    },
+    async restoreMeeting(id: string) {
+      if (!archiveStorage) return { ok: false, error: "このブラウザーでは端末内保存を利用できません。" };
+      const loaded = await archiveStorage.load(id);
+      if (!loaded.ok) return { ok: false, error: loaded.error === "invalid"
+        ? "保存データを検証できません。データを変更せず、復元を停止しました。"
+        : "保存済み会議の読み込みに失敗しました。" };
+      if (!loaded.value) return { ok: false, error: "保存済み会議が見つかりませんでした。" };
+      const archive = loaded.value;
+      const projection = projectMeetingArchive(archive);
+      legacyEvents = archive.legacyEvents;
+      const engineState = {
+        ...createInitialTopicEngineState(archive.metadata.startedAt),
+        meetingGraph: archive.legacyGraph,
+        meetingStartedAt: archive.metadata.startedAt,
+      };
+      const restoredSegments: AnalyzedSegment[] = [];
+      const savedUtterances = archive.events.flatMap((event) => {
+        if (event.kind !== "utterance_added") return [];
+        return [event.utterance];
+      });
+      for (const utterance of savedUtterances) {
+        const source = utterance.provider === "web_speech" ? "speech" : utterance.provider === "replay" ? "replay" : "manual";
+        const metadata = utterance.speaker || utterance.audio ? {
+          speaker: utterance.speaker ?? undefined, startMs: utterance.audio?.startMs, endMs: utterance.audio?.endMs,
+          confidence: utterance.audio?.confidence,
+        } : undefined;
+        const transition = attachSegmentMetadata(processTopicSegment(engineState, utterance.text, source, utterance.createdAt, metadata), metadata);
+        transition.segment.id = utterance.id;
+        Object.assign(engineState, transition.state);
+        restoredSegments.push(transition.segment);
+      }
+      engineState.meetingGraph = archive.legacyGraph;
+      const finalEngineState = { ...engineState, meetingGraph: archive.legacyGraph, segments: restoredSegments,
+        segmentCount: restoredSegments.length };
+      const conversationTree = restoredSegments.reduce((tree, segment) =>
+        appendConversationSegment(tree, segment), createInitialConversationTreeState());
+      const assertions = projection.assertions;
+      const corrections = archive.events.flatMap((event) => event.kind === "human_correction" ? [event.correction] : []);
+      const canonical = projection.canonical;
+      const log: MeetingEventLog = { events: archive.events, nextSeq: Math.max(0, ...restoredSegments.map((segment, i) => i + 1)) + 1 };
+      legacyEvents = archive.legacyEvents;
+      snapshot = {
+        ...snapshot,
+        legacyEvents,
+        engineState: finalEngineState,
+        conversationTree,
+        segmentArchive: restoredSegments as AnalyzedSegment[],
+        semantic: { log, assertions, corrections, canonical, endedAt: archive.metadata.endedAt },
+        bufferText: "",
+        bufferStartedAt: null,
+        bufferUpdatedAt: null,
+        meetingSummary: null,
+        meetingSummaryStatus: "idle",
+        meetingSummaryError: null,
+        meetingSummaryStale: false,
+        decisionSupport: { status: "idle", materials: [], analyzedAt: null },
+      };
+      activeArchiveId = archive.id;
+      refreshProgress();
+      emit();
+      return { ok: true };
+    },
+    finishMeeting() {
+      if (snapshot.semantic.endedAt !== null) return;
+      flushSpeechBuffer();
+      const at = Date.now();
+      const current = snapshot.semantic;
+      const next = { ...current, endedAt: at };
+      const reviewed = synchronizeReview(next, current, snapshot.engineState.meetingGraph.meetingId, at, true);
+      writeSnapshot({ ...snapshot, semantic: { ...next, ...reviewed } });
+    },
+    resumeMeeting() {
+      if (snapshot.semantic.endedAt === null) return;
+      writeSnapshot({ ...snapshot, semantic: { ...snapshot.semantic, endedAt: null } });
+    },
+    async reviewMinutes(targets, action, bulk) {
+      if (snapshot.semantic.endedAt === null) return { ok: false, message: "会議を終了してから確認してください。" };
+      const current = snapshot.semantic;
+      const result = applyReviewAction(current, snapshot.engineState.meetingGraph.meetingId, targets, action, Date.now(), bulk);
+      if (result.ok) {
+        const nextSemantic = { ...current, ...result.state, corrections: result.state.canonical.corrections };
+        if (activeArchiveId) {
+          const prior = snapshot;
+          snapshot = { ...snapshot, semantic: nextSemantic };
+          const saved = await archiveStorage!.save(buildArchive());
+          if (!saved.ok) {
+            snapshot = prior;
+            return { ok: false, message: saved.error === "quota" ? "端末の保存容量が不足しています。" : "変更を端末へ保存できませんでした。" };
+          }
+        }
+        writeSnapshot({ ...snapshot, semantic: nextSemantic });
+        return { ok: true };
+      }
+      return { ok: false, message: result.message };
+    },
+    async recordSemanticCorrection(target, axes, note = null) {
+      if (Object.keys(axes).length === 0) return { ok: true };
       const correction: HumanCorrection = {
         id: createId("correction"),
         at: Date.now(),
@@ -599,16 +783,19 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
         axes,
         note,
       };
-      // Appended to the event log as well as held for resolution: a correction is
-      // a first-class event, not a UI-local override that a re-render discards.
+      const current = snapshot.semantic;
+      const revised = applyItemCorrection(current, correction, snapshot.engineState.meetingGraph.meetingId);
       writeSnapshot({
         ...snapshot,
-        semantic: {
-          ...snapshot.semantic,
-          log: appendEvent(snapshot.semantic.log, { kind: "human_correction", at: correction.at, correction }),
-          corrections: [...snapshot.semantic.corrections, correction],
-        },
+        semantic: { ...current, ...revised, corrections: revised.canonical.corrections },
       });
+      if (activeArchiveId && archiveStorage) {
+        const saved = await archiveStorage.save(buildArchive());
+        if (!saved.ok) return { ok: false, error: saved.error === "quota"
+          ? "端末の保存容量が不足しています。訂正は画面上に残っていますが、保存されていません。"
+          : "訂正を端末へ保存できませんでした。訂正は画面上に残っています。" };
+      }
+      return { ok: true };
     },
     toggleConversationNodeRating(nodeId) {
       const nextTree = toggleConversationNodeRating(snapshot.conversationTree, nodeId);

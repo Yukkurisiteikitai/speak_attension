@@ -12,9 +12,10 @@ import type {
   RawUtterance, RelationAssertion, SemanticAssertion, SemanticUnit,
 } from "./types";
 import { segmentUnitSpans } from "./segmentUnits";
+import { conditionMarker, isScheduleMention, scheduleAcceptance, scheduleSubject, scheduleTime, supersessionMarker, withdrawalMarker } from "./commitmentMarkers";
 import { parseAxes } from "./parseAxes";
 
-export const FAST_PATH_ENGINE = { engine: "semantic-core/fastPath", version: "1.0.0" } as const;
+export const FAST_PATH_ENGINE = { engine: "semantic-core/fastPath", version: "1.1.0" } as const;
 
 // The rolling window the fast path may look at. 20 utterances is roughly a few
 // minutes of meeting speech -- enough to resolve an explicit named reference
@@ -48,8 +49,8 @@ export function emptyFastPathContext(): FastPathContext {
 const unitId = (utteranceId: string, index: number) => `${utteranceId}#u${index}`;
 const assertionId = (utteranceId: string, index: number) => `${utteranceId}#a${index}`;
 
-// An explicitly named alternative, e.g. 「A案」. The only reference the fast path
-// will resolve; pronouns are refinement's job.
+// An explicitly named alternative, e.g. 「A案」. Agreement and withdrawal also
+// support a small set of explicit references to the immediately preceding turn.
 const NAMED_OPTION_PATTERN = /[A-Za-zＡ-Ｚａ-ｚ0-9一二三四五]+案/g;
 
 function namedOptionsIn(text: string): string[] {
@@ -79,9 +80,63 @@ export function runFastPath(input: FastPathInput): FastPathResult {
   }));
 
   const relations: RelationAssertion[] = [];
+  const recent = context.recentUtterances.filter((prior) => prior.seq < utterance.seq);
+  const previous = recent.at(-1);
+  const previousUnits = previous ? segmentUnitSpans(previous.text).map((span, index) => ({
+    id: unitId(previous.id, index), text: previous.text.slice(span.start, span.end),
+  })) : [];
+  const link = (from: SemanticUnit, to: string, relation: RelationAssertion["relation"]) => {
+    relations.push({
+      id: from.id + "->" + to + ":" + relation, from: from.id, to, relation,
+      basis: "explicit_marker", epistemic: "explicit", provenance: "rule",
+      confidence: 0.9, producedBy: FAST_PATH_ENGINE,
+    });
+  };
   for (const unit of units) {
     const text = utterance.text.slice(unit.span.start, unit.span.end);
-    for (const option of namedOptionsIn(text)) {
+    const named = namedOptionsIn(text);
+    if (scheduleAcceptance.test(text) && previous?.speaker && utterance.speaker &&
+        previous.speaker !== utterance.speaker && previousUnits.length === 1 &&
+        isScheduleMention(previousUnits[0].text)) {
+      link(unit, previousUnits[0].id, "confirms");
+    }
+    if (isScheduleMention(text) && scheduleSubject(text) && !supersessionMarker.test(text)) {
+      for (const prior of recent) {
+        if (scheduleSubject(prior.text) !== scheduleSubject(text) || !isScheduleMention(prior.text) ||
+            prior.text.match(scheduleTime)?.[0] === text.match(scheduleTime)?.[0]) continue;
+        if (segmentUnitSpans(prior.text).length === 1) link(unit, unitId(prior.id, 0), "opposes");
+      }
+    }
+    if (withdrawalMarker.test(text)) {
+      const referential = /(?:今の|先ほどの|さっきの|直前の|[こそ]の(?:決定|合意))/.test(text);
+      const candidates = recent.flatMap((prior) => {
+        const sameSpeaker = !prior.speaker || !utterance.speaker || prior.speaker === utterance.speaker;
+        if (!named.length && (!referential || prior !== previous || !sameSpeaker)) return [];
+        return segmentUnitSpans(prior.text).flatMap((span, index) => {
+          const snippet = prior.text.slice(span.start, span.end);
+          const act = parseAxes(snippet).act;
+          const wanted = /(?:決定|合意|取り決め)/.test(text) ? act === "decide" : act === "decide" || act === "commit";
+          return wanted &&
+            (!named.length || named.some((option) => snippet.includes(option))) ? [unitId(prior.id, index)] : [];
+        });
+      });
+      const entireUtterance = named.length === 0 && referential && /発言/.test(text);
+      for (const candidate of candidates) {
+        link(unit, candidate, candidates.length === 1 || entireUtterance ? "withdraws" : "opposes");
+      }
+    }
+    if (previousUnits.length === 1 && /^(?:ただし[、,]?|QA|結果|その件|反対|いいえ)/.test(text)) {
+      if (conditionMarker.test(text)) link(unit, previousUnits[0].id, "conditions");
+      else if (/反対|未決定|まだ決まってい/.test(text)) link(unit, previousUnits[0].id, "opposes");
+    }
+    if (supersessionMarker.test(text) && named.length >= 2) {
+      const candidates = recent.filter((prior) => prior.text.includes(named[0]) && parseAxes(prior.text).act === "decide");
+      if (candidates.length === 1 && segmentUnitSpans(candidates[0].text).length === 1) {
+        link(unit, unitId(candidates[0].id, 0), "supersedes");
+      }
+    }
+    if (withdrawalMarker.test(text)) continue;
+    for (const option of named) {
       // Only link when exactly one earlier utterance in the window names the
       // same alternative. Two candidates is an ambiguity, not a relation.
       const matches = context.recentUtterances.filter(

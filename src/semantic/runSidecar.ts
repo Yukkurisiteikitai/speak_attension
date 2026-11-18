@@ -61,13 +61,14 @@ export function runSidecarCase(testCase: CorpusTestCase): SidecarCaseResult {
       // never handed the whole meeting.
       recentUtterances: recentUtterances(log, FAST_PATH_CONTEXT_WINDOW),
     };
-    const { assertions } = runFastPath({ utterance: appended.utterance, context });
+    const { assertions, relations } = runFastPath({ utterance: appended.utterance, context });
     state = reduceCanonical(state, {
       kind: "units_asserted",
       at: appended.utterance.createdAt,
       utterance: appended.utterance,
       assertions,
     }).state;
+    if (relations.length) state = reduceCanonical(state, { kind: "relations_asserted", at: appended.utterance.createdAt, relations }).state;
   });
 
   return { caseId: testCase.id, canonical: state, asCharacterization: toCharacterization(testCase, state) };

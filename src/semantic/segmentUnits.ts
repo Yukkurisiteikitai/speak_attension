@@ -1,7 +1,8 @@
 // Splits one utterance into 0..N unit spans (ADR 0022 §3).
 //
 // Deliberately under-segments. The rule is *not* "split every sentence": it is
-// "split only where an explicit connective marks a relation between clauses."
+// "split where an explicit connective marks a relation or adjacent execution
+// clauses each have their own verb."
 // That distinction is what keeps these two corpus cases consistent:
 //
 //   「いい質問ですね。そこはまだ検討中です。青チームで検証します」-> 1 unit
@@ -16,6 +17,7 @@
 // 「ただし」 on the substring 「ただ」, leaving a 「し、…」 fragment. Spans must map
 // back to the raw text exactly, so boundaries are found on the original string.
 
+import { detectAct } from "./parseAxes";
 import type { Span } from "./types";
 
 // Boundary falls *after* the match: the connective belongs to the clause it
@@ -55,6 +57,15 @@ function collectBoundaries(text: string): number[] {
     for (const match of text.matchAll(pattern)) {
       if (match.index === undefined || !opensClause(text, match.index)) continue;
       boundaries.add(match.index);
+    }
+  }
+
+  // Split adjacent execution clauses only when each has its own verb.
+  const clauses = [...text.matchAll(/[^。！？、,；;\n]+[。！？、,；;\n]?/g)];
+  for (let index = 1; index < clauses.length; index += 1) {
+    if (detectAct(clauses[index - 1][0].trim()) === "commit" &&
+        detectAct(clauses[index][0].trim()) === "commit") {
+      boundaries.add(clauses[index].index);
     }
   }
 

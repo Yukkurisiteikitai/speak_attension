@@ -39,6 +39,14 @@ describe("rawUtterance", () => {
     expect(withCorrection.events).toHaveLength(2);
   });
 
+  it("retains the original utterance when an existing input id is replayed", () => {
+    const input = { id: "u1", text: "原文", createdAt: 1, provider: "manual" as const };
+    const first = appendUtterance(createEventLog(), input);
+    const replay = appendUtterance(first.log, { ...input, text: "再処理された文" });
+    expect(replay.log).toBe(first.log);
+    expect(replay.utterance).toBe(first.utterance);
+  });
+
   it("normalizes every provider into the same utterance shape", () => {
     let log = createEventLog();
     for (const provider of ["manual", "replay", "web_speech", "external_stt"] as const) {

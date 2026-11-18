@@ -11,6 +11,7 @@
 // drifted apart (ADR 0022 background), and adding a fourth copy would reproduce
 // the defect this migration exists to remove.
 
+import { conditionMarker, isScheduleMention, supersessionMarker, uncertaintyMarker, withdrawalMarker } from "./commitmentMarkers";
 import type { Commitment, DiscourseAct, EpistemicStatus, Scope, SemanticAxes, SemanticRole } from "./types";
 import { isFillerUtterance } from "../utils/topicExtraction";
 
@@ -197,14 +198,27 @@ export function detectEpistemic(text: string): EpistemicStatus {
 
 // The realtime parser only ever states rule-derived readings (ADR 0023 §2).
 export function parseAxes(text: string): SemanticAxes {
-  return {
-    scope: detectScope(text),
+  const statement = text.replace(/[。！!\s]+$/, "");
+  const axes: SemanticAxes = {
+    scope: detectScope(statement),
     role: detectRole(text),
     act: detectAct(text),
     commitment: detectCommitment(text),
     epistemic: detectEpistemic(text),
     provenance: "rule",
   };
+  if (withdrawalMarker.test(text)) {
+    return { ...axes, role: "other", act: "report", commitment: "none", epistemic: "explicit" };
+  }
+  if (uncertaintyMarker.test(text) || conditionMarker.test(text)) {
+    return ["decide", "commit"].includes(axes.act)
+      ? { ...axes, role: "proposal", act: "suggest", commitment: "proposed", epistemic: "explicit" }
+      : axes;
+  }
+  if (supersessionMarker.test(text) || (isScheduleMention(text) && /(?:に|で)(?:します|決定です|確定です)$/.test(statement))) {
+    return { ...axes, role: "decision", act: "decide", commitment: "decided", epistemic: "explicit" };
+  }
+  return axes;
 }
 
 // --- action details ----------------------------------------------------------
@@ -221,7 +235,7 @@ export function extractActionDetails(text: string): ActionDetails {
   const deadline =
     /(?:今すぐ|直ちに|至急)/.test(text)
       ? "即時"
-      : text.match(/(?:今日|明日|明後日|今週|来週|今月|来月|\d+月\d+日|[月火水木金土日]曜日|\d+時)(?:中)?までに?/)?.[0] ?? null;
+      : text.match(/(?:(?:今週|来週|再来週)?[月火水木金土日]曜(?:日)?|今日|明日|明後日|今週|来週|今月|来月|\d+月\d+日|\d+時)(?:中)?までに?/)?.[0] ?? null;
 
   // Prefer the name carrying an honorific. Two things are needed to get this
   // right, both found by running the parser over held-out meetings:

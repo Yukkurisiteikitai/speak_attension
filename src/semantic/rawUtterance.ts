@@ -48,6 +48,9 @@ export function appendEvent(log: MeetingEventLog, event: MeetingEvent): MeetingE
 }
 
 export function appendUtterance(log: MeetingEventLog, input: RawUtteranceInput): { log: MeetingEventLog; utterance: RawUtterance } {
+  for (const event of log.events) {
+    if (event.kind === "utterance_added" && event.utterance.id === input.id) return { log, utterance: event.utterance };
+  }
   const utterance = createRawUtterance(input, log.nextSeq);
   return {
     log: {
@@ -65,7 +68,10 @@ export function utterancesOf(log: MeetingEventLog): RawUtterance[] {
 // The rolling context the fast path is allowed to look at (ADR 0023 §4). Never
 // the whole meeting: a caller that needs history belongs on the refinement path.
 export function recentUtterances(log: MeetingEventLog, windowSize: number): RawUtterance[] {
-  if (windowSize <= 0) return [];
-  const all = utterancesOf(log);
-  return all.slice(Math.max(0, all.length - windowSize));
+  const recent: RawUtterance[] = [];
+  for (let index = log.events.length - 1; index >= 0 && recent.length < windowSize; index -= 1) {
+    const event = log.events[index];
+    if (event.kind === "utterance_added") recent.push(event.utterance);
+  }
+  return recent.reverse();
 }

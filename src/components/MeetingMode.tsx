@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ActionView } from "./ActionView";
 import { ConversationNodeEditor } from "./ConversationNodeEditor";
@@ -6,6 +6,8 @@ import { ControlPanel } from "./ControlPanel";
 import { DesignHingePanel } from "./DesignHingePanel";
 import { ManualReplayPanel } from "./ManualReplayPanel";
 import { MeetingReportPanel } from "./MeetingReportPanel";
+import { MeetingReviewQueue } from "./MeetingReviewQueue";
+import type { MeetingArchiveSummary } from "../semantic/meetingArchiveStorage";
 import { MeetingSummaryGraph } from "./MeetingSummaryGraph";
 import { MeetingStateMap } from "./MeetingStateMap";
 import { MeetingStateDashboard } from "./MeetingStateDashboard";
@@ -52,6 +54,11 @@ export function MeetingMode({
   });
   const [now, setNow] = useState(() => Date.now());
   const [mapMode, setMapMode] = useState<MeetingMapMode>("dashboard");
+  const [savedMeetings, setSavedMeetings] = useState<MeetingArchiveSummary[]>([]);
+  const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "dirty" | "failed" | "disabled">("disabled");
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const lastSavedSegmentCount = useRef(0);
+  const [endedView, setEndedView] = useState<"minutes" | "timeline">("minutes");
   const [selectedDecisionId, setSelectedDecisionId] = useState<string | null>(null);
   const dashboard = useMemo(
     () => buildMeetingStateDashboard(topicEngine.meetingStateGraph, topicEngine.decisionSupport.materials, topicEngine.currentTopic?.title ?? null),
@@ -77,6 +84,10 @@ export function MeetingMode({
   const stopSpeech = speech.stop;
   const flushMeeting = topicEngine.flushBuffer;
   useEffect(() => { if (!active) { stopSpeech(); flushMeeting(); } }, [active, stopSpeech, flushMeeting]);
+  useEffect(() => {
+    if (topicEngine.segmentArchive.length !== lastSavedSegmentCount.current && saveStatus === "saved") setSaveStatus("dirty");
+    lastSavedSegmentCount.current = topicEngine.segmentArchive.length;
+  }, [topicEngine.segmentArchive.length, saveStatus]);
   const [inputDockOpen, setInputDockOpen] = useState(false);
   const [inputTab, setInputTab] = useState<MeetingInputTab>("manual");
   const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
@@ -99,6 +110,82 @@ export function MeetingMode({
     setMapMode("summary");
     void topicEngine.organizeMeeting();
   };
+  const finishMeeting = () => {
+    speech.stop();
+    setEndedView("minutes");
+    topicEngine.finishMeeting();
+  };
+  const correctSemanticItem = useCallback((target: { utteranceId: string; unitId?: string }, axes: Partial<import("../semantic/types").SemanticAxes>) => {
+    if (saveStatus === "saved") setSaveStatus("dirty");
+    void topicEngine.recordSemanticCorrection(target, axes).then((result) => {
+      if (result.ok) {
+        if (saveStatus === "saved") setSaveStatus("saved");
+      } else {
+        setSaveStatus("failed");
+        setSaveError(result.error ?? "訂正を保存できませんでした。");
+      }
+    });
+  }, [saveStatus, topicEngine.recordSemanticCorrection]);
+  useEffect(() => {
+    const hasUnsavedData = topicEngine.segmentArchive.length > 0 && saveStatus !== "saved";
+    if (!hasUnsavedData && saveStatus !== "dirty" && saveStatus !== "failed") return;
+    const warnBeforeClose = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnBeforeClose);
+    return () => window.removeEventListener("beforeunload", warnBeforeClose);
+  }, [saveStatus, topicEngine.segmentArchive.length]);
+  const endedAt = topicEngine.meetingEndedAt;
+  const minutes = topicEngine.minutes;
+  if (endedAt !== null && minutes) {
+    return <div className="minutes-workspace">
+      <nav className="workspace-tabs" aria-label="終了した会議">
+        <button type="button" aria-pressed={endedView === "minutes"} onClick={() => setEndedView("minutes")}>議事録</button>
+        <button type="button" aria-pressed={endedView === "timeline"} onClick={() => setEndedView("timeline")}>発言タイムライン</button>
+        <button type="button" onClick={() => {
+          topicEngine.resumeMeeting();
+          if (saveStatus === "saved") setSaveStatus("dirty");
+        }}>会議を再開</button>
+      </nav>
+      {endedView === "minutes" ? <MeetingReviewQueue minutes={minutes}
+        saved={saveStatus === "saved"} saveStatus={saveStatus} saveError={saveError} savedMeetings={savedMeetings}
+        onSave={() => {
+          setSaveStatus("saving");
+          void topicEngine.saveMeeting().then((result) => {
+            if (result.ok) lastSavedSegmentCount.current = topicEngine.segmentArchive.length;
+            setSaveStatus(result.ok ? "saved" : "failed");
+            setSaveError(result.error ?? null);
+          });
+        }}
+        onListSaved={() => { void topicEngine.listSavedMeetings().then((result) => {
+          if (result.ok) setSavedMeetings(result.meetings ?? []);
+          else { setSaveStatus("failed"); setSaveError(result.error ?? "保存一覧を読み込めませんでした。"); }
+        }); }}
+        onRestore={(id) => { void topicEngine.restoreMeeting(id).then((result) => {
+          if (result.ok) {
+            const utterances = topicEngine.getArchive()?.events.filter((event) => event.kind === "utterance_added").length ?? 0;
+            lastSavedSegmentCount.current = utterances;
+            setSaveStatus("saved"); setSaveError(null);
+          }
+          else { setSaveStatus("failed"); setSaveError(result.error ?? "復元に失敗しました。"); }
+        }); }}
+        onDeleteSaved={(id) => { void topicEngine.deleteSavedMeeting(id).then((result) => {
+          if (result.ok) setSavedMeetings((items) => items.filter((item) => item.id !== id));
+          else { setSaveStatus("failed"); setSaveError(result.error ?? "削除に失敗しました。"); }
+        }); }}
+        metadata={{ title: topicEngine.meetingGraph.title, startedAt: topicEngine.meetingStartedAt, endedAt }}
+        onReview={topicEngine.reviewMinutes} /> :
+        <ConversationView
+          conversationTree={topicEngine.conversationTree}
+          timelineRows={topicEngine.timelineRows}
+          selectedNodeId={selectedConversationNodeId}
+          onRate={topicEngine.toggleConversationNodeRating}
+          onSelect={setSelectedConversationNodeId}
+          onCorrect={correctSemanticItem}
+        />}
+    </div>;
+  }
 
   return (
     <>
@@ -116,6 +203,29 @@ export function MeetingMode({
         </div>
       </header>
 
+      <details className="saved-meetings-library">
+        <summary onClick={() => { void topicEngine.listSavedMeetings().then((result) => {
+          if (result.ok) setSavedMeetings(result.meetings ?? []);
+          else { setSaveStatus("failed"); setSaveError(result.error ?? "保存一覧を読み込めませんでした。"); }
+        }); }}>保存済み会議を開く</summary>
+        <p>この端末のブラウザー内に保存した会議です。</p>
+        {savedMeetings.length ? <ul>{savedMeetings.map((meeting) => <li key={meeting.id}>
+          <span>{meeting.title} · {new Date(meeting.endedAt).toLocaleString("ja-JP")}</span>
+          <button type="button" onClick={() => { void topicEngine.restoreMeeting(meeting.id).then((result) => {
+            if (result.ok) {
+              const utterances = topicEngine.getArchive()?.events.filter((event) => event.kind === "utterance_added").length ?? 0;
+              lastSavedSegmentCount.current = utterances;
+              setSaveStatus("saved"); setSaveError(null);
+            }
+            else { setSaveStatus("failed"); setSaveError(result.error ?? "復元に失敗しました。"); }
+          }); }}>開く</button>
+          <button type="button" onClick={() => { void topicEngine.deleteSavedMeeting(meeting.id).then((result) => {
+            if (result.ok) setSavedMeetings((items) => items.filter((item) => item.id !== meeting.id));
+            else { setSaveStatus("failed"); setSaveError(result.error ?? "削除に失敗しました。"); }
+          }); }}>削除</button>
+        </li>)}</ul> : <p>保存済み会議はありません。</p>}
+      </details>
+
       <section className="dashboard-grid">
         <aside className="meeting-agenda-column">
           <section className="meeting-agenda-card">
@@ -132,6 +242,8 @@ export function MeetingMode({
           <ControlPanel
             error={speech.error} isListening={speech.isListening} isSupported={speech.isSupported}
             onReset={() => setIsResetConfirmOpen(true)} onOrganize={organizeMeeting}
+            onFinish={minutes ? finishMeeting : undefined}
+            canFinish={topicEngine.segmentArchive.length > 0 || Boolean(topicEngine.bufferText.trim())}
             canOrganize={topicEngine.segmentArchive.length > 0}
             isOrganizing={topicEngine.meetingSummaryStatus === "refining"}
             onStart={speech.isSupported ? speech.start : () => setInputDockOpen(true)} onStop={() => { speech.stop(); topicEngine.flushBuffer(); }}
@@ -188,7 +300,7 @@ export function MeetingMode({
               selectedNodeId={selectedConversationNodeId}
               onRate={topicEngine.toggleConversationNodeRating}
               onSelect={setSelectedConversationNodeId}
-              onCorrect={topicEngine.recordSemanticCorrection}
+              onCorrect={correctSemanticItem}
               onStart={speech.start}
             />
           )}

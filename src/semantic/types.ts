@@ -1,3 +1,5 @@
+import type { EvidenceRef, ItemCorrection, ItemReviewEvent } from "./meetingItem";
+
 // Semantic Core type contract (ADR 0022 §3-§6, ADR 0023 §5-§8).
 //
 // Four layers, where an upper layer never rewrites a lower one:
@@ -37,6 +39,7 @@ export type RawUtterance = {
 };
 
 export type MeetingEvent =
+  | { kind: "item_review"; at: number; event: ItemReviewEvent }
   | { kind: "utterance_added"; at: number; utterance: RawUtterance }
   | { kind: "human_correction"; at: number; correction: HumanCorrection }
   | { kind: "human_confirmation"; at: number; target: AssertionId; by: "facilitator" }
@@ -113,7 +116,7 @@ export type SemanticAssertion = {
 
 export type RelationKind =
   | "supports" | "motivates" | "answers" | "decided_from"
-  | "opposes" | "refines"
+  | "opposes" | "refines" | "withdraws" | "supersedes" | "confirms" | "conditions"
   // A first-class value: "we could not resolve this" is not the same as
   // "there is no relation" (ADR 0022 §4).
   | "unresolved";
@@ -148,6 +151,7 @@ export type HumanCorrection = {
   axes: Partial<SemanticAxes>;
   // Fixing the segmentation itself, which one-label-per-utterance made
   // impossible to express.
+  item?: ItemCorrection;
   resegment?: Array<{ span: Span; axes: Partial<SemanticAxes> }>;
   note: string | null;
 };
@@ -179,10 +183,21 @@ export type CanonicalEntry = {
   // Bumped whenever this entry changes, so a late refinement can detect that
   // what it read has moved on (ADR 0023 §8).
   entityRevision: number;
+  source: { assertion: SemanticAssertion; evidence: EvidenceRef };
+  axes: SemanticAxes;
+  correction?: ItemCorrection;
+  humanRevised: boolean;
+  rationale: string;
+  related?: RelationAssertion[];
+  disposition?: "withdrawn" | "superseded";
+  blocked?: boolean;
+  supportingEvidence?: EvidenceRef[];
 };
 
 export type CanonicalMeetingState = {
   entries: CanonicalEntry[];
+  corrections: HumanCorrection[];
+  relations: RelationAssertion[];
   // Indexes so promotion re-evaluates only affected entries instead of
   // rebuilding (ADR 0023 §5).
   byUtteranceId: Record<UtteranceId, EntityId[]>;

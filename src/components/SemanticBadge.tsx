@@ -6,7 +6,7 @@ import {
 import type { SemanticRole } from "../semantic/types";
 import type { TimelineUnitRow } from "../semantic/timelineProjection";
 import {
-  actLabels, basisLabels, commitmentLabels, isSettledCommitment, roleLabels, scopeLabels,
+  actLabels, basisLabels, commitmentLabels, isSettledCommitment, reviewStateLabels, roleLabels, scopeLabels, semanticStateLabels,
 } from "../semantic/labels";
 
 type SemanticBadgeProps = {
@@ -36,7 +36,10 @@ export function SemanticBadge({ unit }: SemanticBadgeProps) {
   const corrected = unit.humanOverriddenAxes.length > 0;
 
   // Icon, label and colour together -- never colour alone.
-  const strength = isSettledCommitment(commitment) ? "is-confirmed" : "is-tentative";
+  const recorded = unit.item
+    ? unit.item.reviewState === "auto_recorded" || unit.item.reviewState === "human_verified"
+    : isSettledCommitment(commitment);
+  const strength = recorded ? "is-confirmed" : "is-tentative";
   const title = [
     `${roleLabels[role]}（${actLabels[act]}・${commitmentLabels[commitment]}）`,
     `範囲: ${scopeLabels[scope]}`,
@@ -49,10 +52,10 @@ export function SemanticBadge({ unit }: SemanticBadgeProps) {
       <Icon size={13} aria-hidden="true" />
       <span className="semantic-badge-role">{roleLabels[role]}</span>
       <span className="semantic-badge-meta">
-        {actLabels[act]} ・ {commitmentLabels[commitment]}
+        {unit.item ? semanticStateLabels[unit.item.semanticState] : actLabels[act] + " ・ " + commitmentLabels[commitment]}
       </span>
       <span className="semantic-badge-scope">{scopeLabels[scope]}</span>
-      {unit.promotion ? (
+      {unit.item ? <span className="semantic-badge-basis">{reviewStateLabels[unit.item.reviewState]}</span> : unit.promotion ? (
         // Shows what reached canonical state and on whose authority, so a rule's
         // reading is never displayed as a confirmed fact.
         <span className="semantic-badge-basis">{basisLabels[unit.promotion.basis]}</span>

@@ -18,11 +18,19 @@ const createdAtOf = () => 1000;
 function emptyProjection(): MeetingStateProjection {
   return {
     confirmedDecisions: [], provisionalDecisions: [], actions: [], deferred: [], questions: [],
-    unresolved: [], proposals: [], options: [], problems: [], topics: [], context: [],
+    unresolved: [], proposals: [], options: [], problems: [], topics: [], context: [], relations: [],
   };
 }
 
 function entry(overrides: Partial<CanonicalEntry>): CanonicalEntry {
+  const axes = {
+    scope: "subject_matter" as const, role: "decision" as const, act: "decide" as const,
+    commitment: "decided" as const, epistemic: "explicit" as const, provenance: "rule" as const,
+  };
+  const assertion = {
+    id: "a1", unit: { id: "u1", utteranceId: "u1", span: { start: 0, end: 1 }, axes },
+    confidence: 1, producedBy: { engine: "test", version: "1" }, createdAt: 1000, supersedes: [],
+  };
   return {
     id: "u1:decision",
     kind: "decision",
@@ -31,6 +39,11 @@ function entry(overrides: Partial<CanonicalEntry>): CanonicalEntry {
     evidence: { utteranceIds: ["u1"], assertionIds: ["a1"] },
     promotedBy: { policyVersion: "test" },
     entityRevision: 1,
+    source: { assertion, evidence: { utteranceId: "u1", speakerId: null, timestamp: 1000,
+      startOffset: 0, endOffset: 1, text: "x" } },
+    axes,
+    humanRevised: false,
+    rationale: "test",
     ...overrides,
   };
 }

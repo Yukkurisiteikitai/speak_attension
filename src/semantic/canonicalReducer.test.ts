@@ -29,11 +29,13 @@ describe("reduceCanonical", () => {
     expect(entriesOfKind(twice.state, "decision")).toHaveLength(entriesOfKind(once.state, "decision").length);
   });
 
-  it("bumps entityRevision when an entry is re-derived, so a stale refinement can be detected", () => {
+  it("keeps the revision for identical assertions and bumps it for changed input", () => {
     const event = assertEvent("対戦ゲーム形式を採用します");
     const once = reduceCanonical(createCanonicalState(), event);
     const twice = reduceCanonical(once.state, event);
-    expect(twice.state.entries[0].entityRevision).toBe(once.state.entries[0].entityRevision + 1);
+    expect(twice.state).toBe(once.state);
+    const changed = reduceCanonical(twice.state, assertEvent("抽選形式を採用します"));
+    expect(changed.state.entries[0].entityRevision).toBe(once.state.entries[0].entityRevision + 1);
   });
 
   it("does not rebuild from scratch: earlier entries keep their identity", () => {

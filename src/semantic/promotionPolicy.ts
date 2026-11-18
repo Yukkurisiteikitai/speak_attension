@@ -13,9 +13,10 @@
 import type {
   AssertionId, CanonicalKind, PromotionBasis, RelationAssertion, SemanticUnit, UtteranceId,
 } from "./types";
+import type { ItemCorrection } from "./meetingItem";
 import { extractActionDetails } from "./parseAxes";
 
-export const PROMOTION_POLICY_VERSION = "1.0.0";
+export const PROMOTION_POLICY_VERSION = "1.1.0";
 
 export type PromotionCandidate = {
   unit: SemanticUnit;
@@ -26,6 +27,8 @@ export type PromotionCandidate = {
   assertionId: AssertionId;
   // True only when a person explicitly confirmed this reading.
   humanConfirmed?: boolean;
+  roleCorrected?: boolean;
+  correction?: ItemCorrection;
 };
 
 export type PromotionOutcome = {
@@ -55,6 +58,16 @@ const unresolved = (reason: string): PromotionOutcome =>
 export function promoteUnit(candidate: PromotionCandidate): PromotionOutcome {
   const { scope, role, act, commitment, epistemic } = candidate.unit.axes;
   const basis = basisFor(candidate);
+  const correction = candidate.correction;
+  if (correction) {
+    const { semanticState, fields } = correction;
+    const kind: CanonicalKind = semanticState === "deferred" ? "deferred"
+      : semanticState === "agreed" && correction.kind === "action" ? "action"
+      : semanticState === "agreed" && ["decision", "schedule"].includes(correction.kind) ? "decision"
+      : correction.kind === "issue" ? "problem" : "proposal";
+    return { kind, basis: "human_confirmed", owner: fields.owner || null,
+      deadline: fields.deadline || null, reason: "human correction" };
+  }
   const isMeetingProcess = scope === "meeting_process";
 
   // I8: an ambiguous reading goes no further than unresolved.
@@ -72,6 +85,7 @@ export function promoteUnit(candidate: PromotionCandidate): PromotionOutcome {
   // consulted at all here, I6 via basis.
   const decisionGate =
     act === "decide" &&
+    (role === "decision" || role === "other") &&
     commitment === "decided" &&
     !isMeetingProcess &&
     epistemic === "explicit" &&
@@ -86,7 +100,7 @@ export function promoteUnit(candidate: PromotionCandidate): PromotionOutcome {
   const actionGate =
     act === "commit" &&
     commitment === "committed" &&
-    role !== "proposal" &&
+    role === "action" &&
     !isMeetingProcess &&
     epistemic === "explicit" &&
     basis !== "provisional" &&
@@ -105,7 +119,7 @@ export function promoteUnit(candidate: PromotionCandidate): PromotionOutcome {
   if (role === "option") {
     return { kind: "option", basis, owner: null, deadline: null, reason: "option reading" };
   }
-  if (role === "proposal" && commitment === "proposed") {
+  if (role === "proposal" && (commitment === "proposed" || candidate.roleCorrected)) {
     return { kind: "proposal", basis, owner: null, deadline: null, reason: "proposal reading" };
   }
   if (role === "question") {

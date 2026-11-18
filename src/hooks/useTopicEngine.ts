@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { createTopicEngineStore } from "./topicEngineStore";
+import { IndexedDbMeetingArchiveStorage } from "../semantic/meetingArchiveStorage";
 import type { LlmSettings } from "../utils/llmClient";
 import { buildMissingContributions } from "../utils/missingContribution";
 import { buildTimelineProjection } from "../semantic/timelineProjection";
 import { projectMeetingState } from "../semantic/meetingStateProjection";
 import { meetingStateGraphFromProjection } from "../semantic/meetingStateGraph";
 import { utterancesOf } from "../semantic/rawUtterance";
+import { projectMeetingMinutes } from "../semantic/meetingMinutesProjection";
 import { SEMANTIC_CORE_FLAGS } from "../semantic/flags";
 
 // A final Web Speech chunk should reach the fast path within the realtime
@@ -27,7 +29,7 @@ type UseTopicEngineOptions = {
 export function useTopicEngine({ onLog, llmSettings }: UseTopicEngineOptions = {}) {
   const storeRef = useRef<ReturnType<typeof createTopicEngineStore> | null>(null);
   if (!storeRef.current) {
-    storeRef.current = createTopicEngineStore({ onLog });
+    storeRef.current = createTopicEngineStore({ onLog, storage: new IndexedDbMeetingArchiveStorage() });
   }
 
   const store = storeRef.current;
@@ -57,9 +59,16 @@ export function useTopicEngine({ onLog, llmSettings }: UseTopicEngineOptions = {
   // Projection, not interpretation: buildTimelineProjection reads the assertions
   // the fast path already produced. Memoized on the semantic snapshot so a new
   // utterance does not re-derive the whole meeting.
+  const meetingId = snapshot.engineState.meetingGraph.meetingId;
+  const minutes = useMemo(
+    () => SEMANTIC_CORE_FLAGS.core ? projectMeetingMinutes(meetingId, snapshot.semantic.canonical, snapshot.semantic.log) : null,
+    [meetingId, snapshot.semantic],
+  );
   const timelineRows = useMemo(
-    () => (SEMANTIC_CORE_FLAGS.timeline ? buildTimelineProjection(snapshot.semantic) : []),
-    [snapshot.semantic],
+    () => SEMANTIC_CORE_FLAGS.timeline
+      ? buildTimelineProjection({ ...snapshot.semantic, meetingId, minutesItems: minutes?.items })
+      : [],
+    [snapshot.semantic, meetingId, minutes],
   );
 
   // Phase 3: the graph the Meeting State dashboard reads. Flag off = the legacy
@@ -106,6 +115,16 @@ export function useTopicEngine({ onLog, llmSettings }: UseTopicEngineOptions = {
     // Semantic Core (ADR 0022 §9). Phase 2 consumes this for the Timeline only.
     timelineRows,
     meetingStateGraph,
+    minutes,
+    meetingEndedAt: snapshot.semantic.endedAt,
+    finishMeeting: store.finishMeeting,
+    resumeMeeting: store.resumeMeeting,
+    reviewMinutes: store.reviewMinutes,
+    saveMeeting: store.saveMeeting,
+    restoreMeeting: store.restoreMeeting,
+    listSavedMeetings: store.listSavedMeetings,
+    deleteSavedMeeting: store.deleteSavedMeeting,
+    getArchive: store.getArchive,
     recordSemanticCorrection: store.recordSemanticCorrection,
     conversationTree: snapshot.conversationTree,
     currentTopic,

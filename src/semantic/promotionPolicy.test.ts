@@ -81,7 +81,7 @@ describe("promotion invariants (ADR 0022 §6)", () => {
     const importedFrom = [...source.matchAll(/^\s*import[\s\S]*?from\s+"([^"]+)";/gm)].map((match) => match[1]);
     expect(importedFrom).not.toContain("./decisionSupport");
     expect(importedFrom.some((specifier) => /decisionSupport/i.test(specifier))).toBe(false);
-    expect(importedFrom).toEqual(["./types", "./parseAxes"]);
+    expect(importedFrom).toEqual(["./types", "./meetingItem", "./parseAxes"]);
   });
 
   it("I8: ambiguous input goes no further than unresolved", () => {

@@ -19,6 +19,9 @@ import type {
   CanonicalKind, CanonicalMeetingState, HumanCorrection, InputProviderKind,
   PromotionBasis, SemanticAssertion, SemanticAxes,
 } from "./types";
+import { canonicalUnitId } from "./canonicalReducer";
+import { projectMeetingMinutes } from "./meetingMinutesProjection";
+import type { MeetingItem } from "./meetingItem";
 import { sliceUnitText } from "./types";
 import { resolveUnit, type AxisName } from "./resolveUnit";
 import type { MeetingEventLog } from "./rawUtterance";
@@ -34,6 +37,7 @@ export type TimelineUnitRow = {
   conflictingAxes: AxisName[];
   // What this unit became in canonical state, if anything.
   promotion: { kind: CanonicalKind; basis: PromotionBasis } | null;
+  item?: MeetingItem;
 };
 
 export type TimelineRow = {
@@ -54,26 +58,9 @@ export type TimelineProjectionInput = {
   assertions: SemanticAssertion[];
   corrections: HumanCorrection[];
   canonical: CanonicalMeetingState;
+  meetingId?: string;
+  minutesItems?: MeetingItem[];
 };
-
-// Canonical entry ids are `${unitId}:${kind}` (see canonicalReducer), so a unit's
-// promotion is looked up rather than re-derived.
-//
-// Built ONCE per projection, not per utterance. Two earlier versions of this
-// were quadratic -- scanning canonical.entries per unit (318ms at n=3200), then
-// per utterance (124ms) -- against a 50ms budget. Both reintroduced, in a new
-// place, exactly the cost the incremental reducer exists to remove. A projection
-// must index once and then look up.
-function promotionsByUnitId(
-  canonical: CanonicalMeetingState,
-): Map<string, { kind: CanonicalKind; basis: PromotionBasis }> {
-  const index = new Map<string, { kind: CanonicalKind; basis: PromotionBasis }>();
-  for (const entry of canonical.entries) {
-    // `${unitId}:${kind}` -- take everything before the final colon.
-    index.set(entry.id.slice(0, entry.id.lastIndexOf(":")), { kind: entry.kind, basis: entry.basis });
-  }
-  return index;
-}
 
 export function buildTimelineProjection(input: TimelineProjectionInput): TimelineRow[] {
   const { log, assertions, corrections, canonical } = input;
@@ -85,7 +72,9 @@ export function buildTimelineProjection(input: TimelineProjectionInput): Timelin
     assertionsByUtterance.set(assertion.unit.utteranceId, list);
   }
 
-  const promotions = promotionsByUnitId(canonical);
+  const entries = new Map(canonical.entries.map((entry) => [canonicalUnitId(entry), entry]));
+  const items = new Map((input.minutesItems ?? projectMeetingMinutes(input.meetingId ?? "", canonical, log).items)
+    .map((item) => [item.id, item]));
 
   return utterancesOf(log)
     .slice()
@@ -101,13 +90,16 @@ export function buildTimelineProjection(input: TimelineProjectionInput): Timelin
       for (const unitId of unitIds) {
         const resolved = resolveUnit(unitId, forUtterance, corrections);
         if (!resolved) continue;
+        const entry = entries.get(unitId);
+        const item = items.get(unitId);
         units.push({
           unitId,
-          text: sliceUnitText(utterance, unitById.get(unitId)!),
+          text: entry?.label ?? sliceUnitText(utterance, unitById.get(unitId)!),
           axes: resolved.axes,
           humanOverriddenAxes: resolved.humanOverriddenAxes,
           conflictingAxes: resolved.conflictingAxes,
-          promotion: promotions.get(unitId) ?? null,
+          promotion: entry && !entry.disposition && !entry.blocked ? { kind: entry.kind, basis: entry.basis } : null,
+          item,
         });
       }
 
@@ -119,7 +111,7 @@ export function buildTimelineProjection(input: TimelineProjectionInput): Timelin
         provider: utterance.provider,
         text: utterance.text,
         units,
-        isCorrected: units.some((unit) => unit.humanOverriddenAxes.length > 0),
+        isCorrected: units.some((unit) => unit.humanOverriddenAxes.length > 0 || entries.get(unit.unitId)?.correction),
       };
     });
 }
