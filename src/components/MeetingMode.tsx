@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { ActionView } from "./ActionView";
 import { ConversationNodeEditor } from "./ConversationNodeEditor";
@@ -23,38 +23,10 @@ import { selectDecisionParents } from "../utils/meetingDecisionGraph";
 import { buildMeetingStateDashboard } from "../utils/meetingStateDashboard";
 import { buildCurrentDiscussionState } from "../utils/currentDiscussionState";
 import { formatReplayTime } from "../utils/transcriptReplay";
-import type { AnalyzedSegment, MeetingSummary, SessionLogEntry } from "../types/topic";
+import type { AnalyzedSegment, MeetingSummary } from "../types/topic";
 
 type MeetingInputTab = "manual" | "replay" | "transcript";
 type MeetingMapMode = "dashboard" | "progress" | "state" | "live" | "summary";
-
-const WS_URL = "ws://127.0.0.1:8787";
-
-// Keeps a single browser WebSocket for session logs and hides the transport detail from the UI.
-function useSessionSocket() {
-  const socketRef = useRef<WebSocket | null>(null);
-  const [connectionStatus, setConnectionStatus] = useState("接続中");
-
-  useEffect(() => {
-    const socket = new WebSocket(WS_URL);
-    socketRef.current = socket;
-    socket.addEventListener("open", () => setConnectionStatus("接続済み"));
-    socket.addEventListener("close", () => setConnectionStatus("切断"));
-    socket.addEventListener("error", () => setConnectionStatus("接続エラー"));
-    return () => {
-      socket.close();
-      socketRef.current = null;
-    };
-  }, []);
-
-  const sendLog = useCallback((entry: SessionLogEntry) => {
-    const socket = socketRef.current;
-    if (!socket || socket.readyState !== WebSocket.OPEN) return;
-    socket.send(JSON.stringify(entry));
-  }, []);
-
-  return { connectionStatus, sendLog };
-}
 
 function statusLabel(isSupported: boolean, isListening: boolean): string {
   if (!isSupported) return "音声入力は非対応";
@@ -69,9 +41,8 @@ export function MeetingMode({
   active: boolean;
   onStartIdeaSession: (summary: MeetingSummary, segments: AnalyzedSegment[], selectedItemIds: string[]) => void;
 }) {
-  const { connectionStatus, sendLog } = useSessionSocket();
   const { llmSettings, updateLlmSettings } = useLlmSettings();
-  const topicEngine = useTopicEngine({ onLog: sendLog, llmSettings });
+  const topicEngine = useTopicEngine({ llmSettings });
   const designHinge = useDesignHingeStore({ llmSettings });
   const speech = useSpeechRecognition({
     onFinalText: (text) => {
@@ -83,8 +54,8 @@ export function MeetingMode({
   const [mapMode, setMapMode] = useState<MeetingMapMode>("dashboard");
   const [selectedDecisionId, setSelectedDecisionId] = useState<string | null>(null);
   const dashboard = useMemo(
-    () => buildMeetingStateDashboard(topicEngine.decisionGraph, topicEngine.decisionSupport.materials, topicEngine.currentTopic?.title ?? null),
-    [topicEngine.decisionGraph, topicEngine.decisionSupport.materials, topicEngine.currentTopic],
+    () => buildMeetingStateDashboard(topicEngine.meetingStateGraph, topicEngine.decisionSupport.materials, topicEngine.currentTopic?.title ?? null),
+    [topicEngine.meetingStateGraph, topicEngine.decisionSupport.materials, topicEngine.currentTopic],
   );
   const currentDiscussionState = useMemo(
     () => buildCurrentDiscussionState(topicEngine.meetingGraph, topicEngine.currentTopicId, topicEngine.decisionGraph, topicEngine.segmentArchive),
@@ -96,12 +67,12 @@ export function MeetingMode({
   const exploreFromDashboard = useCallback((id: string) => setSelectedDecisionId(id), []);
   const openTraceMap = useCallback(() => setMapMode("state"), []);
   const selectedDashboardNode = useMemo(
-    () => topicEngine.decisionGraph.nodes.find((node) => node.id === selectedDecisionId) ?? null,
-    [topicEngine.decisionGraph, selectedDecisionId],
+    () => topicEngine.meetingStateGraph.nodes.find((node) => node.id === selectedDecisionId) ?? null,
+    [topicEngine.meetingStateGraph, selectedDecisionId],
   );
   const selectedDashboardNodeParents = useMemo(
-    () => (selectedDecisionId ? selectDecisionParents(topicEngine.decisionGraph, selectedDecisionId).filter((node) => node.id !== selectedDecisionId) : []),
-    [topicEngine.decisionGraph, selectedDecisionId],
+    () => (selectedDecisionId ? selectDecisionParents(topicEngine.meetingStateGraph, selectedDecisionId).filter((node) => node.id !== selectedDecisionId) : []),
+    [topicEngine.meetingStateGraph, selectedDecisionId],
   );
   const stopSpeech = speech.stop;
   const flushMeeting = topicEngine.flushBuffer;
@@ -255,7 +226,6 @@ export function MeetingMode({
               createCounterfactual={designHinge.createCounterfactual} requestManualIntervention={designHinge.requestManualIntervention}
               setPolicyEnabled={designHinge.setPolicyEnabled} exportSession={designHinge.exportSession}
             /><TopicInspector
-              connectionStatus={connectionStatus}
               currentTopicGaps={topicEngine.currentTopicGaps}
               currentTopicId={topicEngine.currentTopicId}
               decisionLogs={topicEngine.decisionLogs}

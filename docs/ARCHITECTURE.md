@@ -7,7 +7,7 @@ speak_attension は、**アイデア出し支援を主モード**とするロー
 **技術スタック:**
 - Runtime: React 18 + TypeScript + Vite
 - Graph visualization: React Flow
-- Backend: WebSocket server (Node.js + ws)
+- Backend: local HTTP API (Node.js)
 - Testing: Vitest
 - LLM: LM Studio (ローカル、OpenAI 互換)
 
@@ -270,7 +270,7 @@ npm install
 npm run dev
 ```
 - Vite dev server: `http://127.0.0.1:5173/`
-- WebSocket server: `ws://127.0.0.1:8787`
+- Local HTTP API: `http://127.0.0.1:8787`
 
 ### Testing
 ```sh
@@ -288,7 +288,7 @@ npm run build      # Production build
 
 1. **Scale**: 放射状レイアウトの衝突回避は、数十キーワードスケールでは十分。数百件規模は空間インデックスが必要
 2. **Persistence**: キーワード・トピック・意味階層はセッション在中のみ。リロードで喪失（ルール実装で復帰不可）
-3. **STT**: ブラウザーの Web Speech API に依存。ローカル WebSocket ログ中継は任意
+3. **STT**: ブラウザーの Web Speech API に依存。音声認識の処理先はブラウザー実装に依存
 4. **No Python DB Auth TTS**: 追加しない（AGENTS.md 参照）
 
 ---

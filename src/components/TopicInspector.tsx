@@ -11,7 +11,6 @@ import type {
 import { buildReaderGuide } from "../utils/readerGuide";
 
 type TopicInspectorProps = {
-  connectionStatus: string;
   currentTopicGaps: TopicGap[];
   currentTopicId: string | null;
   decisionLogs: TopicDecisionLog[];
@@ -47,7 +46,6 @@ function coverageChecklist(topicId: string | null, graph: MeetingGraph) {
 
 // Diagnostic panel: shows the current topic state, the missing pieces, and the raw analysis trail.
 export function TopicInspector({
-  connectionStatus,
   currentTopicGaps,
   currentTopicId,
   decisionLogs,
@@ -76,7 +74,6 @@ export function TopicInspector({
     () =>
       JSON.stringify(
         {
-          connectionStatus,
           focusState,
           currentTopic: currentTopic?.title ?? null,
           latestSegment,
@@ -88,7 +85,7 @@ export function TopicInspector({
         null,
         2,
       ),
-    [connectionStatus, currentTopic?.title, focusState, importantMentions, latestDecision, latestSegment, logs, meetingGraph],
+    [currentTopic?.title, focusState, importantMentions, latestDecision, latestSegment, logs, meetingGraph],
   );
 
   return (
@@ -177,7 +174,6 @@ export function TopicInspector({
         <section className="dev-section">
           <div className="section-head">
             <h2>Focus Controls</h2>
-            <span>{connectionStatus}</span>
           </div>
           <div className="focus-controls">
             <label className="field-label" htmlFor="focus-topic-select">

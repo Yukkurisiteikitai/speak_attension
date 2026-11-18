@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Download, FileText, Sparkles, ThumbsDown, ThumbsUp } from "lucide-react";
 import { useLlmConnectionCheck } from "../hooks/useLlmConnectionCheck";
 import { downloadFile } from "../lib/download";
@@ -6,6 +6,7 @@ import type { AnalyzedSegment, ConversationTreeState, ImportantMention, MeetingD
 import type { LlmSettings } from "../utils/llmClient";
 import { reviewReportWithLlm } from "../utils/llmGapReview";
 import { buildMeetingReport, renderMeetingReportMarkdown, type MeetingReport, type MeetingReportFinding } from "../utils/meetingReport";
+import { splitDiscordReport } from "../utils/discordReport";
 import { buildEvaluationDataset, summarizeFeedback, type FindingVerdict, type ReportFeedbackMap } from "../utils/reportFeedback";
 
 type MeetingReportPanelProps = {
@@ -105,6 +106,8 @@ export function MeetingReportPanel({ conversationTree, meetingGraph, decisionGra
   });
   const [isReviewing, setIsReviewing] = useState(false);
   const [discordStatus, setDiscordStatus] = useState<string | null>(null);
+  const [discordSending, setDiscordSending] = useState(false);
+  const discordSendingRef = useRef(false);
 
   const summary = useMemo(() => (report ? summarizeFeedback(report.findings, feedback) : null), [feedback, report]);
 
@@ -160,19 +163,34 @@ export function MeetingReportPanel({ conversationTree, meetingGraph, decisionGra
   };
 
   const sendToDiscord = async () => {
-    if (!report) return;
+    if (!report || discordSendingRef.current) return;
+    discordSendingRef.current = true;
+    setDiscordSending(true);
     setDiscordStatus("Discordへ送信中…");
+    let sent = 0;
+    let total = 0;
     try {
-      const response = await fetch("/api/discord/report", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: renderMeetingReportMarkdown(report) }),
-      });
-      const payload = (await response.json()) as { error?: { message?: string } };
-      if (!response.ok) throw new Error(payload.error?.message ?? `HTTP ${response.status}`);
-      setDiscordStatus("Discordへ送信しました。");
+      const parts = splitDiscordReport(renderMeetingReportMarkdown(report));
+      total = parts.length;
+      for (const content of parts) {
+        if (sent > 0) await new Promise((resolve) => setTimeout(resolve, 600));
+        const response = await fetch("/api/discord/report", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content }),
+        });
+        const payload = (await response.json()) as { error?: { message?: string } };
+        if (!response.ok) throw new Error(payload.error?.message ?? `HTTP ${response.status}`);
+        sent += 1;
+        setDiscordStatus(`Discordへ送信中… ${sent}/${total}件`);
+      }
+      setDiscordStatus(`Discordへ全${total}件を送信しました。`);
     } catch (error) {
-      setDiscordStatus(`Discord送信失敗: ${error instanceof Error ? error.message : String(error)}`);
+      const progress = total > 0 ? `（${sent}/${total}件送信済み）` : "";
+      setDiscordStatus(`Discord送信失敗${progress}: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      discordSendingRef.current = false;
+      setDiscordSending(false);
     }
   };
 
@@ -196,7 +214,7 @@ export function MeetingReportPanel({ conversationTree, meetingGraph, decisionGra
           <Download size={17} />
           <span>評価データ</span>
         </button>
-        <button type="button" onClick={() => void sendToDiscord()} disabled={!report}>
+        <button type="button" onClick={() => void sendToDiscord()} disabled={!report || discordSending}>
           <span>Discordへ送信</span>
         </button>
       </div>
