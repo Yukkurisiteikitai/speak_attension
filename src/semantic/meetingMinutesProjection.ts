@@ -20,6 +20,7 @@ export function isInactive(item: MeetingItem): boolean {
 }
 
 export function projectMeetingMinutes(meetingId: string, canonical: CanonicalMeetingState, log: MeetingEventLog): MeetingMinutes {
+  const archivedPolicyVersion = log.policyVersion ?? REVIEW_POLICY_VERSION;
   const seen = new Set<string>();
   const history = log.events.flatMap((event) => {
     if (event.kind !== "item_review" || seen.has(event.event.id)) return [];
@@ -53,11 +54,16 @@ export function projectMeetingMinutes(meetingId: string, canonical: CanonicalMee
     if (isInactive(draft) || review?.action === "ItemDismissed") draft.reviewState = "dismissed";
     else if (review?.action === "ItemHeld") draft.reviewState = "held";
     else if (review) {
-      // Replay can assign a different numeric entityRevision when relations are
-      // folded in a different batch. The stable semantic identity plus evidence
-      // is the safe discriminator; policy changes must not erase an explicit
-      // review decision from the archive.
-      draft = { ...draft, ...review.after, id, meetingId };
+      // The archive is the source of review history, but policy-derived fields
+      // always come from the current projection. In particular, an automatic
+      // record made under an older policy must be reviewed again when the
+      // current policy no longer permits it.
+      const policyChanged = archivedPolicyVersion !== draft.policyVersion || review.after.policyVersion !== draft.policyVersion;
+      if (review.action === "ItemAutoRecorded" && policyChanged && !draft.canAutoRecord) {
+        draft.reviewState = "pending";
+      } else {
+        draft.reviewState = review.after.reviewState;
+      }
     }
     return [draft];
   }).sort((a, b) => a.evidenceRefs[0].timestamp - b.evidenceRefs[0].timestamp ||

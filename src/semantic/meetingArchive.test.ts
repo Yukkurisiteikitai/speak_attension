@@ -40,8 +40,6 @@ describe("meeting archive integrity and projections", () => {
     expect((await store.reviewMinutes(eligible, { kind: "ItemHumanVerified" }, true)).ok).toBe(true);
     const updated = store.getArchive()!;
     await storage.save(updated);
-    const currentItems = projectMeetingMinutes(updated.id, store.getSnapshot().semantic.canonical, { events: updated.events, nextSeq: 9 });
-
     const checked = validateMeetingArchive(await storage.load(updated.id).then((result) => result.ok ? result.value : null));
     expect(checked.valid).toBe(true);
     if (!checked.valid) return;
@@ -56,8 +54,9 @@ describe("meeting archive integrity and projections", () => {
       expect(utterance?.kind === "utterance_added" && utterance.utterance.text.slice(ref.startOffset, ref.endOffset)).toBe(ref.text);
     }
     const metadata = checked.archive.metadata;
-    expect(exportMinutesMarkdown(projected, metadata)).toBe(exportMinutesMarkdown(currentItems, metadata));
-    expect(exportMinutesJson(projected, metadata)).toBe(exportMinutesJson(currentItems, metadata));
+    const replayed = projectMeetingMinutes(checked.archive.id, restored.canonical, { events: checked.archive.events, nextSeq: 9 });
+    expect(exportMinutesMarkdown(projected, metadata)).toBe(exportMinutesMarkdown(replayed, metadata));
+    expect(exportMinutesJson(projected, metadata)).toBe(exportMinutesJson(replayed, metadata));
 
   });
 
@@ -101,6 +100,46 @@ describe("meeting archive integrity and projections", () => {
       .items.find((item) => item.id === task.id)).toMatchObject({ title: "資料を完成させる", fields: { owner: "佐藤" } });
     expect(buildTimelineProjection(reopened.getSnapshot().semantic)[3]?.units[0]?.text).toBe("資料を完成させる");
     expect(reopened.getArchive()?.events.filter((event) => event.kind === "human_correction")).toHaveLength(1);
+  });
+
+  it("does not recreate an active archive after deleting it", async () => {
+    const { store, storage } = await makeArchivedMeeting();
+    const archive = store.getArchive()!;
+    await storage.save(archive);
+    expect((await store.restoreMeeting(archive.id)).ok).toBe(true);
+
+    expect(await store.deleteSavedMeeting(archive.id)).toEqual({ ok: true, wasActive: true });
+    const projected = projectMeetingMinutes(archive.id, store.getSnapshot().semantic.canonical,
+      { events: store.getArchive()!.events, nextSeq: 20 });
+    const reviewable = projected.pending.find((candidate) => candidate.reviewState === "pending");
+    expect(reviewable).toBeDefined();
+    if (reviewable) expect((await store.reviewMinutes([reviewable], { kind: "ItemHeld" })).ok).toBe(true);
+    expect(await storage.list()).toMatchObject({ ok: true, value: [] });
+  });
+
+  it("rechecks an old automatic record against current policy without losing review history", async () => {
+    const { store } = await makeArchivedMeeting();
+    const archive = store.getArchive()!;
+    const canonical = projectMeetingArchive(archive).canonical;
+    const current = projectMeetingMinutes(archive.id, canonical, { events: archive.events, nextSeq: 20 });
+    const item = current.items.find((candidate) => !candidate.canAutoRecord && candidate.reviewState === "pending")!;
+    const oldPolicyEvent: import("./types").MeetingEvent = {
+      kind: "item_review", at: 2_000, event: {
+        id: item.id + ":review:legacy", action: "ItemAutoRecorded", actor: "rule",
+        canonicalRevision: 1, revision: 1, before: null,
+        after: { ...item, reviewState: "auto_recorded", policyVersion: "0.9.0", canAutoRecord: true,
+          canVerify: true, riskLevel: "low", reviewReasons: [] },
+        reason: "旧ポリシーで自動記録",
+      },
+    };
+    const oldPolicyLog = { events: [...archive.events, oldPolicyEvent], policyVersion: "0.9.0", nextSeq: 20 };
+    const restored = projectMeetingMinutes(archive.id, canonical, oldPolicyLog);
+    const reprojected = restored.items.find((candidate) => candidate.id === item.id);
+
+    expect(item.canAutoRecord).toBe(false);
+    expect(reprojected).toMatchObject({ reviewState: "pending", canAutoRecord: item.canAutoRecord,
+      canVerify: item.canVerify, riskLevel: item.riskLevel, reviewReasons: item.reviewReasons });
+    expect(restored.history.some((event) => event.action === "ItemAutoRecorded")).toBe(true);
   });
 
   it("keeps a corrected schedule title in Canonical and the review projection", async () => {

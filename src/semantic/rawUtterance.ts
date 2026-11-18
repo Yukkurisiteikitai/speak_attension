@@ -8,6 +8,9 @@ import type { InputProviderKind, MeetingEvent, RawUtterance, UtteranceId } from 
 
 export type MeetingEventLog = {
   events: MeetingEvent[];
+  // Carries the source archive policy during restore; it is projection metadata,
+  // not a persisted event.
+  policyVersion?: string;
   // Next seq to hand out. Kept here so ordering never depends on createdAt,
   // which repeats when two utterances land in the same millisecond.
   nextSeq: number;
@@ -44,7 +47,7 @@ export function createRawUtterance(input: RawUtteranceInput, seq: number): RawUt
 
 // Append-only: returns a new log and never mutates the one passed in.
 export function appendEvent(log: MeetingEventLog, event: MeetingEvent): MeetingEventLog {
-  return { events: [...log.events, event], nextSeq: log.nextSeq };
+  return { ...log, events: [...log.events, event] };
 }
 
 export function appendUtterance(log: MeetingEventLog, input: RawUtteranceInput): { log: MeetingEventLog; utterance: RawUtterance } {
@@ -53,9 +56,10 @@ export function appendUtterance(log: MeetingEventLog, input: RawUtteranceInput):
   }
   const utterance = createRawUtterance(input, log.nextSeq);
   return {
-    log: {
+      log: {
+        ...log,
       events: [...log.events, { kind: "utterance_added", at: input.createdAt, utterance }],
-      nextSeq: log.nextSeq + 1,
+        nextSeq: log.nextSeq + 1,
     },
     utterance,
   };

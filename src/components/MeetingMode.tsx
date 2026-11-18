@@ -171,7 +171,10 @@ export function MeetingMode({
           else { setSaveStatus("failed"); setSaveError(result.error ?? "復元に失敗しました。"); }
         }); }}
         onDeleteSaved={(id) => { void topicEngine.deleteSavedMeeting(id).then((result) => {
-          if (result.ok) setSavedMeetings((items) => items.filter((item) => item.id !== id));
+          if (result.ok) {
+            setSavedMeetings((items) => items.filter((item) => item.id !== id));
+            if (result.wasActive) setSaveStatus("dirty");
+          }
           else { setSaveStatus("failed"); setSaveError(result.error ?? "削除に失敗しました。"); }
         }); }}
         metadata={{ title: topicEngine.meetingGraph.title, startedAt: topicEngine.meetingStartedAt, endedAt }}
@@ -220,7 +223,10 @@ export function MeetingMode({
             else { setSaveStatus("failed"); setSaveError(result.error ?? "復元に失敗しました。"); }
           }); }}>開く</button>
           <button type="button" onClick={() => { void topicEngine.deleteSavedMeeting(meeting.id).then((result) => {
-            if (result.ok) setSavedMeetings((items) => items.filter((item) => item.id !== meeting.id));
+            if (result.ok) {
+              setSavedMeetings((items) => items.filter((item) => item.id !== meeting.id));
+              if (result.wasActive) setSaveStatus("dirty");
+            }
             else { setSaveStatus("failed"); setSaveError(result.error ?? "削除に失敗しました。"); }
           }); }}>削除</button>
         </li>)}</ul> : <p>保存済み会議はありません。</p>}

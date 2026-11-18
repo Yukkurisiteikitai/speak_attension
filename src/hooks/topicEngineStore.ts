@@ -94,7 +94,7 @@ type TopicEngineStore = {
   saveMeeting: () => Promise<{ ok: boolean; error?: string }>;
   restoreMeeting: (id: string) => Promise<{ ok: boolean; error?: string }>;
   listSavedMeetings: () => Promise<{ ok: boolean; meetings?: MeetingArchiveSummary[]; error?: string }>;
-  deleteSavedMeeting: (id: string) => Promise<{ ok: boolean; error?: string }>;
+  deleteSavedMeeting: (id: string) => Promise<{ ok: boolean; error?: string; wasActive?: boolean }>;
   getArchive: () => MeetingArchive | null;
   resumeMeeting: () => void;
   reviewMinutes: (targets: ReviewTarget[], action: ReviewAction, bulk?: boolean) => Promise<ReviewResult>;
@@ -677,7 +677,10 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
     async deleteSavedMeeting(id: string) {
       if (!archiveStorage) return { ok: false, error: "このブラウザーでは端末内保存を利用できません。" };
       const result = await archiveStorage.remove(id);
-      return result.ok ? { ok: true } : { ok: false, error: "保存済み会議を削除できませんでした。" };
+      if (!result.ok) return { ok: false, error: "保存済み会議を削除できませんでした。" };
+      const wasActive = activeArchiveId === id;
+      if (wasActive) activeArchiveId = null;
+      return { ok: true, wasActive };
     },
     async restoreMeeting(id: string) {
       if (!archiveStorage) return { ok: false, error: "このブラウザーでは端末内保存を利用できません。" };
@@ -718,7 +721,8 @@ export function createTopicEngineStore(options: TopicEngineStoreOptions = {}): T
       const assertions = projection.assertions;
       const corrections = archive.events.flatMap((event) => event.kind === "human_correction" ? [event.correction] : []);
       const canonical = projection.canonical;
-      const log: MeetingEventLog = { events: archive.events, nextSeq: Math.max(0, ...restoredSegments.map((segment, i) => i + 1)) + 1 };
+      const log: MeetingEventLog = { events: archive.events, policyVersion: archive.policyVersion,
+        nextSeq: Math.max(0, ...restoredSegments.map((segment, i) => i + 1)) + 1 };
       legacyEvents = archive.legacyEvents;
       snapshot = {
         ...snapshot,

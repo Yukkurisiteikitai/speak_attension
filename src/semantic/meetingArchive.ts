@@ -160,7 +160,8 @@ export function validateMeetingArchive(value: unknown): ArchiveValidationResult 
 export function projectMeetingArchive(archive: MeetingArchive): ArchiveProjection {
   let canonical = createCanonicalState();
   const assertions: SemanticAssertion[] = [];
-  const eventLog = { events: archive.events, nextSeq: Math.max(0, ...archive.events.flatMap((event) => event.kind === "utterance_added" ? [event.utterance.seq] : [])) + 1 };
+  const eventLog = { events: archive.events, policyVersion: archive.policyVersion,
+    nextSeq: Math.max(0, ...archive.events.flatMap((event) => event.kind === "utterance_added" ? [event.utterance.seq] : [])) + 1 };
   const utteranceEvents = archive.events.filter((event) => event.kind === "utterance_added");
   for (const event of utteranceEvents) {
     if (event.kind !== "utterance_added") continue;
