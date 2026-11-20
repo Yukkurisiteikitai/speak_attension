@@ -11,7 +11,7 @@ type ConversationViewProps = {
   selectedNodeId: string | null;
   onRate: (nodeId: string) => void;
   onSelect: (nodeId: string | null) => void;
-  onCorrect: (target: { utteranceId: string; unitId?: string }, axes: Partial<SemanticAxes>) => void;
+  onCorrect: (target: { utteranceId: string; unitId?: string }, axes: Partial<SemanticAxes>) => void | Promise<unknown>;
   onStart?: () => void;
 };
 

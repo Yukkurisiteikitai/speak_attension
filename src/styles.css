@@ -2937,3 +2937,154 @@ input:focus {
 
 .action-view-toggle > summary { cursor: pointer; }
 .action-view-toggle > summary h2 { display: inline; }
+
+.minutes-workspace {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+.minutes-panel {
+  display: grid;
+  gap: 16px;
+  overflow-wrap: anywhere;
+}
+.minutes-heading, .minute-counts, .minute-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+.minutes-heading {
+  justify-content: space-between;
+}
+.minute-counts div {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 14px;
+}
+.minute-counts dd, .minute-detail dd {
+  margin: 0;
+}
+.minute-counts dd {
+  font-size: 1.35rem;
+  font-weight: 650;
+}
+.minutes-panes {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) minmax(0, 1.8fr);
+  gap: 16px;
+  align-items: start;
+}
+.minutes-list > ul, .minute-history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.minutes-list > ul > li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.minutes-list > ul > li > button {
+  flex: 1;
+  text-align: left;
+  min-width: 0;
+}
+.minutes-list button small {
+  display: block;
+  color: var(--muted);
+}
+.minutes-list button[aria-pressed="true"] {
+  border-color: var(--green);
+  background: var(--green-soft);
+}
+.minute-detail, .minute-preview, .minute-bulk, .minute-history details {
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  border-radius: 12px;
+  padding: 14px;
+}
+.minute-detail h3, .minute-detail h4, .minutes-heading h2 {
+  margin: 0 0 8px;
+}
+.minute-detail dl > div {
+  display: grid;
+  grid-template-columns: minmax(6ch, 100px) minmax(0, 1fr);
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.minute-detail dt, .minute-evidence figcaption, .minute-storage-note {
+  color: var(--muted);
+}
+.minute-evidence figure {
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border-left: 3px solid var(--strong-line);
+  background: var(--surface);
+}
+.minute-evidence blockquote {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+}
+.minute-correction {
+  display: grid;
+  gap: 10px;
+  padding-top: 14px;
+}
+.minute-correction label {
+  display: grid;
+  gap: 4px;
+}
+.minute-correction input, .minute-correction select, .minute-correction textarea {
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+  padding: 7px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--strong-line);
+  border-radius: 6px;
+}
+.minute-history li + li {
+  margin-top: 8px;
+}
+.minute-preview .minute-actions {
+  margin-top: 10px;
+}
+.minute-preview pre {
+  white-space: pre-wrap;
+}
+.minute-feedback {
+  color: var(--green);
+}
+.minute-feedback.is-error {
+  color: var(--red);
+}
+@media (max-width: 720px) {
+  .minutes-panes { grid-template-columns: minmax(0, 1fr); }
+}
+
+.minute-save-status {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+.minute-save-status small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+}
+.minute-save-status.is-failed { border-color: var(--red); color: var(--red); }
+.saved-meetings ul { display: grid; gap: 8px; padding-left: 18px; }
+.saved-meetings li { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.saved-meetings li span { flex: 1; }
+@media (max-width: 600px) {
+  .minute-save-status { grid-template-columns: 1fr 1fr; }
+  .minute-save-status small { grid-column: 1 / -1; }
+}

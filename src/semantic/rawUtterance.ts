@@ -8,6 +8,9 @@ import type { InputProviderKind, MeetingEvent, RawUtterance, UtteranceId } from 
 
 export type MeetingEventLog = {
   events: MeetingEvent[];
+  // Carries the source archive policy during restore; it is projection metadata,
+  // not a persisted event.
+  policyVersion?: string;
   // Next seq to hand out. Kept here so ordering never depends on createdAt,
   // which repeats when two utterances land in the same millisecond.
   nextSeq: number;
@@ -44,15 +47,19 @@ export function createRawUtterance(input: RawUtteranceInput, seq: number): RawUt
 
 // Append-only: returns a new log and never mutates the one passed in.
 export function appendEvent(log: MeetingEventLog, event: MeetingEvent): MeetingEventLog {
-  return { events: [...log.events, event], nextSeq: log.nextSeq };
+  return { ...log, events: [...log.events, event] };
 }
 
 export function appendUtterance(log: MeetingEventLog, input: RawUtteranceInput): { log: MeetingEventLog; utterance: RawUtterance } {
+  for (const event of log.events) {
+    if (event.kind === "utterance_added" && event.utterance.id === input.id) return { log, utterance: event.utterance };
+  }
   const utterance = createRawUtterance(input, log.nextSeq);
   return {
-    log: {
+      log: {
+        ...log,
       events: [...log.events, { kind: "utterance_added", at: input.createdAt, utterance }],
-      nextSeq: log.nextSeq + 1,
+        nextSeq: log.nextSeq + 1,
     },
     utterance,
   };
@@ -65,7 +72,10 @@ export function utterancesOf(log: MeetingEventLog): RawUtterance[] {
 // The rolling context the fast path is allowed to look at (ADR 0023 §4). Never
 // the whole meeting: a caller that needs history belongs on the refinement path.
 export function recentUtterances(log: MeetingEventLog, windowSize: number): RawUtterance[] {
-  if (windowSize <= 0) return [];
-  const all = utterancesOf(log);
-  return all.slice(Math.max(0, all.length - windowSize));
+  const recent: RawUtterance[] = [];
+  for (let index = log.events.length - 1; index >= 0 && recent.length < windowSize; index -= 1) {
+    const event = log.events[index];
+    if (event.kind === "utterance_added") recent.push(event.utterance);
+  }
+  return recent.reverse();
 }

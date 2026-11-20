@@ -82,3 +82,26 @@ export const canonicalKindLabels: Record<CanonicalKind, string> = {
 export function isSettledCommitment(commitment: Commitment): boolean {
   return commitment === "accepted" || commitment === "decided" || commitment === "committed";
 }
+
+export const itemKindLabels = {
+  decision: "決定", action: "タスク", schedule: "日程", proposal: "提案", issue: "課題",
+} as const;
+
+export const semanticStateLabels = {
+  candidate: "候補", agreed: "会議で合意", deferred: "会議で保留", rejected: "却下",
+  withdrawn: "撤回", superseded: "後続の内容に差し替え",
+} as const;
+
+export const reviewStateLabels = {
+  pending: "要確認", auto_recorded: "自動記録済み", human_verified: "人間確認済み",
+  held: "保留", dismissed: "除外",
+} as const;
+
+export const riskLabels = { low: "低", medium: "中", high: "高" } as const;
+export const itemFieldLabels = { content: "記録内容", owner: "担当者", deadline: "期限・日時", target: "対象", condition: "条件" } as const;
+
+export const reviewActionLabels = {
+  ItemAutoRecorded: "自動記録", ItemHumanVerified: "記録上確定", ItemHeld: "保留",
+  ItemDismissed: "除外", ItemCorrected: "訂正", ItemReviewReopened: "再審査",
+  ItemWithdrawn: "発言の撤回", ItemSuperseded: "後続の内容に差し替え", ReviewActionReverted: "確認操作の取り消し",
+} as const;

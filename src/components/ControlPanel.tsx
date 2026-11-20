@@ -7,6 +7,8 @@ type ControlPanelProps = {
   onReset: () => void;
   onOrganize: () => void;
   canOrganize: boolean;
+  onFinish?: () => void;
+  canFinish: boolean;
   isOrganizing: boolean;
   onStart: () => void;
   onStop: () => void;
@@ -20,6 +22,8 @@ export function ControlPanel({
   onReset,
   onOrganize,
   canOrganize,
+  onFinish,
+  canFinish,
   isOrganizing,
   onStart,
   onStop,
@@ -47,6 +51,10 @@ export function ControlPanel({
         <Sparkles size={18} />
         <span>{isOrganizing ? "会議を整理中…" : "会議を整理"}</span>
       </button>
+
+      {onFinish && <button className="quiet-button" type="button" disabled={!canFinish} onClick={onFinish}>
+        会議を終了して議事録を確認
+      </button>}
 
       <div className={`status-pill ${isListening ? "active" : ""} ${!isSupported ? "is-unavailable" : ""}`} title={!isSupported ? "このブラウザーでは Web Speech API が提供されていません" : undefined}>
         <span className="status-dot" aria-hidden="true" />{statusLabel}
