@@ -40,15 +40,17 @@ export function applyReviewStateToMeetingGraph(
 ): MeetingDecisionGraph {
   const pending = items.filter((item) => item.reviewState === "pending" || item.reviewState === "held");
   if (pending.length === 0) return graph;
+  const knownUtteranceIds = new Set(items.flatMap((item) => item.evidenceRefs.map((reference) => reference.utteranceId)));
 
   let changed = false;
   const nodes = graph.nodes.map((node) => {
     if (node.type !== "decision" && node.type !== "action") return node;
     const nodeLabel = normalizeEvidence(node.label);
+    const hasSemanticSourceId = node.provenance.utteranceIds.some((id) => knownUtteranceIds.has(id));
     const needsReview = pending.some((item) => item.evidenceRefs.some((reference) => {
       const evidence = normalizeEvidence(reference.text);
       const sameSource = node.provenance.utteranceIds.includes(reference.utteranceId) ||
-        node.createdAt === reference.timestamp;
+        (!hasSemanticSourceId && node.createdAt === reference.timestamp);
       return sameSource && evidence.length > 0 && (evidence.includes(nodeLabel) || nodeLabel.includes(evidence));
     }));
     if (!needsReview || (node.state === "unconfirmed" && node.action?.status === "proposed")) return node;
