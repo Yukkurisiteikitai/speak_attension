@@ -29,7 +29,11 @@ Phase 2以降は Phase 1 の結果を見てから発行する。
 
 ### 個別の課題
 
-現在、個別の課題の指示書はない。
+| 指示書 | 内容 | 状態 |
+|---|---|---|
+| [m1-external-user-test.md](m1-external-user-test.md) | M1第三者利用テストの手順・記録票 | 準備中。公開環境とプライバシー表示の確認後に実施 |
+| [cloudflare-preview-design.md](cloudflare-preview-design.md) | Workersの隔離プレビュー環境の設計案 | 未適用。Cloudflare権限とステージングWorker作成の確認待ち |
+| [canonical-review-state-e2e.md](canonical-review-state-e2e.md) | Playwrightによる状態整合性ブラウザーテスト | 実装中 |
 
 ### 検証記録
 
