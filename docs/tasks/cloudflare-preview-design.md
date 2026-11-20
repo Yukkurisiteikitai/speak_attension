@@ -13,7 +13,7 @@ Issue #30に対応するM1用の隔離プレビュー案。**この文書は設�
 
 - 本番: 現行 `speak-attension` Workerと現在の `workers.dev` URLを維持する。
 - preview: `speak-attension-preview` という別Workerを1つ事前作成し、独立した `workers.dev` URLを割り当てる。カスタムドメイン、ルート、KV/R2/D1等のbindingは付けない。
-- `wrangler.toml` に `env.preview.name` とpreview専用Worker設定を追加し、preview deployでは必ず `wrangler deploy --env preview` を使う。
+- `wrangler.toml` に `[env.preview]` と `workers_dev = true` を追加し、preview deployでは必ず `wrangler deploy --env preview` を使う。Wranglerはenvironmentごとに別Workerを作り、`speak-attension-preview` とpreview用 `workers.dev` URLを使う。
 - UIに外部認証や実データの接続先が将来入る場合、preview資格情報・DBを本番と分ける設計審査を追加する。
 
 ## ワークフロー案
@@ -30,9 +30,11 @@ Issue #30に対応するM1用の隔離プレビュー案。**この文書は設�
 
 - `CLOUDFLARE_ACCOUNT_ID` はGitHub Actions Secretとして使う。
 - deploy tokenはpreview Workerだけを更新できる最小権限とする。既存の本番用トークンを無条件で流用しない。
-- Cloudflare側でpreview Workerを先に作ることで、CI tokenにWorker作成・アカウント全体の管理権限を持たせない。
+- preview Workerの初回作成にはCloudflareのWorkers product scopeで`Admin`権限が必要。作成後、CI tokenはpreview Worker個別scopeの`Editor`（Workers Scripts Edit相当）に限定する。production Workerやzoneの権限は付けない。
 - GitHub Environment Secretsは `preview` 環境に限定し、本番Secretsと共有しない。
 - 値は表示・ログ出力せず、チャットに貼り付けない。
+
+アプリのWorkers runtimeに別のsecretはなく、preview API tokenとaccount IDはデプロイ用のGitHub Environment Secretとしてのみ扱う。Wranglerのenvironment secretsはenvironmentごとに独立し、継承されないため、将来runtime secretを追加する場合もpreview用の値を明示して設定する。
 
 ## ロールバック
 
@@ -42,10 +44,10 @@ Issue #30に対応するM1用の隔離プレビュー案。**この文書は設�
 
 ## 実装前の確認事項
 
-- Cloudflareアカウントで別のWorker名とpreview用 `workers.dev` URLを作成できるか。
-- 現在のAPI tokenを変更せず、preview Worker専用tokenを発行できるか。
+- CloudflareアカウントでWorkers product scopeの`Admin`を持つ担当者がpreview Workerを初回作成できるか。
+- preview Worker作成後、個別Worker scopeの`Editor`を付けたCI用API tokenを発行できるか。
 - GitHub Environmentの保護ルールが利用可能か。
-- Wranglerの環境名・assets設定が現在のバージョンで期待どおり分離されるか。
+- Wranglerの環境名・workers.dev URL・assets設定が現在のバージョンで期待どおり分離されるか。
 - preview URLから本番Worker、実データ、秘密情報に接続しないこと。
 
 これらを読み取り確認できるまで、設定追加やdeployを実行しない。
