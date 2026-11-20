@@ -5,7 +5,7 @@ import type { LlmSettings } from "../utils/llmClient";
 import { buildMissingContributions } from "../utils/missingContribution";
 import { buildTimelineProjection } from "../semantic/timelineProjection";
 import { projectMeetingState } from "../semantic/meetingStateProjection";
-import { meetingStateGraphFromProjection } from "../semantic/meetingStateGraph";
+import { applyReviewStateToMeetingGraph, meetingStateGraphFromProjection } from "../semantic/meetingStateGraph";
 import { utterancesOf } from "../semantic/rawUtterance";
 import { projectMeetingMinutes } from "../semantic/meetingMinutesProjection";
 import { SEMANTIC_CORE_FLAGS } from "../semantic/flags";
@@ -75,13 +75,16 @@ export function useTopicEngine({ onLog, llmSettings }: UseTopicEngineOptions = {
   // decisionGraph, unchanged. Flag on = a projection of canonical state, so the
   // dashboard cannot show a decision the promotion policy did not admit.
   const meetingStateGraph = useMemo(() => {
-    if (!SEMANTIC_CORE_FLAGS.meetingState) return snapshot.engineState.decisionGraph;
+    if (!SEMANTIC_CORE_FLAGS.meetingState) {
+      return applyReviewStateToMeetingGraph(snapshot.engineState.decisionGraph, minutes?.items ?? []);
+    }
     const createdAt = new Map(utterancesOf(snapshot.semantic.log).map((utterance) => [utterance.id, utterance.createdAt]));
-    return meetingStateGraphFromProjection(
+    const graph = meetingStateGraphFromProjection(
       projectMeetingState(snapshot.semantic.canonical),
       (utteranceId) => createdAt.get(utteranceId) ?? 0,
     );
-  }, [snapshot.engineState.decisionGraph, snapshot.semantic]);
+    return applyReviewStateToMeetingGraph(graph, minutes?.items ?? []);
+  }, [snapshot.engineState.decisionGraph, snapshot.semantic, minutes]);
 
   const currentTopic = useMemo(
     () => snapshot.engineState.meetingGraph.nodes.find((node) => node.id === snapshot.engineState.currentTopicId) ?? null,

@@ -8,6 +8,9 @@ import { buildTimelineProjection } from "./timelineProjection";
 import { exportMinutesJson, exportMinutesMarkdown } from "./meetingMinutesExport";
 import { canBulkVerify } from "./reviewEventReducer";
 import { compareDecisionProjections } from "./meetingStateConsistency";
+import { buildMeetingStateDashboard } from "../utils/meetingStateDashboard";
+import { projectMeetingState } from "./meetingStateProjection";
+import { applyReviewStateToMeetingGraph, meetingStateGraphFromProjection } from "./meetingStateGraph";
 
 async function makeArchivedMeeting(storage: import("./meetingArchiveStorage").MeetingArchiveStorage = new MemoryMeetingArchiveStorage()) {
   vi.spyOn(Date, "now").mockReturnValue(1_000);
@@ -140,6 +143,111 @@ describe("meeting archive integrity and projections", () => {
     expect(reprojected).toMatchObject({ reviewState: "pending", canAutoRecord: item.canAutoRecord,
       canVerify: item.canVerify, riskLevel: item.riskLevel, reviewReasons: item.reviewReasons });
     expect(restored.history.some((event) => event.action === "ItemAutoRecorded")).toBe(true);
+  });
+
+  it("keeps an old-policy auto-record pending across Canonical, legacy dashboard, restore, and exports", async () => {
+    const storage = new MemoryMeetingArchiveStorage();
+    const store = createTopicEngineStore({ storage });
+    store.submitTranscript("予算100万円に決定します", "manual");
+    store.finishMeeting();
+    const archive = store.getArchive()!;
+    const initial = projectMeetingMinutes(archive.id, store.getSnapshot().semantic.canonical,
+      { events: archive.events, nextSeq: 10 });
+    const item = initial.items.find((candidate) => candidate.kind === "decision")!;
+    expect(item.canAutoRecord).toBe(false);
+
+    const oldAutoEvent: import("./types").MeetingEvent = {
+      kind: "item_review", at: 2_000, event: {
+        id: item.id + ":review:legacy", action: "ItemAutoRecorded", actor: "rule",
+        canonicalRevision: 1, revision: 1, before: null,
+        after: { ...item, reviewState: "auto_recorded", policyVersion: "0.9.0", canAutoRecord: true,
+          canVerify: true, riskLevel: "low", reviewReasons: [] },
+        reason: "旧ポリシーで自動記録",
+      },
+    };
+    const oldArchive = { ...archive, policyVersion: "0.9.0", events: [...archive.events, oldAutoEvent] };
+    await storage.save(oldArchive);
+
+    const reopened = createTopicEngineStore({ storage });
+    expect((await reopened.restoreMeeting(archive.id)).ok).toBe(true);
+    const snapshot = reopened.getSnapshot();
+    const minutes = projectMeetingMinutes(archive.id, snapshot.semantic.canonical, snapshot.semantic.log);
+    const pendingItem = minutes.items.find((candidate) => candidate.id === item.id)!;
+    expect(pendingItem.reviewState).toBe("pending");
+
+    const canonicalEntry = snapshot.semantic.canonical.entries.find((entry) => entry.source.assertion.unit.id === item.id)!;
+    const canonicalGraph = applyReviewStateToMeetingGraph(meetingStateGraphFromProjection(
+      projectMeetingState(snapshot.semantic.canonical), () => 1_000,
+    ), minutes.items);
+    expect(canonicalGraph.nodes.find((node) => node.id === canonicalEntry.id)?.state).toBe("unconfirmed");
+
+    const rawLegacyDashboard = buildMeetingStateDashboard(snapshot.engineState.decisionGraph, [], null);
+    expect(rawLegacyDashboard.confirmedDecisions).toContainEqual(expect.objectContaining({ state: "decided" }));
+    const legacyGraph = applyReviewStateToMeetingGraph(snapshot.engineState.decisionGraph, minutes.items);
+    const dashboard = buildMeetingStateDashboard(legacyGraph, [], null);
+    expect(dashboard.confirmedDecisions).toEqual([]);
+    expect(dashboard.unresolvedItems.some((node) => node.type === "decision" && node.state === "unconfirmed")).toBe(true);
+
+    const restored = projectMeetingArchive(oldArchive);
+    expect(restored.timelineItems.find((candidate) => candidate.id === item.id)?.reviewState).toBe("pending");
+    expect(exportMinutesMarkdown(minutes, archive.metadata)).toContain("要確認");
+    expect(JSON.parse(exportMinutesJson(minutes, archive.metadata))).toMatchObject({
+      pending: [expect.objectContaining({ id: item.id, reviewState: "pending" })],
+    });
+  });
+
+  it("reopens an old auto-recorded action as unconfirmed in Canonical and dashboard projections", async () => {
+    const storage = new MemoryMeetingArchiveStorage();
+    const store = createTopicEngineStore({ storage });
+    store.submitTranscript("A案を採用します", "manual");
+    store.finishMeeting();
+
+    const before = projectMeetingMinutes(store.getSnapshot().engineState.meetingGraph.meetingId,
+      store.getSnapshot().semantic.canonical, store.getSnapshot().semantic.log);
+    const item = before.recorded.find((candidate) => candidate.kind === "decision")!;
+    expect(item.reviewState).toBe("auto_recorded");
+
+    expect((await store.reviewMinutes([item], { kind: "ItemReviewReopened" })).ok).toBe(true);
+    const snapshot = store.getSnapshot();
+    const after = projectMeetingMinutes(snapshot.engineState.meetingGraph.meetingId,
+      snapshot.semantic.canonical, snapshot.semantic.log);
+    expect(after.pending.find((candidate) => candidate.id === item.id)?.reviewState).toBe("pending");
+
+    const canonicalProjection = projectMeetingState(snapshot.semantic.canonical);
+    const canonicalGraph = meetingStateGraphFromProjection(canonicalProjection, () => 1_000);
+    const canonicalEntry = snapshot.semantic.canonical.entries.find((entry) => entry.source.assertion.unit.id === item.id)!;
+    const reviewAwareCanonicalGraph = applyReviewStateToMeetingGraph(canonicalGraph, after.items);
+    expect(reviewAwareCanonicalGraph.nodes.find((node) => node.id === canonicalEntry.id)?.state).toBe("unconfirmed");
+    expect(buildMeetingStateDashboard(snapshot.engineState.decisionGraph, [], null).confirmedDecisions)
+      .toContainEqual(expect.objectContaining({ label: item.title, state: "decided" }));
+    const reviewAwareLegacyGraph = applyReviewStateToMeetingGraph(snapshot.engineState.decisionGraph, after.items);
+    const legacyDashboard = buildMeetingStateDashboard(reviewAwareLegacyGraph, [], null);
+    expect(legacyDashboard.confirmedDecisions).not.toContainEqual(expect.objectContaining({ label: item.title }));
+    expect(legacyDashboard.unresolvedItems).toContainEqual(expect.objectContaining({ label: item.title, state: "unconfirmed" }));
+
+    const archive = store.getArchive()!;
+    await storage.save(archive);
+    const restored = projectMeetingArchive(archive);
+    const restoredGraph = applyReviewStateToMeetingGraph(meetingStateGraphFromProjection(
+      projectMeetingState(restored.canonical), () => 1_000,
+    ), restored.timelineItems);
+    const restoredEntry = restored.canonical.entries.find((entry) => entry.source.assertion.unit.id === item.id)!;
+    expect(restored.timelineItems.find((candidate) => candidate.id === item.id)?.reviewState).toBe("pending");
+    expect(restoredGraph.nodes.find((node) => node.id === restoredEntry.id)?.state).toBe("unconfirmed");
+    const reopenedStore = createTopicEngineStore({ storage });
+    expect((await reopenedStore.restoreMeeting(archive.id)).ok).toBe(true);
+    const reopenedSnapshot = reopenedStore.getSnapshot();
+    const reopenedMinutes = projectMeetingMinutes(archive.id, reopenedSnapshot.semantic.canonical, reopenedSnapshot.semantic.log);
+    const restoredLegacyGraph = applyReviewStateToMeetingGraph(reopenedSnapshot.engineState.decisionGraph, reopenedMinutes.items);
+    const restoredDashboard = buildMeetingStateDashboard(restoredLegacyGraph, [], null);
+    expect(restoredDashboard.unresolvedItems)
+      .toContainEqual(expect.objectContaining({ label: item.title, state: "unconfirmed" }));
+    expect(restoredDashboard.confirmedDecisions).not.toContainEqual(expect.objectContaining({ label: item.title }));
+    const metadata = archive.metadata;
+    expect(exportMinutesMarkdown(reopenedMinutes, metadata)).toContain("要確認");
+    expect(JSON.parse(exportMinutesJson(reopenedMinutes, metadata))).toMatchObject({
+      pending: [expect.objectContaining({ id: item.id, reviewState: "pending" })],
+    });
   });
 
   it("keeps a corrected schedule title in Canonical and the review projection", async () => {

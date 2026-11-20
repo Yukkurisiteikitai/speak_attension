@@ -18,7 +18,7 @@
 
 - LLM はローカルの LM Studio（OpenAI 互換、`http://127.0.0.1:1234/v1`）だけを使用する。クラウド AI API は追加しない。
 - LLM を使う機能には必ずルールベースの fallback を用意し、LLM がなくても全機能を使えるようにする。
-- Deepgram、Whisper、独自 STT、Python、DB 永続化、認証、TTS、話者分離は追加しない。
+- Deepgram、Whisper、独自 STT、Python、サーバー側DB永続化、認証、共有DB、TTS、話者分離は追加しない。会議アーカイブの端末内保存には、採用済みの [ADR 0028](docs/adr/0028-local-meeting-archive.md) に従い、利用者が明示的に選択した場合だけブラウザーIndexedDBを使う。
 - リアルタイムのセグメント処理はルールベースを維持する。LLM は非同期の後処理層だけで使う。
 - 確認済み発言・決定・提案・AI/ルールの確認候補・未確認は同じ状態として扱わない。AI やルールが単独で「決定」「重要」「危険」を確定しない（[ADR 0018](docs/adr/0018-meeting-state-primary-surface-and-epistemic-boundaries.md)）。
 
