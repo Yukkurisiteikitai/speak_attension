@@ -23,3 +23,7 @@ jobs:
       - run: pnpm run typecheck
       - run: pnpm test
       - run: pnpm exec vite build
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Run browser E2E
+        run: pnpm test:e2e

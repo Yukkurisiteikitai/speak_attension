@@ -1,6 +1,8 @@
 .env
 node_modules
 dist
+playwright-report
+test-results
 docs/plans
 .vite
 npm-debug.log*
