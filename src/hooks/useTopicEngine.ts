@@ -71,9 +71,9 @@ export function useTopicEngine({ onLog, llmSettings }: UseTopicEngineOptions = {
     [snapshot.semantic, meetingId, minutes],
   );
 
-  // Phase 3: the graph the Meeting State dashboard reads. Flag off = the legacy
-  // decisionGraph, unchanged. Flag on = a projection of canonical state, so the
-  // dashboard cannot show a decision the promotion policy did not admit.
+  // The dashboard reads the legacy graph while Phase 3 is disabled and the
+  // Canonical projection when enabled. Both receive the event-derived review
+  // state so reopened or held minutes are not presented as settled.
   const meetingStateGraph = useMemo(() => {
     if (!SEMANTIC_CORE_FLAGS.meetingState) {
       return applyReviewStateToMeetingGraph(snapshot.engineState.decisionGraph, minutes?.items ?? []);
